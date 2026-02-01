@@ -15,6 +15,8 @@ export interface Track {
   pdfPage: number | null;
   markers: Marker[];
   completed: boolean;
+  tempo: number | null;
+  timeSignature: string;
 }
 
 export interface Book {

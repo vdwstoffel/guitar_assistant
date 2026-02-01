@@ -557,12 +557,14 @@ export default function Home() {
     authorName: string,
     bookName: string,
     trackNumber: number,
-    pdfPage?: number | null
+    pdfPage?: number | null,
+    tempo?: number | null,
+    timeSignature?: string
   ) => {
     const response = await fetch(`/api/tracks/${trackId}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title, author: authorName, book: bookName, trackNumber, pdfPage }),
+      body: JSON.stringify({ title, author: authorName, book: bookName, trackNumber, pdfPage, tempo, timeSignature }),
     });
 
     if (!response.ok) {
@@ -576,6 +578,70 @@ export default function Home() {
     setCurrentBook(book);
 
     await fetchLibrary();
+  };
+
+  const handleTempoChange = async (tempo: number | null, timeSignature: string) => {
+    if (!currentTrack) return;
+
+    try {
+      const response = await fetch(`/api/tracks/${currentTrack.id}/tempo`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tempo, timeSignature }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to update tempo");
+      }
+
+      const updatedTrack = await response.json();
+
+      // Update current track
+      setCurrentTrack(updatedTrack);
+
+      // Update in authors list
+      const updateTracks = (tracks: Track[]) =>
+        tracks.map((track) =>
+          track.id === currentTrack.id ? { ...track, tempo, timeSignature } : track
+        );
+
+      setAuthors((prevAuthors) =>
+        prevAuthors.map((author) => ({
+          ...author,
+          books: author.books.map((book) => ({
+            ...book,
+            tracks: updateTracks(book.tracks),
+          })),
+        }))
+      );
+
+      if (selectedAuthor) {
+        setSelectedAuthor((prev) =>
+          prev
+            ? {
+                ...prev,
+                books: prev.books.map((book) => ({
+                  ...book,
+                  tracks: updateTracks(book.tracks),
+                })),
+              }
+            : null
+        );
+      }
+
+      if (selectedBook) {
+        setSelectedBook((prev) =>
+          prev
+            ? {
+                ...prev,
+                tracks: updateTracks(prev.tracks),
+              }
+            : null
+        );
+      }
+    } catch (error) {
+      console.error("Error updating tempo:", error);
+    }
   };
 
   const handleBookUpdate = async (
@@ -901,6 +967,12 @@ export default function Home() {
               onDelete={handleMarkerDelete}
               onClearAll={() => handleMarkersClear(currentTrack.id)}
               formatTime={markerBarState.formatTime}
+              isCountingIn={markerBarState.isCountingIn}
+              currentCountInBeat={markerBarState.currentCountInBeat}
+              totalCountInBeats={markerBarState.totalCountInBeats}
+              trackTempo={markerBarState.trackTempo}
+              trackTimeSignature={markerBarState.trackTimeSignature}
+              onTempoChange={handleTempoChange}
             />
           )}
         </>

@@ -43,6 +43,8 @@ interface UpdateMetadataBody {
   book: string;
   trackNumber: number;
   pdfPage?: number | null;
+  tempo?: number | null;
+  timeSignature?: string;
 }
 
 interface ToggleCompletedBody {
@@ -80,7 +82,7 @@ export async function PUT(
   try {
     const { id } = await params;
     const body: UpdateMetadataBody = await request.json();
-    const { title, author: authorName, book: bookName, trackNumber, pdfPage } = body;
+    const { title, author: authorName, book: bookName, trackNumber, pdfPage, tempo, timeSignature } = body;
 
     if (!title?.trim() || !authorName?.trim() || !bookName?.trim()) {
       return NextResponse.json(
@@ -157,6 +159,8 @@ export async function PUT(
         trackNumber: trackNumber >= 0 ? trackNumber : 0,
         bookId: bookRecord.id,
         pdfPage: pdfPage !== undefined ? pdfPage : undefined,
+        tempo: tempo !== undefined ? tempo : undefined,
+        timeSignature: timeSignature !== undefined ? timeSignature : undefined,
       },
       include: {
         book: {

@@ -4,6 +4,7 @@ import { useRef, useState, useEffect, useCallback } from "react";
 import { Track, Marker } from "@/types";
 import WaveSurfer from "wavesurfer.js";
 import RegionsPlugin from "wavesurfer.js/dist/plugins/regions.js";
+import { playCountIn } from "@/lib/clickGenerator";
 
 export interface MarkerBarState {
   showMarkers: boolean;
@@ -20,6 +21,13 @@ export interface MarkerBarState {
   jumpToMarker: (timestamp: number) => void;
   addMarker: () => void;
   formatTime: (seconds: number) => string;
+  // Count-in state
+  isCountingIn: boolean;
+  currentCountInBeat: number;
+  totalCountInBeats: number;
+  trackTempo: number | null;
+  trackTimeSignature: string;
+  volume: number;
 }
 
 interface BottomPlayerProps {
@@ -72,6 +80,9 @@ export default function BottomPlayer({
   const [editingMarkerName, setEditingMarkerName] = useState("");
   const [scrollLeft, setScrollLeft] = useState(0);
   const [containerWidth, setContainerWidth] = useState(0);
+  const [isCountingIn, setIsCountingIn] = useState(false);
+  const [currentCountInBeat, setCurrentCountInBeat] = useState(0);
+  const [totalCountInBeats, setTotalCountInBeats] = useState(0);
 
   const handleZoom = (newZoom: number) => {
     const clampedZoom = Math.max(1, Math.min(200, newZoom));
@@ -357,12 +368,44 @@ export default function BottomPlayer({
     wavesurferRef.current.play();
   };
 
-  const jumpToMarker = useCallback((timestamp: number) => {
+  const jumpToMarker = useCallback(async (timestamp: number) => {
     if (!wavesurferRef.current || !duration) return;
-    const startTime = Math.max(0, timestamp - leadIn);
-    wavesurferRef.current.seekTo(startTime / duration);
-    wavesurferRef.current.play();
-  }, [duration, leadIn]);
+
+    // If track has tempo, use beat-based count-in
+    if (track?.tempo && track.tempo > 0) {
+      const timeSignature = track.timeSignature || "4/4";
+      const beats = parseInt(timeSignature.split("/")[0]) || 4;
+
+      setIsCountingIn(true);
+      setCurrentCountInBeat(0);
+      setTotalCountInBeats(beats);
+
+      // Seek to marker position (paused)
+      wavesurferRef.current.seekTo(timestamp / duration);
+
+      // Play count-in clicks
+      await playCountIn({
+        bpm: track.tempo,
+        timeSignature,
+        volume,
+        onBeat: (beat, total) => {
+          setCurrentCountInBeat(beat);
+          setTotalCountInBeats(total);
+        },
+      });
+
+      setIsCountingIn(false);
+      setCurrentCountInBeat(0);
+
+      // Start playback
+      wavesurferRef.current?.play();
+    } else {
+      // Fallback to seconds-based lead-in
+      const startTime = Math.max(0, timestamp - leadIn);
+      wavesurferRef.current.seekTo(startTime / duration);
+      wavesurferRef.current.play();
+    }
+  }, [duration, leadIn, track?.tempo, track?.timeSignature, volume]);
 
   const addMarker = useCallback(() => {
     if (!track || !newMarkerName.trim()) return;
@@ -404,6 +447,12 @@ export default function BottomPlayer({
           jumpToMarker,
           addMarker,
           formatTime,
+          isCountingIn,
+          currentCountInBeat,
+          totalCountInBeats,
+          trackTempo: track?.tempo ?? null,
+          trackTimeSignature: track?.timeSignature || "4/4",
+          volume,
         });
       }
     }, 16); // Debounce to ~60fps
@@ -413,7 +462,7 @@ export default function BottomPlayer({
         clearTimeout(stateCallbackTimeoutRef.current);
       }
     };
-  }, [showMarkers, newMarkerName, leadIn, editingMarkerId, editingMarkerName, currentTime, jumpToMarker, addMarker, formatTime]);
+  }, [showMarkers, newMarkerName, leadIn, editingMarkerId, editingMarkerName, currentTime, jumpToMarker, addMarker, formatTime, isCountingIn, currentCountInBeat, totalCountInBeats, track?.tempo, track?.timeSignature, volume]);
 
   if (!track) {
     return (

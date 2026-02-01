@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { Marker } from "@/types";
+import { createTapTempo } from "@/lib/tapTempo";
 
 interface MarkersBarProps {
   markers: Marker[];
@@ -22,6 +23,13 @@ interface MarkersBarProps {
   onDelete: (markerId: string) => void;
   onClearAll: () => void;
   formatTime: (seconds: number) => string;
+  // Count-in and tempo props
+  isCountingIn?: boolean;
+  currentCountInBeat?: number;
+  totalCountInBeats?: number;
+  trackTempo?: number | null;
+  trackTimeSignature?: string;
+  onTempoChange?: (tempo: number | null, timeSignature: string) => void;
 }
 
 export default function MarkersBar({
@@ -43,7 +51,46 @@ export default function MarkersBar({
   onDelete,
   onClearAll,
   formatTime,
+  isCountingIn = false,
+  currentCountInBeat = 0,
+  totalCountInBeats = 0,
+  trackTempo = null,
+  trackTimeSignature = "4/4",
+  onTempoChange,
 }: MarkersBarProps) {
+  const [tapBpm, setTapBpm] = useState<number | null>(null);
+  const [tapCount, setTapCount] = useState(0);
+  const tapTempoRef = useRef(createTapTempo());
+
+  const handleTap = useCallback(() => {
+    const bpm = tapTempoRef.current.tap();
+    setTapBpm(bpm);
+    setTapCount(tapTempoRef.current.getTapCount());
+  }, []);
+
+  const handleSaveTempo = useCallback(() => {
+    if (tapBpm && onTempoChange) {
+      onTempoChange(tapBpm, trackTimeSignature);
+      setTapBpm(null);
+      setTapCount(0);
+      tapTempoRef.current.reset();
+    }
+  }, [tapBpm, onTempoChange, trackTimeSignature]);
+
+  const handleClearTempo = useCallback(() => {
+    if (onTempoChange) {
+      onTempoChange(null, trackTimeSignature);
+    }
+    setTapBpm(null);
+    setTapCount(0);
+    tapTempoRef.current.reset();
+  }, [onTempoChange, trackTimeSignature]);
+
+  const handleTimeSignatureChange = useCallback((newTimeSignature: string) => {
+    if (onTempoChange) {
+      onTempoChange(trackTempo, newTimeSignature);
+    }
+  }, [onTempoChange, trackTempo]);
   // Keyboard shortcuts: 1-9 jump to marker 1-9, 0 jumps to marker 10
   useEffect(() => {
     if (!visible) return;
@@ -76,19 +123,77 @@ export default function MarkersBar({
   return (
     <div className="w-full border-t border-gray-700 bg-gray-800 text-white pt-2 pb-2 px-4">
       {/* Controls Row - Centered */}
-      <div className="flex items-center justify-center gap-4">
-        <div className="flex items-center gap-2">
-          <label className="text-xs text-gray-400">Lead-in:</label>
-          <input
-            type="number"
-            min={0}
-            max={30}
-            value={leadIn}
-            onChange={(e) => onLeadInChange(Math.max(0, parseInt(e.target.value) || 0))}
-            className="w-12 px-1 py-0.5 bg-gray-700 border border-gray-600 rounded text-xs text-center focus:outline-none focus:border-green-500"
-          />
-          <span className="text-xs text-gray-500">sec</span>
-        </div>
+      <div className="flex items-center justify-center gap-4 flex-wrap">
+        {/* Count-in / Lead-in Controls */}
+        {trackTempo && trackTempo > 0 ? (
+          <div className="flex items-center gap-2">
+            {/* Count-in indicator */}
+            {isCountingIn ? (
+              <div className="flex items-center gap-1 text-yellow-400 text-xs animate-pulse">
+                <span className="font-bold">{currentCountInBeat}/{totalCountInBeats}</span>
+              </div>
+            ) : (
+              <>
+                <span className="text-xs text-gray-400">Count-in:</span>
+                <span className="text-xs text-green-400 font-mono">{trackTempo} BPM</span>
+                <select
+                  value={trackTimeSignature}
+                  onChange={(e) => handleTimeSignatureChange(e.target.value)}
+                  className="px-1 py-0.5 bg-gray-700 border border-gray-600 rounded text-xs focus:outline-none focus:border-green-500"
+                >
+                  <option value="4/4">4/4</option>
+                  <option value="3/4">3/4</option>
+                  <option value="2/4">2/4</option>
+                  <option value="6/8">6/8</option>
+                </select>
+                <button
+                  onClick={handleClearTempo}
+                  className="text-xs text-gray-500 hover:text-red-400"
+                  title="Remove tempo (use seconds lead-in instead)"
+                >
+                  ×
+                </button>
+              </>
+            )}
+          </div>
+        ) : (
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-gray-400">Lead-in:</label>
+            <input
+              type="number"
+              min={0}
+              max={30}
+              value={leadIn}
+              onChange={(e) => onLeadInChange(Math.max(0, parseInt(e.target.value) || 0))}
+              className="w-12 px-1 py-0.5 bg-gray-700 border border-gray-600 rounded text-xs text-center focus:outline-none focus:border-green-500"
+            />
+            <span className="text-xs text-gray-500">sec</span>
+          </div>
+        )}
+
+        {/* Tap Tempo */}
+        {onTempoChange && (
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleTap}
+              className="px-2 py-1 bg-purple-600 hover:bg-purple-700 rounded text-xs"
+            >
+              Tap
+            </button>
+            {tapBpm && (
+              <>
+                <span className="text-xs text-purple-400 font-mono">{tapBpm} BPM</span>
+                <span className="text-xs text-gray-500">({tapCount} taps)</span>
+                <button
+                  onClick={handleSaveTempo}
+                  className="px-2 py-1 bg-green-600 hover:bg-green-700 rounded text-xs"
+                >
+                  Save
+                </button>
+              </>
+            )}
+          </div>
+        )}
 
         <div className="flex gap-2">
           <input

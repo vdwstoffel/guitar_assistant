@@ -35,7 +35,7 @@ interface TrackEditModalProps {
   bookName: string;
   bookHasPdf: boolean;
   onClose: () => void;
-  onSave: (trackId: string, title: string, author: string, book: string, trackNumber: number, pdfPage?: number | null) => Promise<void>;
+  onSave: (trackId: string, title: string, author: string, book: string, trackNumber: number, pdfPage?: number | null, tempo?: number | null, timeSignature?: string) => Promise<void>;
 }
 
 interface BookEditModalProps {
@@ -117,13 +117,15 @@ function TrackEditModal({ track, authorName, bookName, bookHasPdf, onClose, onSa
   const [editBook, setEditBook] = useState(bookName);
   const [editTrackNumber, setEditTrackNumber] = useState(track.trackNumber || 0);
   const [editPdfPage, setEditPdfPage] = useState<number | null>(track.pdfPage);
+  const [editTempo, setEditTempo] = useState<number | null>(track.tempo);
+  const [editTimeSignature, setEditTimeSignature] = useState(track.timeSignature || "4/4");
   const [isSaving, setIsSaving] = useState(false);
 
   const handleSave = async () => {
     if (!editTitle.trim() || !editAuthor.trim() || !editBook.trim()) return;
     setIsSaving(true);
     try {
-      await onSave(track.id, editTitle.trim(), editAuthor.trim(), editBook.trim(), editTrackNumber, editPdfPage);
+      await onSave(track.id, editTitle.trim(), editAuthor.trim(), editBook.trim(), editTrackNumber, editPdfPage, editTempo, editTimeSignature);
       onClose();
     } catch (error) {
       console.error("Failed to save track metadata:", error);
@@ -188,6 +190,34 @@ function TrackEditModal({ track, authorName, bookName, bookHasPdf, onClose, onSa
               <p className="text-xs text-gray-500 mt-1">Opens this page when track plays</p>
             </div>
           )}
+          <div className="flex gap-4">
+            <div>
+              <label className="block text-sm text-gray-400 mb-1">Tempo (BPM)</label>
+              <input
+                type="number"
+                min={20}
+                max={300}
+                value={editTempo ?? ''}
+                onChange={(e) => setEditTempo(e.target.value ? Math.min(300, Math.max(20, parseInt(e.target.value) || 20)) : null)}
+                placeholder="None"
+                className="w-24 px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:border-green-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm text-gray-400 mb-1">Time Signature</label>
+              <select
+                value={editTimeSignature}
+                onChange={(e) => setEditTimeSignature(e.target.value)}
+                className="px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:border-green-500"
+              >
+                <option value="4/4">4/4</option>
+                <option value="3/4">3/4</option>
+                <option value="2/4">2/4</option>
+                <option value="6/8">6/8</option>
+              </select>
+            </div>
+          </div>
+          <p className="text-xs text-gray-500">Set tempo for click track count-in when jumping to markers</p>
         </div>
         <div className="flex justify-end gap-3 mt-6">
           <button
@@ -217,7 +247,7 @@ interface TrackListViewProps {
   onTrackSelect: (track: Track, author: Author, book: Book) => void;
   onBack: () => void;
   onBookUpdate?: (bookId: string, bookName: string, authorName: string) => Promise<void>;
-  onTrackUpdate?: (trackId: string, title: string, author: string, book: string, trackNumber: number, pdfPage?: number | null) => Promise<void>;
+  onTrackUpdate?: (trackId: string, title: string, author: string, book: string, trackNumber: number, pdfPage?: number | null, tempo?: number | null, timeSignature?: string) => Promise<void>;
   onTrackComplete?: (trackId: string, completed: boolean) => Promise<void>;
   onBookInProgress?: (bookId: string, inProgress: boolean) => Promise<void>;
   onShowPdf?: (pdfPath: string, page?: number) => void;
