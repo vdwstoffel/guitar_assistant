@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import AuthorSidebar from "@/components/AuthorSidebar";
 import BookGrid from "@/components/BookGrid";
+import InProgressGrid from "@/components/InProgressGrid";
 import TrackListView from "@/components/TrackListView";
 import BottomPlayer, { MarkerBarState } from "@/components/BottomPlayer";
 import MarkersBar from "@/components/MarkersBar";
@@ -38,6 +39,13 @@ export default function Home() {
   const [currentBook, setCurrentBook] = useState<Book | null>(null);
   const [isScanning, setIsScanning] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [isInProgressSelected, setIsInProgressSelected] = useState(false);
+
+  // Compute in-progress books from all authors
+  const inProgressBooks = authors.flatMap((author) =>
+    author.books.filter((book) => book.inProgress).map((book) => ({ book, author }))
+  );
+  const inProgressCount = inProgressBooks.length;
 
   // PDF state
   const [pdfPath, setPdfPath] = useState<string | null>(null);
@@ -145,9 +153,26 @@ export default function Home() {
   }, []);
 
   const handleAuthorSelect = (author: Author) => {
+    setIsInProgressSelected(false);
     setSelectedAuthor(author);
     setSelectedBook(null);
     updateLibraryUrl(author.id, null);
+  };
+
+  const handleInProgressSelect = () => {
+    setIsInProgressSelected(true);
+    setSelectedAuthor(null);
+    setSelectedBook(null);
+    updateLibraryUrl(null, null);
+  };
+
+  const handleInProgressBookSelect = (book: Book, author: Author) => {
+    setSelectedAuthor(author);
+    setSelectedBook(book);
+    if (book.pdfPath) {
+      setPdfPath(book.pdfPath);
+    }
+    updateLibraryUrl(author.id, book.id);
   };
 
   const handleBookSelect = (book: Book) => {
@@ -571,6 +596,46 @@ export default function Home() {
     await fetchLibrary();
   };
 
+  const handleBookInProgress = async (bookId: string, inProgress: boolean) => {
+    const response = await fetch(`/api/books/${bookId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ inProgress }),
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to update book in-progress status");
+    }
+
+    // Update local state
+    const updateBooks = (books: Book[]) =>
+      books.map((book) =>
+        book.id === bookId ? { ...book, inProgress } : book
+      );
+
+    setAuthors((prevAuthors) =>
+      prevAuthors.map((author) => ({
+        ...author,
+        books: updateBooks(author.books),
+      }))
+    );
+
+    if (selectedAuthor) {
+      setSelectedAuthor((prev) =>
+        prev
+          ? {
+              ...prev,
+              books: updateBooks(prev.books),
+            }
+          : null
+      );
+    }
+
+    if (selectedBook?.id === bookId) {
+      setSelectedBook((prev) => (prev ? { ...prev, inProgress } : null));
+    }
+  };
+
   const handleTrackComplete = async (trackId: string, completed: boolean) => {
     const response = await fetch(`/api/tracks/${trackId}`, {
       method: "PATCH",
@@ -718,10 +783,13 @@ export default function Home() {
                     onUpload={handleUpload}
                     isScanning={isScanning}
                     isUploading={isUploading}
+                    inProgressCount={inProgressCount}
+                    isInProgressSelected={isInProgressSelected}
+                    onInProgressSelect={handleInProgressSelect}
                   />
                 </div>
 
-                {/* Content: BookGrid OR TrackListView */}
+                {/* Content: BookGrid OR TrackListView OR InProgressGrid */}
                 <div className="flex-1 min-w-0">
                   {selectedBook && selectedAuthor ? (
                     <TrackListView
@@ -731,15 +799,25 @@ export default function Home() {
                       onTrackSelect={handleTrackSelect}
                       onBack={() => {
                         setSelectedBook(null);
-                        updateLibraryUrl(selectedAuthor?.id || null, null);
+                        if (isInProgressSelected) {
+                          updateLibraryUrl(null, null);
+                        } else {
+                          updateLibraryUrl(selectedAuthor?.id || null, null);
+                        }
                       }}
                       onBookUpdate={handleBookUpdate}
                       onTrackUpdate={handleMetadataUpdate}
                       onTrackComplete={handleTrackComplete}
+                      onBookInProgress={handleBookInProgress}
                       onShowPdf={handleShowPdf}
                       onPdfUpload={handlePdfUpload}
                       onPdfDelete={handlePdfDelete}
                       onPdfConvert={handlePdfConvert}
+                    />
+                  ) : isInProgressSelected ? (
+                    <InProgressGrid
+                      books={inProgressBooks}
+                      onBookSelect={handleInProgressBookSelect}
                     />
                   ) : selectedAuthor ? (
                     <BookGrid

@@ -35,6 +35,45 @@ interface UpdateBookBody {
   authorName: string;
 }
 
+interface PatchBookBody {
+  inProgress?: boolean;
+}
+
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    const body: PatchBookBody = await request.json();
+
+    const updatedBook = await prisma.book.update({
+      where: { id },
+      data: {
+        ...(body.inProgress !== undefined && { inProgress: body.inProgress }),
+      },
+      include: {
+        tracks: {
+          orderBy: { trackNumber: "asc" },
+          include: {
+            markers: {
+              orderBy: { timestamp: "asc" },
+            },
+          },
+        },
+      },
+    });
+
+    return NextResponse.json(updatedBook);
+  } catch (error) {
+    console.error("Error updating book:", error);
+    return NextResponse.json(
+      { error: "Failed to update book" },
+      { status: 500 }
+    );
+  }
+}
+
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }

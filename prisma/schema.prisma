@@ -16,12 +16,13 @@ model Author {
 }
 
 model Book {
-  id       String  @id @default(uuid())
-  name     String
-  authorId String
-  pdfPath  String?
-  author   Author  @relation(fields: [authorId], references: [id], onDelete: Cascade)
-  tracks   Track[]
+  id         String  @id @default(uuid())
+  name       String
+  authorId   String
+  pdfPath    String?
+  inProgress Boolean @default(false)
+  author     Author  @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  tracks     Track[]
 
   @@unique([name, authorId])
 }

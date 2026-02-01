@@ -22,6 +22,7 @@ export interface Book {
   name: string;
   authorId: string;
   pdfPath: string | null;
+  inProgress: boolean;
   tracks: Track[];
 }
 

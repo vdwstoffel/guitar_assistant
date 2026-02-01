@@ -219,6 +219,7 @@ interface TrackListViewProps {
   onBookUpdate?: (bookId: string, bookName: string, authorName: string) => Promise<void>;
   onTrackUpdate?: (trackId: string, title: string, author: string, book: string, trackNumber: number, pdfPage?: number | null) => Promise<void>;
   onTrackComplete?: (trackId: string, completed: boolean) => Promise<void>;
+  onBookInProgress?: (bookId: string, inProgress: boolean) => Promise<void>;
   onShowPdf?: (pdfPath: string, page?: number) => void;
   onPdfUpload?: (bookId: string, file: File) => Promise<void>;
   onPdfDelete?: (bookId: string) => Promise<void>;
@@ -234,6 +235,7 @@ export default function TrackListView({
   onBookUpdate,
   onTrackUpdate,
   onTrackComplete,
+  onBookInProgress,
   onShowPdf,
   onPdfUpload,
   onPdfDelete,
@@ -290,6 +292,21 @@ export default function TrackListView({
         <div className="flex flex-col justify-center">
           <div className="flex items-center gap-2">
             <h1 className="text-2xl font-bold text-white">{book.name}</h1>
+            {onBookInProgress && (
+              <button
+                onClick={() => onBookInProgress(book.id, !book.inProgress)}
+                className={`p-1 rounded transition-colors ${
+                  book.inProgress
+                    ? "text-yellow-400 hover:text-yellow-300 bg-yellow-400/10"
+                    : "text-gray-400 hover:text-yellow-400 hover:bg-gray-700"
+                }`}
+                title={book.inProgress ? "Remove from In Progress" : "Add to In Progress"}
+              >
+                <svg className="w-4 h-4" fill={book.inProgress ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </button>
+            )}
             {onBookUpdate && (
               <button
                 onClick={() => setEditingBook(true)}

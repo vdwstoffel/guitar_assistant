@@ -11,6 +11,9 @@ interface AuthorSidebarProps {
   onUpload: (files: FileList) => Promise<void>;
   isScanning: boolean;
   isUploading: boolean;
+  inProgressCount: number;
+  isInProgressSelected: boolean;
+  onInProgressSelect: () => void;
 }
 
 export default function AuthorSidebar({
@@ -21,6 +24,9 @@ export default function AuthorSidebar({
   onUpload,
   isScanning,
   isUploading,
+  inProgressCount,
+  isInProgressSelected,
+  onInProgressSelect,
 }: AuthorSidebarProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isBusy = isScanning || isUploading;
@@ -41,6 +47,26 @@ export default function AuthorSidebar({
 
       {/* Author List */}
       <div className="flex-1 overflow-y-auto">
+        {/* In Progress Section */}
+        <button
+          onClick={onInProgressSelect}
+          className={`w-full px-4 py-3 text-left transition-colors border-b border-gray-700 ${
+            isInProgressSelected
+              ? "bg-gray-800 text-yellow-400 border-l-2 border-yellow-500"
+              : "hover:bg-gray-800 text-gray-300 border-l-2 border-transparent"
+          }`}
+        >
+          <span className="font-medium flex items-center gap-2">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            In Progress
+          </span>
+          <span className="block text-xs text-gray-500 mt-0.5">
+            {inProgressCount} book{inProgressCount !== 1 ? "s" : ""}
+          </span>
+        </button>
+
         {authors.length === 0 ? (
           <div className="text-gray-500 text-center p-6 text-sm">
             <p>No authors found.</p>
