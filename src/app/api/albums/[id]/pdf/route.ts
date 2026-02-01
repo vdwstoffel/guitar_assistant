@@ -68,21 +68,8 @@ export async function POST(
 
     const buffer = Buffer.from(await file.arrayBuffer());
 
-    // Save to a temporary file first
-    const tempPath = absolutePath + ".tmp";
-    await fs.writeFile(tempPath, buffer);
-
-    // Convert PDF using Ghostscript to ensure compatibility (converts JPEG 2000 to standard JPEG)
-    const result = await convertPdfWithGhostscript(tempPath, absolutePath);
-
-    if (!result.success) {
-      // If conversion fails, use original file
-      console.log("Ghostscript conversion failed, using original PDF:", result.error);
-      await fs.rename(tempPath, absolutePath);
-    } else {
-      // Clean up temp file
-      await fs.unlink(tempPath).catch(() => {});
-    }
+    // Save PDF directly (use PATCH endpoint to fix JPEG 2000 compatibility if needed)
+    await fs.writeFile(absolutePath, buffer);
 
     // Update album with PDF path
     const updatedAlbum = await prisma.album.update({
