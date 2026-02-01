@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import * as path from "path";
 import * as fs from "fs/promises";
+import NodeID3 from "node-id3";
+import { File as TagFile } from "node-taglib-sharp";
 
 const MUSIC_DIR = process.env.MUSIC_DIR || "./music";
 
@@ -63,6 +65,39 @@ export async function PATCH(
     }
     if (body.timeSignature !== undefined) {
       updateData.timeSignature = body.timeSignature;
+    }
+
+    // If title is being updated, write to audio file metadata
+    if (body.title !== undefined) {
+      const jamTrack = await prisma.jamTrack.findUnique({
+        where: { id },
+      });
+
+      if (jamTrack) {
+        const musicPath = path.resolve(MUSIC_DIR);
+        const filePath = path.join(musicPath, jamTrack.filePath);
+        const ext = path.extname(filePath).toLowerCase();
+
+        if (ext === ".mp3") {
+          try {
+            const tags: NodeID3.Tags = {
+              title: body.title.trim(),
+            };
+            NodeID3.update(tags, filePath);
+          } catch (err) {
+            console.error(`Failed to update mp3 metadata for ${filePath}:`, err);
+          }
+        } else if (ext === ".m4a") {
+          try {
+            const tagFile = TagFile.createFromPath(filePath);
+            tagFile.tag.title = body.title.trim();
+            tagFile.save();
+            tagFile.dispose();
+          } catch (err) {
+            console.error(`Failed to update m4a metadata for ${filePath}:`, err);
+          }
+        }
+      }
     }
 
     const updatedJamTrack = await prisma.jamTrack.update({

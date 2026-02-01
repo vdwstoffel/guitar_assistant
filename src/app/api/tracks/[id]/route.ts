@@ -4,6 +4,7 @@ import * as path from "path";
 import * as fs from "fs";
 import NodeID3 from "node-id3";
 import { WaveFile } from "wavefile";
+import { File as TagFile } from "node-taglib-sharp";
 
 const MUSIC_DIR = process.env.MUSIC_DIR || "./music";
 
@@ -124,8 +125,22 @@ export async function PUT(
         album: bookName.trim(),
         trackNumber,
       });
+    } else if (ext === ".m4a") {
+      try {
+        const tagFile = TagFile.createFromPath(filePath);
+        tagFile.tag.title = title.trim();
+        tagFile.tag.performers = [authorName.trim()];
+        tagFile.tag.album = bookName.trim();
+        if (trackNumber > 0) {
+          tagFile.tag.track = trackNumber;
+        }
+        tagFile.save();
+        tagFile.dispose();
+      } catch (err) {
+        console.error(`Failed to write m4a metadata to ${filePath}:`, err);
+      }
     } else {
-      // For other file types, we can only update the database
+      // For other file types (flac, ogg, aac), we can only update the database
       console.warn(`Cannot write metadata to ${ext} files, only updating database`);
     }
 

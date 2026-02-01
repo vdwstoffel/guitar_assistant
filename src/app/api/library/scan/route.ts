@@ -4,6 +4,7 @@ import * as fs from "fs/promises";
 import * as path from "path";
 import * as mm from "music-metadata";
 import NodeID3 from "node-id3";
+import { File as TagFile } from "node-taglib-sharp";
 
 const MUSIC_DIR = process.env.MUSIC_DIR || "./music";
 const SUPPORTED_EXTENSIONS = [".mp3", ".flac", ".wav", ".ogg", ".m4a", ".aac"];
@@ -163,11 +164,17 @@ async function scanMusicFolder(): Promise<ScannedTrack[]> {
           return withoutExt.replace(/[-_]/g, ' ').trim();
         };
 
-        // Use metadata as primary source, fall back to filename - clean both
+        // Get folder structure as fallback: music/Author/Book/track.ext
+        const relativePath = path.relative(musicPath, filePath);
+        const pathParts = relativePath.split(path.sep);
+        const folderAuthor = pathParts.length >= 3 ? pathParts[0] : null;
+        const folderBook = pathParts.length >= 3 ? pathParts[1] : null;
+
+        // Use metadata as primary source, fall back to folder structure, then defaults
         const rawTitle = metadata.common.title || fileName;
         const title = cleanTitle(rawTitle);
-        const author = metadata.common.artist || "Unknown Author";
-        const book = metadata.common.album || "Unknown Book";
+        const author = metadata.common.artist || folderAuthor || "Unknown Author";
+        const book = metadata.common.album || folderBook || "Unknown Book";
         const trackNumber = metadata.common.track?.no || 0;
         const duration = metadata.format.duration || 0;
 
@@ -324,16 +331,11 @@ export async function POST() {
       const oldFullPath = path.join(musicPath, track.filePath);
       const newFullPath = path.join(musicPath, newRelativePath);
 
-      // Skip if already in correct location
-      if (track.filePath === newRelativePath) {
-        continue;
-      }
-
       try {
         // Check if source file exists
         await fs.access(oldFullPath);
 
-        // Update MP3 metadata if needed
+        // Always update embedded metadata to match database values
         if (ext.toLowerCase() === ".mp3") {
           const tags: NodeID3.Tags = {
             title: track.title,
@@ -342,6 +344,25 @@ export async function POST() {
             trackNumber: track.trackNumber ? String(track.trackNumber) : undefined,
           };
           NodeID3.update(tags, oldFullPath);
+        } else if (ext.toLowerCase() === ".m4a") {
+          try {
+            const tagFile = TagFile.createFromPath(oldFullPath);
+            tagFile.tag.title = track.title;
+            tagFile.tag.performers = [track.book.author.name];
+            tagFile.tag.album = track.book.name;
+            if (track.trackNumber) {
+              tagFile.tag.track = track.trackNumber;
+            }
+            tagFile.save();
+            tagFile.dispose();
+          } catch (tagErr) {
+            console.error(`Failed to update m4a metadata for ${oldFullPath}:`, tagErr);
+          }
+        }
+
+        // Skip file move if already in correct location
+        if (track.filePath === newRelativePath) {
+          continue;
         }
 
         // Create directory structure

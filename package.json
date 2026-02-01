@@ -12,6 +12,7 @@
     "music-metadata": "^11.11.1",
     "next": "16.1.6",
     "node-id3": "^0.2.9",
+    "node-taglib-sharp": "^6.0.1",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-pdf": "^10.3.0",

@@ -4,6 +4,7 @@ import * as path from "path";
 import * as fs from "fs";
 import NodeID3 from "node-id3";
 import { WaveFile } from "wavefile";
+import { File as TagFile } from "node-taglib-sharp";
 
 const MUSIC_DIR = process.env.MUSIC_DIR || "./music";
 
@@ -169,6 +170,16 @@ export async function PUT(
           album: bookName.trim(),
           artist: authorName.trim(),
         });
+      } else if (ext === ".m4a") {
+        try {
+          const tagFile = TagFile.createFromPath(filePath);
+          tagFile.tag.performers = [authorName.trim()];
+          tagFile.tag.album = bookName.trim();
+          tagFile.save();
+          tagFile.dispose();
+        } catch (err) {
+          console.error(`Failed to update m4a tags for ${track.filePath}:`, err);
+        }
       }
     }
 
