@@ -733,6 +733,7 @@ export default function Home() {
                         setSelectedAlbum(null);
                         updateLibraryUrl(selectedArtist?.id || null, null);
                       }}
+                      onAlbumUpdate={handleAlbumUpdate}
                       onSongUpdate={handleMetadataUpdate}
                       onSongComplete={handleSongComplete}
                       onShowPdf={handleShowPdf}

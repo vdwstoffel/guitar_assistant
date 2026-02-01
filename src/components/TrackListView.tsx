@@ -38,6 +38,79 @@ interface SongEditModalProps {
   onSave: (songId: string, title: string, artist: string, album: string, trackNumber: number, pdfPage?: number | null) => Promise<void>;
 }
 
+interface AlbumEditModalProps {
+  album: Album;
+  artistName: string;
+  onClose: () => void;
+  onSave: (albumId: string, albumName: string, artistName: string) => Promise<void>;
+}
+
+function AlbumEditModal({ album, artistName, onClose, onSave }: AlbumEditModalProps) {
+  const [editAlbumName, setEditAlbumName] = useState(album.name);
+  const [editArtistName, setEditArtistName] = useState(artistName);
+  const [isSaving, setIsSaving] = useState(false);
+
+  const handleSave = async () => {
+    if (!editAlbumName.trim() || !editArtistName.trim()) return;
+    setIsSaving(true);
+    try {
+      await onSave(album.id, editAlbumName.trim(), editArtistName.trim());
+      onClose();
+    } catch (error) {
+      console.error("Failed to save album metadata:", error);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md mx-4 shadow-xl">
+        <h3 className="text-lg font-semibold mb-4 text-white">Edit Album Info</h3>
+        <p className="text-sm text-gray-400 mb-4">
+          This will update all {album.songs.length} song{album.songs.length !== 1 ? "s" : ""} in this album.
+        </p>
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm text-gray-400 mb-1">Album Name</label>
+            <input
+              type="text"
+              value={editAlbumName}
+              onChange={(e) => setEditAlbumName(e.target.value)}
+              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:border-green-500"
+            />
+          </div>
+          <div>
+            <label className="block text-sm text-gray-400 mb-1">Artist Name</label>
+            <input
+              type="text"
+              value={editArtistName}
+              onChange={(e) => setEditArtistName(e.target.value)}
+              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:border-green-500"
+            />
+          </div>
+        </div>
+        <div className="flex justify-end gap-3 mt-6">
+          <button
+            onClick={onClose}
+            disabled={isSaving}
+            className="px-4 py-2 text-gray-400 hover:text-white transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={isSaving || !editAlbumName.trim() || !editArtistName.trim()}
+            className="px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded font-medium transition-colors text-white"
+          >
+            {isSaving ? "Saving..." : "Save All"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SongEditModal({ song, artistName, albumName, albumHasPdf, onClose, onSave }: SongEditModalProps) {
   const [editTitle, setEditTitle] = useState(song.title);
   const [editArtist, setEditArtist] = useState(artistName);
@@ -143,6 +216,7 @@ interface TrackListViewProps {
   currentSong: Song | null;
   onSongSelect: (song: Song, artist: Artist, album: Album) => void;
   onBack: () => void;
+  onAlbumUpdate?: (albumId: string, albumName: string, artistName: string) => Promise<void>;
   onSongUpdate?: (songId: string, title: string, artist: string, album: string, trackNumber: number, pdfPage?: number | null) => Promise<void>;
   onSongComplete?: (songId: string, completed: boolean) => Promise<void>;
   onShowPdf?: (pdfPath: string, page?: number) => void;
@@ -157,6 +231,7 @@ export default function TrackListView({
   currentSong,
   onSongSelect,
   onBack,
+  onAlbumUpdate,
   onSongUpdate,
   onSongComplete,
   onShowPdf,
@@ -164,6 +239,7 @@ export default function TrackListView({
   onPdfDelete,
   onPdfConvert,
 }: TrackListViewProps) {
+  const [editingAlbum, setEditingAlbum] = useState(false);
   const [editingSong, setEditingSong] = useState<Song | null>(null);
   const [isConverting, setIsConverting] = useState(false);
 
@@ -175,6 +251,16 @@ export default function TrackListView({
 
   return (
     <div className="h-full overflow-y-auto bg-gray-900 p-6">
+      {/* Album Edit Modal */}
+      {editingAlbum && onAlbumUpdate && (
+        <AlbumEditModal
+          album={album}
+          artistName={artist.name}
+          onClose={() => setEditingAlbum(false)}
+          onSave={onAlbumUpdate}
+        />
+      )}
+
       {/* Song Edit Modal */}
       {editingSong && onSongUpdate && (
         <SongEditModal
@@ -202,7 +288,20 @@ export default function TrackListView({
       <div className="flex gap-4 mb-6">
         <AlbumCover album={album} />
         <div className="flex flex-col justify-center">
-          <h1 className="text-2xl font-bold text-white">{album.name}</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold text-white">{album.name}</h1>
+            {onAlbumUpdate && (
+              <button
+                onClick={() => setEditingAlbum(true)}
+                className="p-1 text-gray-400 hover:text-white hover:bg-gray-700 rounded transition-colors"
+                title="Edit album info"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                </svg>
+              </button>
+            )}
+          </div>
           <p className="text-gray-400">{artist.name}</p>
           <p className="text-gray-500 text-sm mt-1">
             {album.songs.length} track{album.songs.length !== 1 ? "s" : ""}
