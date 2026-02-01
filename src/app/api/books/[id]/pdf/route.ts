@@ -47,23 +47,23 @@ export async function POST(
       return NextResponse.json({ error: "File must be a PDF" }, { status: 400 });
     }
 
-    // Get album to verify it exists
-    const album = await prisma.album.findUnique({
+    // Get book to verify it exists
+    const book = await prisma.book.findUnique({
       where: { id },
-      include: { artist: true },
+      include: { author: true },
     });
 
-    if (!album) {
-      return NextResponse.json({ error: "Album not found" }, { status: 404 });
+    if (!book) {
+      return NextResponse.json({ error: "Book not found" }, { status: 404 });
     }
 
-    // Create directory structure: Artist/Album/
-    const albumDir = path.join(MUSIC_DIR, album.artist.name, album.name);
-    await fs.mkdir(albumDir, { recursive: true });
+    // Create directory structure: Author/Book/
+    const bookDir = path.join(MUSIC_DIR, book.author.name, book.name);
+    await fs.mkdir(bookDir, { recursive: true });
 
     // Save PDF with standardized name
-    const pdfFileName = `${album.name}.pdf`;
-    const pdfPath = path.join(album.artist.name, album.name, pdfFileName);
+    const pdfFileName = `${book.name}.pdf`;
+    const pdfPath = path.join(book.author.name, book.name, pdfFileName);
     const absolutePath = path.join(MUSIC_DIR, pdfPath);
 
     const buffer = Buffer.from(await file.arrayBuffer());
@@ -71,20 +71,20 @@ export async function POST(
     // Save PDF directly (use PATCH endpoint to fix JPEG 2000 compatibility if needed)
     await fs.writeFile(absolutePath, buffer);
 
-    // Update album with PDF path
-    const updatedAlbum = await prisma.album.update({
+    // Update book with PDF path
+    const updatedBook = await prisma.book.update({
       where: { id },
       data: { pdfPath },
       include: {
-        artist: true,
-        songs: {
+        author: true,
+        tracks: {
           orderBy: { trackNumber: "asc" },
           include: { markers: { orderBy: { timestamp: "asc" } } },
         },
       },
     });
 
-    return NextResponse.json({ album: updatedAlbum });
+    return NextResponse.json({ album: updatedBook });
   } catch (error) {
     console.error("Error uploading PDF:", error);
     return NextResponse.json({ error: "Failed to upload PDF" }, { status: 500 });
@@ -99,21 +99,21 @@ export async function PATCH(
   try {
     const { id } = await params;
 
-    const album = await prisma.album.findUnique({
+    const book = await prisma.book.findUnique({
       where: { id },
     });
 
-    if (!album) {
-      return NextResponse.json({ error: "Album not found" }, { status: 404 });
+    if (!book) {
+      return NextResponse.json({ error: "Book not found" }, { status: 404 });
     }
 
-    if (!album.pdfPath) {
-      return NextResponse.json({ error: "Album has no PDF" }, { status: 400 });
+    if (!book.pdfPath) {
+      return NextResponse.json({ error: "Book has no PDF" }, { status: 400 });
     }
 
-    const absolutePath = path.join(MUSIC_DIR, album.pdfPath);
+    const absolutePath = path.join(MUSIC_DIR, book.pdfPath);
     console.log("PATCH: Converting PDF at:", absolutePath);
-    console.log("PATCH: Album pdfPath:", album.pdfPath);
+    console.log("PATCH: Book pdfPath:", book.pdfPath);
 
     // Check if file exists
     try {
@@ -173,16 +173,16 @@ export async function DELETE(
   try {
     const { id } = await params;
 
-    const album = await prisma.album.findUnique({
+    const book = await prisma.book.findUnique({
       where: { id },
     });
 
-    if (!album) {
-      return NextResponse.json({ error: "Album not found" }, { status: 404 });
+    if (!book) {
+      return NextResponse.json({ error: "Book not found" }, { status: 404 });
     }
 
-    if (album.pdfPath) {
-      const absolutePath = path.join(MUSIC_DIR, album.pdfPath);
+    if (book.pdfPath) {
+      const absolutePath = path.join(MUSIC_DIR, book.pdfPath);
       try {
         await fs.unlink(absolutePath);
       } catch {
@@ -190,7 +190,7 @@ export async function DELETE(
       }
     }
 
-    await prisma.album.update({
+    await prisma.book.update({
       where: { id },
       data: { pdfPath: null },
     });

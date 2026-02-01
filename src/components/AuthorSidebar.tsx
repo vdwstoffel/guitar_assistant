@@ -1,27 +1,27 @@
 "use client";
 
 import { useRef } from "react";
-import { Artist } from "@/types";
+import { Author } from "@/types";
 
-interface ArtistSidebarProps {
-  artists: Artist[];
-  selectedArtist: Artist | null;
-  onArtistSelect: (artist: Artist) => void;
+interface AuthorSidebarProps {
+  authors: Author[];
+  selectedAuthor: Author | null;
+  onAuthorSelect: (author: Author) => void;
   onScan: () => void;
   onUpload: (files: FileList) => Promise<void>;
   isScanning: boolean;
   isUploading: boolean;
 }
 
-export default function ArtistSidebar({
-  artists,
-  selectedArtist,
-  onArtistSelect,
+export default function AuthorSidebar({
+  authors,
+  selectedAuthor,
+  onAuthorSelect,
   onScan,
   onUpload,
   isScanning,
   isUploading,
-}: ArtistSidebarProps) {
+}: AuthorSidebarProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isBusy = isScanning || isUploading;
 
@@ -36,31 +36,31 @@ export default function ArtistSidebar({
     <div className="h-full flex flex-col bg-gray-900 text-white">
       {/* Header */}
       <div className="p-4 border-b border-gray-700">
-        <h2 className="text-lg font-bold text-gray-400 uppercase tracking-wider">Artists</h2>
+        <h2 className="text-lg font-bold text-gray-400 uppercase tracking-wider">Authors</h2>
       </div>
 
-      {/* Artist List */}
+      {/* Author List */}
       <div className="flex-1 overflow-y-auto">
-        {artists.length === 0 ? (
+        {authors.length === 0 ? (
           <div className="text-gray-500 text-center p-6 text-sm">
-            <p>No artists found.</p>
-            <p className="mt-2">Add music and scan your library.</p>
+            <p>No authors found.</p>
+            <p className="mt-2">Add audio files and scan your library.</p>
           </div>
         ) : (
           <ul className="py-2">
-            {artists.map((artist) => (
-              <li key={artist.id}>
+            {authors.map((author) => (
+              <li key={author.id}>
                 <button
-                  onClick={() => onArtistSelect(artist)}
+                  onClick={() => onAuthorSelect(author)}
                   className={`w-full px-4 py-3 text-left transition-colors ${
-                    selectedArtist?.id === artist.id
+                    selectedAuthor?.id === author.id
                       ? "bg-gray-800 text-green-400 border-l-2 border-green-500"
                       : "hover:bg-gray-800 text-gray-300 border-l-2 border-transparent"
                   }`}
                 >
-                  <span className="font-medium">{artist.name}</span>
+                  <span className="font-medium">{author.name}</span>
                   <span className="block text-xs text-gray-500 mt-0.5">
-                    {artist.albums.length} album{artist.albums.length !== 1 ? "s" : ""}
+                    {author.books.length} book{author.books.length !== 1 ? "s" : ""}
                   </span>
                 </button>
               </li>

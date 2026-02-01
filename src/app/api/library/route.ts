@@ -3,11 +3,11 @@ import { prisma } from "@/lib/prisma";
 
 export async function GET() {
   try {
-    const artists = await prisma.artist.findMany({
+    const authors = await prisma.author.findMany({
       include: {
-        albums: {
+        books: {
           include: {
-            songs: {
+            tracks: {
               orderBy: { trackNumber: "asc" },
               include: {
                 markers: {
@@ -22,7 +22,7 @@ export async function GET() {
       orderBy: { name: "asc" },
     });
 
-    return NextResponse.json(artists);
+    return NextResponse.json(authors);
   } catch (error) {
     console.error("Error fetching library:", error);
     return NextResponse.json(

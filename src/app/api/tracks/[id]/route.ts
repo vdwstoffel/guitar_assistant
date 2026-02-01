@@ -39,8 +39,8 @@ function writeWavMetadata(
 
 interface UpdateMetadataBody {
   title: string;
-  artist: string;
-  album: string;
+  author: string;
+  book: string;
   trackNumber: number;
   pdfPage?: number | null;
 }
@@ -58,14 +58,14 @@ export async function PATCH(
     const body: ToggleCompletedBody = await request.json();
     const { completed } = body;
 
-    const updatedSong = await prisma.song.update({
+    const updatedTrack = await prisma.track.update({
       where: { id },
       data: { completed },
     });
 
-    return NextResponse.json(updatedSong);
+    return NextResponse.json(updatedTrack);
   } catch (error) {
-    console.error("Error toggling song completed status:", error);
+    console.error("Error toggling track completed status:", error);
     return NextResponse.json(
       { error: "Failed to update completed status" },
       { status: 500 }
@@ -80,34 +80,34 @@ export async function PUT(
   try {
     const { id } = await params;
     const body: UpdateMetadataBody = await request.json();
-    const { title, artist, album, trackNumber, pdfPage } = body;
+    const { title, author: authorName, book: bookName, trackNumber, pdfPage } = body;
 
-    if (!title?.trim() || !artist?.trim() || !album?.trim()) {
+    if (!title?.trim() || !authorName?.trim() || !bookName?.trim()) {
       return NextResponse.json(
-        { error: "Title, artist, and album are required" },
+        { error: "Title, author, and book are required" },
         { status: 400 }
       );
     }
 
-    // Get existing song
-    const existingSong = await prisma.song.findUnique({
+    // Get existing track
+    const existingTrack = await prisma.track.findUnique({
       where: { id },
-      include: { album: { include: { artist: true } } },
+      include: { book: { include: { author: true } } },
     });
 
-    if (!existingSong) {
-      return NextResponse.json({ error: "Song not found" }, { status: 404 });
+    if (!existingTrack) {
+      return NextResponse.json({ error: "Track not found" }, { status: 404 });
     }
 
     // Write metadata to file
-    const filePath = path.resolve(MUSIC_DIR, existingSong.filePath);
+    const filePath = path.resolve(MUSIC_DIR, existingTrack.filePath);
     const ext = path.extname(filePath).toLowerCase();
 
     if (ext === ".mp3") {
       const tags: NodeID3.Tags = {
         title: title.trim(),
-        artist: artist.trim(),
-        album: album.trim(),
+        artist: authorName.trim(),
+        album: bookName.trim(),
         trackNumber: trackNumber > 0 ? String(trackNumber) : undefined,
       };
 
@@ -118,8 +118,8 @@ export async function PUT(
     } else if (ext === ".wav") {
       writeWavMetadata(filePath, {
         title: title.trim(),
-        artist: artist.trim(),
-        album: album.trim(),
+        artist: authorName.trim(),
+        album: bookName.trim(),
         trackNumber,
       });
     } else {
@@ -127,41 +127,41 @@ export async function PUT(
       console.warn(`Cannot write metadata to ${ext} files, only updating database`);
     }
 
-    // Get or create artist
-    const artistRecord = await prisma.artist.upsert({
-      where: { name: artist.trim() },
+    // Get or create author
+    const authorRecord = await prisma.author.upsert({
+      where: { name: authorName.trim() },
       update: {},
-      create: { name: artist.trim() },
+      create: { name: authorName.trim() },
     });
 
-    // Get or create album under this artist
-    const albumRecord = await prisma.album.upsert({
+    // Get or create book under this author
+    const bookRecord = await prisma.book.upsert({
       where: {
-        name_artistId: {
-          name: album.trim(),
-          artistId: artistRecord.id,
+        name_authorId: {
+          name: bookName.trim(),
+          authorId: authorRecord.id,
         },
       },
       update: {},
       create: {
-        name: album.trim(),
-        artistId: artistRecord.id,
+        name: bookName.trim(),
+        authorId: authorRecord.id,
       },
     });
 
-    // Update song
-    const updatedSong = await prisma.song.update({
+    // Update track
+    const updatedTrack = await prisma.track.update({
       where: { id },
       data: {
         title: title.trim(),
         trackNumber: trackNumber >= 0 ? trackNumber : 0,
-        albumId: albumRecord.id,
+        bookId: bookRecord.id,
         pdfPage: pdfPage !== undefined ? pdfPage : undefined,
       },
       include: {
-        album: {
+        book: {
           include: {
-            artist: true,
+            author: true,
           },
         },
         markers: {
@@ -170,21 +170,21 @@ export async function PUT(
       },
     });
 
-    // Clean up empty albums and artists
-    await prisma.album.deleteMany({
-      where: { songs: { none: {} } },
+    // Clean up empty books and authors
+    await prisma.book.deleteMany({
+      where: { tracks: { none: {} } },
     });
-    await prisma.artist.deleteMany({
-      where: { albums: { none: {} } },
+    await prisma.author.deleteMany({
+      where: { books: { none: {} } },
     });
 
     return NextResponse.json({
-      song: updatedSong,
-      artist: artistRecord,
-      album: albumRecord,
+      track: updatedTrack,
+      author: authorRecord,
+      book: bookRecord,
     });
   } catch (error) {
-    console.error("Error updating song metadata:", error);
+    console.error("Error updating track metadata:", error);
     return NextResponse.json(
       { error: "Failed to update metadata" },
       { status: 500 }

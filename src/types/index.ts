@@ -2,33 +2,33 @@ export interface Marker {
   id: string;
   name: string;
   timestamp: number;
-  songId: string;
+  trackId: string;
 }
 
-export interface Song {
+export interface Track {
   id: string;
   title: string;
   trackNumber: number;
   filePath: string;
   duration: number;
-  albumId: string;
+  bookId: string;
   pdfPage: number | null;
   markers: Marker[];
   completed: boolean;
 }
 
-export interface Album {
+export interface Book {
   id: string;
   name: string;
-  artistId: string;
+  authorId: string;
   pdfPath: string | null;
-  songs: Song[];
+  tracks: Track[];
 }
 
-export interface Artist {
+export interface Author {
   id: string;
   name: string;
-  albums: Album[];
+  books: Book[];
 }
 
 export interface Video {
@@ -38,3 +38,8 @@ export interface Video {
   sortOrder: number;
   createdAt: string;
 }
+
+// Backwards compatibility aliases (for gradual migration)
+export type Song = Track;
+export type Album = Book;
+export type Artist = Author;

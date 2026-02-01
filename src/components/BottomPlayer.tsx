@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState, useEffect, useCallback } from "react";
-import { Song, Marker } from "@/types";
+import { Track, Marker } from "@/types";
 import WaveSurfer from "wavesurfer.js";
 import RegionsPlugin from "wavesurfer.js/dist/plugins/regions.js";
 
@@ -23,18 +23,18 @@ export interface MarkerBarState {
 }
 
 interface BottomPlayerProps {
-  song: Song | null;
-  onMarkerAdd: (songId: string, name: string, timestamp: number) => void;
+  track: Track | null;
+  onMarkerAdd: (trackId: string, name: string, timestamp: number) => void;
   onMarkerUpdate: (markerId: string, timestamp: number) => void;
   onMarkerRename: (markerId: string, name: string) => void;
   onMarkerDelete: (markerId: string) => void;
-  onMarkersClear: (songId: string) => void;
+  onMarkersClear: (trackId: string) => void;
   externalMarkersBar?: boolean;
   onMarkerBarStateChange?: (state: MarkerBarState) => void;
 }
 
 export default function BottomPlayer({
-  song,
+  track,
   onMarkerAdd,
   onMarkerUpdate,
   onMarkerRename,
@@ -135,8 +135,8 @@ export default function BottomPlayer({
   const handlePlaybackSpeed = (speed: number) => {
     const clampedSpeed = Math.max(10, Math.min(200, speed));
     setPlaybackSpeed(clampedSpeed);
-    if (song) {
-      localStorage.setItem(`playbackSpeed_${song.id}`, clampedSpeed.toString());
+    if (track) {
+      localStorage.setItem(`playbackSpeed_${track.id}`, clampedSpeed.toString());
     }
     if (wavesurferRef.current) {
       wavesurferRef.current.setPlaybackRate(clampedSpeed / 100, true);
@@ -153,7 +153,7 @@ export default function BottomPlayer({
   };
 
   const initWaveSurfer = useCallback(() => {
-    if (!waveformRef.current || !song) return;
+    if (!waveformRef.current || !track) return;
 
     if (wavesurferRef.current) {
       wavesurferRef.current.destroy();
@@ -183,8 +183,8 @@ export default function BottomPlayer({
       setDuration(ws.getDuration());
       setIsLoading(false);
 
-      // Apply saved playback speed for this song
-      const savedSpeed = localStorage.getItem(`playbackSpeed_${song.id}`);
+      // Apply saved playback speed for this track
+      const savedSpeed = localStorage.getItem(`playbackSpeed_${track.id}`);
       const speed = savedSpeed ? parseInt(savedSpeed, 10) : 100;
       setPlaybackSpeed(speed);
       ws.setPlaybackRate(speed / 100, true);
@@ -195,7 +195,7 @@ export default function BottomPlayer({
       setVolume(vol);
       ws.setVolume(vol / 100);
 
-      song.markers.forEach((marker) => {
+      track.markers.forEach((marker) => {
         const region = regions.addRegion({
           id: marker.id,
           start: marker.timestamp,
@@ -209,7 +209,7 @@ export default function BottomPlayer({
         }
       });
 
-      prevMarkerIdsRef.current = new Set(song.markers.map((m) => m.id));
+      prevMarkerIdsRef.current = new Set(track.markers.map((m) => m.id));
       isInitialLoadRef.current = false;
 
       regions.on("region-updated", (region) => {
@@ -227,13 +227,13 @@ export default function BottomPlayer({
     ws.on("pause", () => setIsPlaying(false));
     ws.on("finish", () => setIsPlaying(false));
 
-    ws.load(`/api/audio/${encodeURIComponent(song.filePath)}`);
+    ws.load(`/api/audio/${encodeURIComponent(track.filePath)}`);
 
     wavesurferRef.current = ws;
-  }, [song]);
+  }, [track]);
 
   useEffect(() => {
-    if (song) {
+    if (track) {
       prevMarkerIdsRef.current = new Set();
       isInitialLoadRef.current = true;
       initWaveSurfer();
@@ -249,18 +249,18 @@ export default function BottomPlayer({
         wavesurferRef.current = null;
       }
     };
-  }, [song?.id]);
+  }, [track?.id]);
 
-  // Wheel zoom event listener - re-run when song changes or loading completes
+  // Wheel zoom event listener - re-run when track changes or loading completes
   useEffect(() => {
     const container = waveformContainerRef.current;
-    if (!container || !song) return;
+    if (!container || !track) return;
 
     container.addEventListener("wheel", handleWheelZoom, { passive: false });
     return () => {
       container.removeEventListener("wheel", handleWheelZoom);
     };
-  }, [handleWheelZoom, song, isLoading]);
+  }, [handleWheelZoom, track, isLoading]);
 
   // Track scroll position and container width for marker labels
   useEffect(() => {
@@ -285,7 +285,7 @@ export default function BottomPlayer({
       container.removeEventListener("scroll", handleScroll);
       window.removeEventListener("resize", handleResize);
     };
-  }, [song, isLoading]);
+  }, [track, isLoading]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -301,22 +301,22 @@ export default function BottomPlayer({
         }
       }
 
-      if (e.code === "KeyM" && song) {
+      if (e.code === "KeyM" && track) {
         e.preventDefault();
-        const markerCount = song.markers.length + 1;
-        onMarkerAdd(song.id, `Marker ${markerCount}`, currentTime);
+        const markerCount = track.markers.length + 1;
+        onMarkerAdd(track.id, `Marker ${markerCount}`, currentTime);
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [song, currentTime, onMarkerAdd]);
+  }, [track, currentTime, onMarkerAdd]);
 
   // Update markers on waveform when they change
   useEffect(() => {
-    if (!regionsRef.current || !song || isLoading || isInitialLoadRef.current) return;
+    if (!regionsRef.current || !track || isLoading || isInitialLoadRef.current) return;
 
-    const currentMarkerIds = new Set(song.markers.map((m) => m.id));
+    const currentMarkerIds = new Set(track.markers.map((m) => m.id));
     const prevMarkerIds = prevMarkerIdsRef.current;
 
     const markersChanged =
@@ -331,7 +331,7 @@ export default function BottomPlayer({
     prevMarkerIdsRef.current = currentMarkerIds;
 
     regionsRef.current.clearRegions();
-    song.markers.forEach((marker) => {
+    track.markers.forEach((marker) => {
       const region = regionsRef.current?.addRegion({
         id: marker.id,
         start: marker.timestamp,
@@ -344,7 +344,7 @@ export default function BottomPlayer({
         region.element.classList.add("marker-region");
       }
     });
-  }, [song?.markers, isLoading]);
+  }, [track?.markers, isLoading]);
 
   const togglePlay = () => {
     if (!wavesurferRef.current) return;
@@ -365,10 +365,10 @@ export default function BottomPlayer({
   }, [duration, leadIn]);
 
   const addMarker = useCallback(() => {
-    if (!song || !newMarkerName.trim()) return;
-    onMarkerAdd(song.id, newMarkerName.trim(), currentTimeRef.current);
+    if (!track || !newMarkerName.trim()) return;
+    onMarkerAdd(track.id, newMarkerName.trim(), currentTimeRef.current);
     setNewMarkerName("");
-  }, [song, newMarkerName, onMarkerAdd]);
+  }, [track, newMarkerName, onMarkerAdd]);
 
   const formatTime = useCallback((seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -415,10 +415,10 @@ export default function BottomPlayer({
     };
   }, [showMarkers, newMarkerName, leadIn, editingMarkerId, editingMarkerName, currentTime, jumpToMarker, addMarker, formatTime]);
 
-  if (!song) {
+  if (!track) {
     return (
       <div className="h-full flex items-center justify-center bg-gray-800 border-t border-gray-700 text-gray-500">
-        <p>Select a song to play</p>
+        <p>Select a track to play</p>
       </div>
     );
   }
@@ -552,16 +552,16 @@ export default function BottomPlayer({
               <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
               </svg>
-              Markers ({song.markers.length})
+              Markers ({track.markers.length})
             </button>
           </div>
 
           {/* Waveform - Full Width */}
           <div className="flex-1 relative pt-6">
             {/* Marker labels - positioned above waveform */}
-            {song.markers.length > 0 && duration > 0 && !isLoading && containerWidth > 0 && (
+            {track.markers.length > 0 && duration > 0 && !isLoading && containerWidth > 0 && (
               <div className="absolute top-0 left-0 right-0 h-6 overflow-visible pointer-events-none z-10">
-                {song.markers.map((marker) => {
+                {track.markers.map((marker) => {
                   // WaveSurfer scales waveform to at least fill container
                   const waveformWidth = Math.max(containerWidth, duration * zoom);
                   const pixelsPerSecond = waveformWidth / duration;
@@ -633,9 +633,9 @@ export default function BottomPlayer({
                   </button>
                 </div>
 
-                {song.markers.length > 0 && (
+                {track.markers.length > 0 && (
                   <button
-                    onClick={() => onMarkersClear(song.id)}
+                    onClick={() => onMarkersClear(track.id)}
                     className="text-xs text-red-400 hover:text-red-300"
                   >
                     Clear all
@@ -644,9 +644,9 @@ export default function BottomPlayer({
               </div>
 
               {/* Markers List - Spread across full width and centered */}
-              {song.markers.length > 0 && (
+              {track.markers.length > 0 && (
                 <div className="flex flex-wrap justify-evenly items-center gap-2 mt-2 w-full">
-                  {song.markers
+                  {track.markers
                     .sort((a, b) => a.timestamp - b.timestamp)
                     .map((marker: Marker) => (
                       <div

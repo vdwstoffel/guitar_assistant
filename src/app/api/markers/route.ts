@@ -4,18 +4,18 @@ import { prisma } from "@/lib/prisma";
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { songId, name, timestamp } = body;
+    const { trackId, name, timestamp } = body;
 
-    if (!songId || !name || timestamp === undefined) {
+    if (!trackId || !name || timestamp === undefined) {
       return NextResponse.json(
-        { error: "Missing required fields: songId, name, timestamp" },
+        { error: "Missing required fields: trackId, name, timestamp" },
         { status: 400 }
       );
     }
 
     const marker = await prisma.marker.create({
       data: {
-        songId,
+        trackId,
         name,
         timestamp,
       },

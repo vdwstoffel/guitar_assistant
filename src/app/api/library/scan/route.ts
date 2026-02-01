@@ -23,13 +23,13 @@ function padTrackNumber(trackNumber: number, totalTracks: number): string {
   return trackNumber.toString().padStart(2, "0");
 }
 
-interface ScannedSong {
+interface ScannedTrack {
   title: string;
   trackNumber: number;
   duration: number;
   filePath: string;
-  artist: string;
-  album: string;
+  author: string;
+  book: string;
 }
 
 async function findAudioFiles(dir: string): Promise<string[]> {
@@ -56,8 +56,8 @@ async function findAudioFiles(dir: string): Promise<string[]> {
   return audioFiles;
 }
 
-async function scanMusicFolder(): Promise<ScannedSong[]> {
-  const songs: ScannedSong[] = [];
+async function scanMusicFolder(): Promise<ScannedTrack[]> {
+  const tracks: ScannedTrack[] = [];
   const musicPath = path.resolve(MUSIC_DIR);
 
   try {
@@ -82,18 +82,18 @@ async function scanMusicFolder(): Promise<ScannedSong[]> {
         // Use metadata as primary source, fall back to filename - clean both
         const rawTitle = metadata.common.title || fileName;
         const title = cleanTitle(rawTitle);
-        const artist = metadata.common.artist || "Unknown Artist";
-        const album = metadata.common.album || "Unknown Album";
+        const author = metadata.common.artist || "Unknown Author";
+        const book = metadata.common.album || "Unknown Book";
         const trackNumber = metadata.common.track?.no || 0;
         const duration = metadata.format.duration || 0;
 
-        songs.push({
+        tracks.push({
           title,
           trackNumber,
           duration,
           filePath: path.relative(musicPath, filePath),
-          artist,
-          album,
+          author,
+          book,
         });
       } catch (err) {
         console.error(`Error parsing ${filePath}:`, err);
@@ -103,110 +103,110 @@ async function scanMusicFolder(): Promise<ScannedSong[]> {
     console.error("Error scanning music folder:", err);
   }
 
-  return songs;
+  return tracks;
 }
 
 export async function POST() {
   try {
-    const songs = await scanMusicFolder();
+    const tracks = await scanMusicFolder();
 
-    if (songs.length === 0) {
+    if (tracks.length === 0) {
       return NextResponse.json({
-        message: "No songs found in music folder",
+        message: "No tracks found in music folder",
         count: 0,
       });
     }
 
-    // Group songs by artist and album
-    const artistAlbumMap = new Map<
+    // Group tracks by author and book
+    const authorBookMap = new Map<
       string,
-      Map<string, ScannedSong[]>
+      Map<string, ScannedTrack[]>
     >();
 
-    for (const song of songs) {
-      if (!artistAlbumMap.has(song.artist)) {
-        artistAlbumMap.set(song.artist, new Map());
+    for (const track of tracks) {
+      if (!authorBookMap.has(track.author)) {
+        authorBookMap.set(track.author, new Map());
       }
-      const albumMap = artistAlbumMap.get(song.artist)!;
-      if (!albumMap.has(song.album)) {
-        albumMap.set(song.album, []);
+      const bookMap = authorBookMap.get(track.author)!;
+      if (!bookMap.has(track.book)) {
+        bookMap.set(track.book, []);
       }
-      albumMap.get(song.album)!.push(song);
+      bookMap.get(track.book)!.push(track);
     }
 
-    // Upsert artists, albums, and songs
-    for (const [artistName, albums] of artistAlbumMap) {
-      const artist = await prisma.artist.upsert({
-        where: { name: artistName },
+    // Upsert authors, books, and tracks
+    for (const [authorName, books] of authorBookMap) {
+      const author = await prisma.author.upsert({
+        where: { name: authorName },
         update: {},
-        create: { name: artistName },
+        create: { name: authorName },
       });
 
-      for (const [albumName, albumSongs] of albums) {
-        const album = await prisma.album.upsert({
+      for (const [bookName, bookTracks] of books) {
+        const book = await prisma.book.upsert({
           where: {
-            name_artistId: {
-              name: albumName,
-              artistId: artist.id,
+            name_authorId: {
+              name: bookName,
+              authorId: author.id,
             },
           },
           update: {},
           create: {
-            name: albumName,
-            artistId: artist.id,
+            name: bookName,
+            authorId: author.id,
           },
         });
 
-        for (const song of albumSongs) {
-          await prisma.song.upsert({
-            where: { filePath: song.filePath },
+        for (const track of bookTracks) {
+          await prisma.track.upsert({
+            where: { filePath: track.filePath },
             update: {
-              title: song.title,
-              trackNumber: song.trackNumber,
-              duration: song.duration,
-              albumId: album.id,
+              title: track.title,
+              trackNumber: track.trackNumber,
+              duration: track.duration,
+              bookId: book.id,
             },
             create: {
-              title: song.title,
-              trackNumber: song.trackNumber,
-              duration: song.duration,
-              filePath: song.filePath,
-              albumId: album.id,
+              title: track.title,
+              trackNumber: track.trackNumber,
+              duration: track.duration,
+              filePath: track.filePath,
+              bookId: book.id,
             },
           });
         }
       }
     }
 
-    // Clean up: remove songs that no longer exist on disk
-    const validPaths = new Set(songs.map((s) => s.filePath));
-    const allDbSongs = await prisma.song.findMany({ select: { id: true, filePath: true } });
-    const songsToDelete = allDbSongs.filter((s) => !validPaths.has(s.filePath));
+    // Clean up: remove tracks that no longer exist on disk
+    const validPaths = new Set(tracks.map((t: ScannedTrack) => t.filePath));
+    const allDbTracks = await prisma.track.findMany({ select: { id: true, filePath: true } });
+    const tracksToDelete = allDbTracks.filter((t: { id: string; filePath: string }) => !validPaths.has(t.filePath));
 
-    if (songsToDelete.length > 0) {
-      await prisma.song.deleteMany({
-        where: { id: { in: songsToDelete.map((s) => s.id) } },
+    if (tracksToDelete.length > 0) {
+      await prisma.track.deleteMany({
+        where: { id: { in: tracksToDelete.map((t: { id: string }) => t.id) } },
       });
     }
 
-    // Clean up empty albums
-    await prisma.album.deleteMany({
-      where: { songs: { none: {} } },
+    // Clean up empty books
+    await prisma.book.deleteMany({
+      where: { tracks: { none: {} } },
     });
 
-    // Clean up empty artists
-    await prisma.artist.deleteMany({
-      where: { albums: { none: {} } },
+    // Clean up empty authors
+    await prisma.author.deleteMany({
+      where: { books: { none: {} } },
     });
 
-    // Reorganize: move files into Artist/Album/XX - Title.ext structure
+    // Reorganize: move files into Author/Book/XX - Title.ext structure
     const musicPath = path.resolve(MUSIC_DIR);
-    const allSongs = await prisma.song.findMany({
+    const allTracks = await prisma.track.findMany({
       include: {
-        album: {
+        book: {
           include: {
-            artist: true,
-            songs: { select: { id: true } },
+            author: true,
+            tracks: { select: { id: true } },
           },
         },
       },
@@ -214,28 +214,28 @@ export async function POST() {
 
     let reorganizedCount = 0;
 
-    for (const song of allSongs) {
-      const artistName = sanitizeFilename(song.album.artist.name);
-      const albumName = sanitizeFilename(song.album.name);
-      const ext = path.extname(song.filePath);
-      const totalTracksInAlbum = song.album.songs.length;
+    for (const track of allTracks) {
+      const authorName = sanitizeFilename(track.book.author.name);
+      const bookName = sanitizeFilename(track.book.name);
+      const ext = path.extname(track.filePath);
+      const totalTracksInBook = track.book.tracks.length;
 
       // Build filename with track number prefix if available
-      let songFilename: string;
-      if (song.trackNumber && song.trackNumber > 0) {
-        const paddedTrack = padTrackNumber(song.trackNumber, totalTracksInAlbum);
-        songFilename = `${paddedTrack} - ${sanitizeFilename(song.title)}${ext}`;
+      let trackFilename: string;
+      if (track.trackNumber && track.trackNumber > 0) {
+        const paddedTrack = padTrackNumber(track.trackNumber, totalTracksInBook);
+        trackFilename = `${paddedTrack} - ${sanitizeFilename(track.title)}${ext}`;
       } else {
-        songFilename = sanitizeFilename(song.title) + ext;
+        trackFilename = sanitizeFilename(track.title) + ext;
       }
 
-      // Build new path: Artist/Album/XX - song.mp3
-      const newRelativePath = path.join(artistName, albumName, songFilename);
-      const oldFullPath = path.join(musicPath, song.filePath);
+      // Build new path: Author/Book/XX - track.mp3
+      const newRelativePath = path.join(authorName, bookName, trackFilename);
+      const oldFullPath = path.join(musicPath, track.filePath);
       const newFullPath = path.join(musicPath, newRelativePath);
 
       // Skip if already in correct location
-      if (song.filePath === newRelativePath) {
+      if (track.filePath === newRelativePath) {
         continue;
       }
 
@@ -246,10 +246,10 @@ export async function POST() {
         // Update MP3 metadata if needed
         if (ext.toLowerCase() === ".mp3") {
           const tags: NodeID3.Tags = {
-            title: song.title,
-            artist: song.album.artist.name,
-            album: song.album.name,
-            trackNumber: song.trackNumber ? String(song.trackNumber) : undefined,
+            title: track.title,
+            artist: track.book.author.name,
+            album: track.book.name,
+            trackNumber: track.trackNumber ? String(track.trackNumber) : undefined,
           };
           NodeID3.update(tags, oldFullPath);
         }
@@ -268,13 +268,13 @@ export async function POST() {
             await fs.access(finalPath);
             // File exists, add counter
             let newFilename: string;
-            if (song.trackNumber && song.trackNumber > 0) {
-              const paddedTrack = padTrackNumber(song.trackNumber, totalTracksInAlbum);
-              newFilename = `${paddedTrack} - ${sanitizeFilename(song.title)} (${counter})${ext}`;
+            if (track.trackNumber && track.trackNumber > 0) {
+              const paddedTrack = padTrackNumber(track.trackNumber, totalTracksInBook);
+              newFilename = `${paddedTrack} - ${sanitizeFilename(track.title)} (${counter})${ext}`;
             } else {
-              newFilename = `${sanitizeFilename(song.title)} (${counter})${ext}`;
+              newFilename = `${sanitizeFilename(track.title)} (${counter})${ext}`;
             }
-            finalRelativePath = path.join(artistName, albumName, newFilename);
+            finalRelativePath = path.join(authorName, bookName, newFilename);
             finalPath = path.join(musicPath, finalRelativePath);
             counter++;
           } catch {
@@ -288,8 +288,8 @@ export async function POST() {
           await fs.rename(oldFullPath, finalPath);
 
           // Update database with new path
-          await prisma.song.update({
-            where: { id: song.id },
+          await prisma.track.update({
+            where: { id: track.id },
             data: { filePath: finalRelativePath },
           });
 
@@ -312,14 +312,14 @@ export async function POST() {
           }
         }
       } catch (err) {
-        console.error(`Failed to reorganize ${song.filePath}:`, err);
+        console.error(`Failed to reorganize ${track.filePath}:`, err);
       }
     }
 
     return NextResponse.json({
       message: "Library scan complete",
-      count: songs.length,
-      removed: songsToDelete.length,
+      count: tracks.length,
+      removed: tracksToDelete.length,
       reorganized: reorganizedCount,
     });
   } catch (error) {

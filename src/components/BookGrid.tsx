@@ -1,25 +1,25 @@
 "use client";
 
 import { useState } from "react";
-import { Artist, Album } from "@/types";
+import { Author, Book } from "@/types";
 
-function AlbumCard({ album, onClick }: { album: Album; onClick: () => void }) {
+function BookCard({ book, onClick }: { book: Book; onClick: () => void }) {
   const [hasError, setHasError] = useState(false);
 
-  // Use the first song's file path to get album art
-  const firstSong = album.songs[0];
-  const artUrl = firstSong ? `/api/albumart/${encodeURIComponent(firstSong.filePath)}` : null;
+  // Use the first track's file path to get book cover art
+  const firstTrack = book.tracks[0];
+  const artUrl = firstTrack ? `/api/albumart/${encodeURIComponent(firstTrack.filePath)}` : null;
 
   return (
     <button
       onClick={onClick}
       className="flex flex-col items-center p-4 bg-gray-800/50 hover:bg-gray-700/50 rounded-lg transition-colors group text-left w-full"
     >
-      {/* Album Artwork */}
+      {/* Book Cover */}
       {artUrl && !hasError ? (
         <img
           src={artUrl}
-          alt={`${album.name} cover`}
+          alt={`${book.name} cover`}
           className="w-full aspect-square rounded-lg object-cover bg-gray-700 mb-3"
           onError={() => setHasError(true)}
         />
@@ -31,43 +31,43 @@ function AlbumCard({ album, onClick }: { album: Album; onClick: () => void }) {
         </div>
       )}
 
-      {/* Album Name */}
+      {/* Book Name */}
       <h3 className="text-white font-medium text-sm truncate w-full text-center group-hover:text-green-400 transition-colors">
-        {album.name}
+        {book.name}
       </h3>
 
       {/* Track Count */}
       <p className="text-gray-500 text-xs mt-1">
-        {album.songs.length} track{album.songs.length !== 1 ? "s" : ""}
+        {book.tracks.length} track{book.tracks.length !== 1 ? "s" : ""}
       </p>
     </button>
   );
 }
 
-interface AlbumGridProps {
-  artist: Artist;
-  onAlbumSelect: (album: Album) => void;
+interface BookGridProps {
+  author: Author;
+  onBookSelect: (book: Book) => void;
 }
 
-export default function AlbumGrid({ artist, onAlbumSelect }: AlbumGridProps) {
+export default function BookGrid({ author, onBookSelect }: BookGridProps) {
   return (
     <div className="h-full overflow-y-auto bg-gray-900 p-6">
-      {/* Artist Header */}
+      {/* Author Header */}
       <div className="mb-6">
-        <h1 className="text-3xl font-bold text-white">{artist.name}</h1>
+        <h1 className="text-3xl font-bold text-white">{author.name}</h1>
         <p className="text-gray-400 mt-1">
-          {artist.albums.length} album{artist.albums.length !== 1 ? "s" : ""} •{" "}
-          {artist.albums.reduce((acc, album) => acc + album.songs.length, 0)} songs
+          {author.books.length} book{author.books.length !== 1 ? "s" : ""} •{" "}
+          {author.books.reduce((acc, book) => acc + book.tracks.length, 0)} tracks
         </p>
       </div>
 
-      {/* Album Grid */}
+      {/* Book Grid */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-        {artist.albums.map((album) => (
-          <AlbumCard
-            key={album.id}
-            album={album}
-            onClick={() => onAlbumSelect(album)}
+        {author.books.map((book) => (
+          <BookCard
+            key={book.id}
+            book={book}
+            onClick={() => onBookSelect(book)}
           />
         ))}
       </div>

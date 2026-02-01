@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import ArtistSidebar from "@/components/ArtistSidebar";
-import AlbumGrid from "@/components/AlbumGrid";
+import AuthorSidebar from "@/components/AuthorSidebar";
+import BookGrid from "@/components/BookGrid";
 import TrackListView from "@/components/TrackListView";
 import BottomPlayer, { MarkerBarState } from "@/components/BottomPlayer";
 import MarkersBar from "@/components/MarkersBar";
@@ -12,7 +12,7 @@ import Metronome from "@/components/Metronome";
 import Fretboard from "@/components/Fretboard";
 import PdfViewer from "@/components/PdfViewer";
 import Videos from "@/components/Videos";
-import { Artist, Album, Song, Marker } from "@/types";
+import { Author, Book, Track, Marker } from "@/types";
 
 type Section = 'library' | 'videos' | 'metronome' | 'fretboard';
 
@@ -30,12 +30,12 @@ export default function Home() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const [artists, setArtists] = useState<Artist[]>([]);
-  const [selectedArtist, setSelectedArtist] = useState<Artist | null>(null);
-  const [selectedAlbum, setSelectedAlbum] = useState<Album | null>(null);
-  const [currentSong, setCurrentSong] = useState<Song | null>(null);
-  const [currentArtist, setCurrentArtist] = useState<Artist | null>(null);
-  const [currentAlbum, setCurrentAlbum] = useState<Album | null>(null);
+  const [authors, setAuthors] = useState<Author[]>([]);
+  const [selectedAuthor, setSelectedAuthor] = useState<Author | null>(null);
+  const [selectedBook, setSelectedBook] = useState<Book | null>(null);
+  const [currentTrack, setCurrentTrack] = useState<Track | null>(null);
+  const [currentAuthor, setCurrentAuthor] = useState<Author | null>(null);
+  const [currentBook, setCurrentBook] = useState<Book | null>(null);
   const [isScanning, setIsScanning] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
 
@@ -61,9 +61,9 @@ export default function Home() {
 
   const handleSectionChange = (section: Section) => {
     if (section !== 'library') {
-      setCurrentSong(null);
-      setCurrentArtist(null);
-      setCurrentAlbum(null);
+      setCurrentTrack(null);
+      setCurrentAuthor(null);
+      setCurrentBook(null);
     }
     if (section === 'library') {
       router.push('/');
@@ -77,22 +77,22 @@ export default function Home() {
       const response = await fetch("/api/library");
       if (response.ok) {
         const data = await response.json();
-        setArtists(data);
+        setAuthors(data);
 
         // Restore state from URL on initial load
         if (restoreFromUrl) {
-          const artistId = searchParams.get('artist');
-          const albumId = searchParams.get('album');
-          if (artistId) {
-            const artist = data.find((a: Artist) => a.id === artistId);
-            if (artist) {
-              setSelectedArtist(artist);
-              if (albumId) {
-                const album = artist.albums.find((al: Album) => al.id === albumId);
-                if (album) {
-                  setSelectedAlbum(album);
-                  if (album.pdfPath) {
-                    setPdfPath(album.pdfPath);
+          const authorId = searchParams.get('artist');
+          const bookId = searchParams.get('album');
+          if (authorId) {
+            const author = data.find((a: Author) => a.id === authorId);
+            if (author) {
+              setSelectedAuthor(author);
+              if (bookId) {
+                const book = author.books.find((b: Book) => b.id === bookId);
+                if (book) {
+                  setSelectedBook(book);
+                  if (book.pdfPath) {
+                    setPdfPath(book.pdfPath);
                   }
                 }
               }
@@ -101,34 +101,34 @@ export default function Home() {
           return;
         }
 
-        // Update selected artist if it exists in new data
-        if (selectedArtist) {
-          const updatedArtist = data.find((a: Artist) => a.id === selectedArtist.id);
-          if (updatedArtist) {
-            setSelectedArtist(updatedArtist);
+        // Update selected author if it exists in new data
+        if (selectedAuthor) {
+          const updatedAuthor = data.find((a: Author) => a.id === selectedAuthor.id);
+          if (updatedAuthor) {
+            setSelectedAuthor(updatedAuthor);
           }
         }
 
-        // Update selected album if it exists in new data
-        if (selectedAlbum && selectedArtist) {
-          const updatedArtist = data.find((a: Artist) => a.id === selectedArtist.id);
-          if (updatedArtist) {
-            const updatedAlbum = updatedArtist.albums.find((al: Album) => al.id === selectedAlbum.id);
-            if (updatedAlbum) {
-              setSelectedAlbum(updatedAlbum);
+        // Update selected book if it exists in new data
+        if (selectedBook && selectedAuthor) {
+          const updatedAuthor = data.find((a: Author) => a.id === selectedAuthor.id);
+          if (updatedAuthor) {
+            const updatedBook = updatedAuthor.books.find((b: Book) => b.id === selectedBook.id);
+            if (updatedBook) {
+              setSelectedBook(updatedBook);
             }
           }
         }
 
-        // Update current song markers if song is playing
-        if (currentSong) {
-          for (const artist of data) {
-            for (const album of artist.albums) {
-              const song = album.songs.find(
-                (s: Song) => s.id === currentSong.id
+        // Update current track markers if track is playing
+        if (currentTrack) {
+          for (const author of data) {
+            for (const book of author.books) {
+              const track = book.tracks.find(
+                (t: Track) => t.id === currentTrack.id
               );
-              if (song) {
-                setCurrentSong(song);
+              if (track) {
+                setCurrentTrack(track);
                 break;
               }
             }
@@ -138,25 +138,25 @@ export default function Home() {
     } catch (error) {
       console.error("Error fetching library:", error);
     }
-  }, [currentSong, selectedArtist, selectedAlbum, searchParams]);
+  }, [currentTrack, selectedAuthor, selectedBook, searchParams]);
 
   useEffect(() => {
     fetchLibrary(true); // Restore from URL on initial load
   }, []);
 
-  const handleArtistSelect = (artist: Artist) => {
-    setSelectedArtist(artist);
-    setSelectedAlbum(null);
-    updateLibraryUrl(artist.id, null);
+  const handleAuthorSelect = (author: Author) => {
+    setSelectedAuthor(author);
+    setSelectedBook(null);
+    updateLibraryUrl(author.id, null);
   };
 
-  const handleAlbumSelect = (album: Album) => {
-    setSelectedAlbum(album);
-    // Auto-show PDF if album has one
-    if (album.pdfPath) {
-      setPdfPath(album.pdfPath);
+  const handleBookSelect = (book: Book) => {
+    setSelectedBook(book);
+    // Auto-show PDF if book has one
+    if (book.pdfPath) {
+      setPdfPath(book.pdfPath);
     }
-    updateLibraryUrl(selectedArtist?.id || null, album.id);
+    updateLibraryUrl(selectedAuthor?.id || null, book.id);
   };
 
   const handleScan = async () => {
@@ -196,18 +196,18 @@ export default function Home() {
     }
   };
 
-  const handleSongSelect = (song: Song, artist: Artist, album: Album) => {
-    setCurrentSong(song);
-    setCurrentArtist(artist);
-    setCurrentAlbum(album);
-    // Update PDF path if album has one
-    if (album.pdfPath) {
-      setPdfPath(album.pdfPath);
+  const handleTrackSelect = (track: Track, author: Author, book: Book) => {
+    setCurrentTrack(track);
+    setCurrentAuthor(author);
+    setCurrentBook(book);
+    // Update PDF path if book has one
+    if (book.pdfPath) {
+      setPdfPath(book.pdfPath);
     }
   };
 
   const handleMarkerAdd = async (
-    songId: string,
+    trackId: string,
     name: string,
     timestamp: number
   ) => {
@@ -215,59 +215,59 @@ export default function Home() {
       const response = await fetch("/api/markers", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ songId, name, timestamp }),
+        body: JSON.stringify({ trackId, name, timestamp }),
       });
       if (response.ok) {
         const newMarker: Marker = await response.json();
-        // Update the current song's markers
-        if (currentSong && currentSong.id === songId) {
-          setCurrentSong({
-            ...currentSong,
-            markers: [...currentSong.markers, newMarker],
+        // Update the current track's markers
+        if (currentTrack && currentTrack.id === trackId) {
+          setCurrentTrack({
+            ...currentTrack,
+            markers: [...currentTrack.markers, newMarker],
           });
         }
-        // Also update in the artists list
-        setArtists((prevArtists) =>
-          prevArtists.map((artist) => ({
-            ...artist,
-            albums: artist.albums.map((album) => ({
-              ...album,
-              songs: album.songs.map((song) =>
-                song.id === songId
-                  ? { ...song, markers: [...song.markers, newMarker] }
-                  : song
+        // Also update in the authors list
+        setAuthors((prevAuthors) =>
+          prevAuthors.map((author) => ({
+            ...author,
+            books: author.books.map((book) => ({
+              ...book,
+              tracks: book.tracks.map((track) =>
+                track.id === trackId
+                  ? { ...track, markers: [...track.markers, newMarker] }
+                  : track
               ),
             })),
           }))
         );
-        // Update selected artist too
-        if (selectedArtist) {
-          setSelectedArtist((prev) =>
+        // Update selected author too
+        if (selectedAuthor) {
+          setSelectedAuthor((prev) =>
             prev
               ? {
                   ...prev,
-                  albums: prev.albums.map((album) => ({
-                    ...album,
-                    songs: album.songs.map((song) =>
-                      song.id === songId
-                        ? { ...song, markers: [...song.markers, newMarker] }
-                        : song
+                  books: prev.books.map((book) => ({
+                    ...book,
+                    tracks: book.tracks.map((track) =>
+                      track.id === trackId
+                        ? { ...track, markers: [...track.markers, newMarker] }
+                        : track
                     ),
                   })),
                 }
               : null
           );
         }
-        // Update selected album too
-        if (selectedAlbum) {
-          setSelectedAlbum((prev) =>
+        // Update selected book too
+        if (selectedBook) {
+          setSelectedBook((prev) =>
             prev
               ? {
                   ...prev,
-                  songs: prev.songs.map((song) =>
-                    song.id === songId
-                      ? { ...song, markers: [...song.markers, newMarker] }
-                      : song
+                  tracks: prev.tracks.map((track) =>
+                    track.id === trackId
+                      ? { ...track, markers: [...track.markers, newMarker] }
+                      : track
                   ),
                 }
               : null
@@ -287,53 +287,53 @@ export default function Home() {
         body: JSON.stringify({ timestamp }),
       });
       if (response.ok) {
-        const updateMarkers = (songs: Song[]) =>
-          songs.map((song) => ({
-            ...song,
-            markers: song.markers.map((m) =>
+        const updateMarkers = (tracks: Track[]) =>
+          tracks.map((track) => ({
+            ...track,
+            markers: track.markers.map((m) =>
               m.id === markerId ? { ...m, timestamp } : m
             ),
           }));
 
-        if (currentSong) {
-          setCurrentSong({
-            ...currentSong,
-            markers: currentSong.markers.map((m) =>
+        if (currentTrack) {
+          setCurrentTrack({
+            ...currentTrack,
+            markers: currentTrack.markers.map((m) =>
               m.id === markerId ? { ...m, timestamp } : m
             ),
           });
         }
 
-        setArtists((prevArtists) =>
-          prevArtists.map((artist) => ({
-            ...artist,
-            albums: artist.albums.map((album) => ({
-              ...album,
-              songs: updateMarkers(album.songs),
+        setAuthors((prevAuthors) =>
+          prevAuthors.map((author) => ({
+            ...author,
+            books: author.books.map((book) => ({
+              ...book,
+              tracks: updateMarkers(book.tracks),
             })),
           }))
         );
 
-        if (selectedArtist) {
-          setSelectedArtist((prev) =>
+        if (selectedAuthor) {
+          setSelectedAuthor((prev) =>
             prev
               ? {
                   ...prev,
-                  albums: prev.albums.map((album) => ({
-                    ...album,
-                    songs: updateMarkers(album.songs),
+                  books: prev.books.map((book) => ({
+                    ...book,
+                    tracks: updateMarkers(book.tracks),
                   })),
                 }
               : null
           );
         }
 
-        if (selectedAlbum) {
-          setSelectedAlbum((prev) =>
+        if (selectedBook) {
+          setSelectedBook((prev) =>
             prev
               ? {
                   ...prev,
-                  songs: updateMarkers(prev.songs),
+                  tracks: updateMarkers(prev.tracks),
                 }
               : null
           );
@@ -352,53 +352,53 @@ export default function Home() {
         body: JSON.stringify({ name }),
       });
       if (response.ok) {
-        const updateMarkers = (songs: Song[]) =>
-          songs.map((song) => ({
-            ...song,
-            markers: song.markers.map((m) =>
+        const updateMarkers = (tracks: Track[]) =>
+          tracks.map((track) => ({
+            ...track,
+            markers: track.markers.map((m) =>
               m.id === markerId ? { ...m, name } : m
             ),
           }));
 
-        if (currentSong) {
-          setCurrentSong({
-            ...currentSong,
-            markers: currentSong.markers.map((m) =>
+        if (currentTrack) {
+          setCurrentTrack({
+            ...currentTrack,
+            markers: currentTrack.markers.map((m) =>
               m.id === markerId ? { ...m, name } : m
             ),
           });
         }
 
-        setArtists((prevArtists) =>
-          prevArtists.map((artist) => ({
-            ...artist,
-            albums: artist.albums.map((album) => ({
-              ...album,
-              songs: updateMarkers(album.songs),
+        setAuthors((prevAuthors) =>
+          prevAuthors.map((author) => ({
+            ...author,
+            books: author.books.map((book) => ({
+              ...book,
+              tracks: updateMarkers(book.tracks),
             })),
           }))
         );
 
-        if (selectedArtist) {
-          setSelectedArtist((prev) =>
+        if (selectedAuthor) {
+          setSelectedAuthor((prev) =>
             prev
               ? {
                   ...prev,
-                  albums: prev.albums.map((album) => ({
-                    ...album,
-                    songs: updateMarkers(album.songs),
+                  books: prev.books.map((book) => ({
+                    ...book,
+                    tracks: updateMarkers(book.tracks),
                   })),
                 }
               : null
           );
         }
 
-        if (selectedAlbum) {
-          setSelectedAlbum((prev) =>
+        if (selectedBook) {
+          setSelectedBook((prev) =>
             prev
               ? {
                   ...prev,
-                  songs: updateMarkers(prev.songs),
+                  tracks: updateMarkers(prev.tracks),
                 }
               : null
           );
@@ -415,49 +415,49 @@ export default function Home() {
         method: "DELETE",
       });
       if (response.ok) {
-        const updateMarkers = (songs: Song[]) =>
-          songs.map((song) => ({
-            ...song,
-            markers: song.markers.filter((m) => m.id !== markerId),
+        const updateMarkers = (tracks: Track[]) =>
+          tracks.map((track) => ({
+            ...track,
+            markers: track.markers.filter((m) => m.id !== markerId),
           }));
 
-        if (currentSong) {
-          setCurrentSong({
-            ...currentSong,
-            markers: currentSong.markers.filter((m) => m.id !== markerId),
+        if (currentTrack) {
+          setCurrentTrack({
+            ...currentTrack,
+            markers: currentTrack.markers.filter((m) => m.id !== markerId),
           });
         }
 
-        setArtists((prevArtists) =>
-          prevArtists.map((artist) => ({
-            ...artist,
-            albums: artist.albums.map((album) => ({
-              ...album,
-              songs: updateMarkers(album.songs),
+        setAuthors((prevAuthors) =>
+          prevAuthors.map((author) => ({
+            ...author,
+            books: author.books.map((book) => ({
+              ...book,
+              tracks: updateMarkers(book.tracks),
             })),
           }))
         );
 
-        if (selectedArtist) {
-          setSelectedArtist((prev) =>
+        if (selectedAuthor) {
+          setSelectedAuthor((prev) =>
             prev
               ? {
                   ...prev,
-                  albums: prev.albums.map((album) => ({
-                    ...album,
-                    songs: updateMarkers(album.songs),
+                  books: prev.books.map((book) => ({
+                    ...book,
+                    tracks: updateMarkers(book.tracks),
                   })),
                 }
               : null
           );
         }
 
-        if (selectedAlbum) {
-          setSelectedAlbum((prev) =>
+        if (selectedBook) {
+          setSelectedBook((prev) =>
             prev
               ? {
                   ...prev,
-                  songs: updateMarkers(prev.songs),
+                  tracks: updateMarkers(prev.tracks),
                 }
               : null
           );
@@ -468,54 +468,54 @@ export default function Home() {
     }
   };
 
-  const handleMarkersClear = async (songId: string) => {
+  const handleMarkersClear = async (trackId: string) => {
     try {
-      const response = await fetch(`/api/markers/clear/${songId}`, {
+      const response = await fetch(`/api/markers/clear/${trackId}`, {
         method: "DELETE",
       });
       if (response.ok) {
-        const updateMarkers = (songs: Song[]) =>
-          songs.map((song) =>
-            song.id === songId ? { ...song, markers: [] } : song
+        const updateMarkers = (tracks: Track[]) =>
+          tracks.map((track) =>
+            track.id === trackId ? { ...track, markers: [] } : track
           );
 
-        if (currentSong && currentSong.id === songId) {
-          setCurrentSong({
-            ...currentSong,
+        if (currentTrack && currentTrack.id === trackId) {
+          setCurrentTrack({
+            ...currentTrack,
             markers: [],
           });
         }
 
-        setArtists((prevArtists) =>
-          prevArtists.map((artist) => ({
-            ...artist,
-            albums: artist.albums.map((album) => ({
-              ...album,
-              songs: updateMarkers(album.songs),
+        setAuthors((prevAuthors) =>
+          prevAuthors.map((author) => ({
+            ...author,
+            books: author.books.map((book) => ({
+              ...book,
+              tracks: updateMarkers(book.tracks),
             })),
           }))
         );
 
-        if (selectedArtist) {
-          setSelectedArtist((prev) =>
+        if (selectedAuthor) {
+          setSelectedAuthor((prev) =>
             prev
               ? {
                   ...prev,
-                  albums: prev.albums.map((album) => ({
-                    ...album,
-                    songs: updateMarkers(album.songs),
+                  books: prev.books.map((book) => ({
+                    ...book,
+                    tracks: updateMarkers(book.tracks),
                   })),
                 }
               : null
           );
         }
 
-        if (selectedAlbum) {
-          setSelectedAlbum((prev) =>
+        if (selectedBook) {
+          setSelectedBook((prev) =>
             prev
               ? {
                   ...prev,
-                  songs: updateMarkers(prev.songs),
+                  tracks: updateMarkers(prev.tracks),
                 }
               : null
           );
@@ -527,101 +527,101 @@ export default function Home() {
   };
 
   const handleMetadataUpdate = async (
-    songId: string,
+    trackId: string,
     title: string,
-    artistName: string,
-    albumName: string,
+    authorName: string,
+    bookName: string,
     trackNumber: number,
     pdfPage?: number | null
   ) => {
-    const response = await fetch(`/api/songs/${songId}`, {
+    const response = await fetch(`/api/tracks/${trackId}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title, artist: artistName, album: albumName, trackNumber, pdfPage }),
+      body: JSON.stringify({ title, author: authorName, book: bookName, trackNumber, pdfPage }),
     });
 
     if (!response.ok) {
       throw new Error("Failed to update metadata");
     }
 
-    const { song, artist, album } = await response.json();
+    const { track, author, book } = await response.json();
 
-    setCurrentSong(song);
-    setCurrentArtist(artist);
-    setCurrentAlbum(album);
+    setCurrentTrack(track);
+    setCurrentAuthor(author);
+    setCurrentBook(book);
 
     await fetchLibrary();
   };
 
-  const handleAlbumUpdate = async (
-    albumId: string,
-    albumName: string,
-    artistName: string
+  const handleBookUpdate = async (
+    bookId: string,
+    bookName: string,
+    authorName: string
   ) => {
-    const response = await fetch(`/api/albums/${albumId}`, {
+    const response = await fetch(`/api/books/${bookId}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ albumName, artistName }),
+      body: JSON.stringify({ bookName, authorName }),
     });
 
     if (!response.ok) {
-      throw new Error("Failed to update album metadata");
+      throw new Error("Failed to update book metadata");
     }
 
     await fetchLibrary();
   };
 
-  const handleSongComplete = async (songId: string, completed: boolean) => {
-    const response = await fetch(`/api/songs/${songId}`, {
+  const handleTrackComplete = async (trackId: string, completed: boolean) => {
+    const response = await fetch(`/api/tracks/${trackId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ completed }),
     });
 
     if (!response.ok) {
-      throw new Error("Failed to update song completed status");
+      throw new Error("Failed to update track completed status");
     }
 
     // Update local state
-    const updateSongs = (songs: Song[]) =>
-      songs.map((song) =>
-        song.id === songId ? { ...song, completed } : song
+    const updateTracks = (tracks: Track[]) =>
+      tracks.map((track) =>
+        track.id === trackId ? { ...track, completed } : track
       );
 
-    if (currentSong?.id === songId) {
-      setCurrentSong({ ...currentSong, completed });
+    if (currentTrack?.id === trackId) {
+      setCurrentTrack({ ...currentTrack, completed });
     }
 
-    setArtists((prevArtists) =>
-      prevArtists.map((artist) => ({
-        ...artist,
-        albums: artist.albums.map((album) => ({
-          ...album,
-          songs: updateSongs(album.songs),
+    setAuthors((prevAuthors) =>
+      prevAuthors.map((author) => ({
+        ...author,
+        books: author.books.map((book) => ({
+          ...book,
+          tracks: updateTracks(book.tracks),
         })),
       }))
     );
 
-    if (selectedArtist) {
-      setSelectedArtist((prev) =>
+    if (selectedAuthor) {
+      setSelectedAuthor((prev) =>
         prev
           ? {
               ...prev,
-              albums: prev.albums.map((album) => ({
-                ...album,
-                songs: updateSongs(album.songs),
+              books: prev.books.map((book) => ({
+                ...book,
+                tracks: updateTracks(book.tracks),
               })),
             }
           : null
       );
     }
 
-    if (selectedAlbum) {
-      setSelectedAlbum((prev) =>
+    if (selectedBook) {
+      setSelectedBook((prev) =>
         prev
           ? {
               ...prev,
-              songs: updateSongs(prev.songs),
+              tracks: updateTracks(prev.tracks),
             }
           : null
       );
@@ -629,12 +629,12 @@ export default function Home() {
   };
 
   // PDF handlers
-  const handlePdfUpload = async (albumId: string, file: File) => {
+  const handlePdfUpload = async (bookId: string, file: File) => {
     const formData = new FormData();
     formData.append("pdf", file);
 
     try {
-      const response = await fetch(`/api/albums/${albumId}/pdf`, {
+      const response = await fetch(`/api/books/${bookId}/pdf`, {
         method: "POST",
         body: formData,
       });
@@ -647,9 +647,9 @@ export default function Home() {
     }
   };
 
-  const handlePdfDelete = async (albumId: string) => {
+  const handlePdfDelete = async (bookId: string) => {
     try {
-      const response = await fetch(`/api/albums/${albumId}/pdf`, {
+      const response = await fetch(`/api/books/${bookId}/pdf`, {
         method: "DELETE",
       });
 
@@ -662,9 +662,9 @@ export default function Home() {
     }
   };
 
-  const handlePdfConvert = async (albumId: string) => {
+  const handlePdfConvert = async (bookId: string) => {
     try {
-      const response = await fetch(`/api/albums/${albumId}/pdf`, {
+      const response = await fetch(`/api/books/${bookId}/pdf`, {
         method: "PATCH",
       });
 
@@ -680,19 +680,19 @@ export default function Home() {
     }
   };
 
-  const handleShowPdf = (albumPdfPath: string, page?: number) => {
-    setPdfPath(albumPdfPath);
+  const handleShowPdf = (bookPdfPath: string, page?: number) => {
+    setPdfPath(bookPdfPath);
     if (page) {
       setPdfPage(page);
     }
   };
 
-  // Auto-navigate to song's PDF page when song changes
+  // Auto-navigate to track's PDF page when track changes
   useEffect(() => {
-    if (currentSong?.pdfPage) {
-      setPdfPage(currentSong.pdfPage);
+    if (currentTrack?.pdfPage) {
+      setPdfPage(currentTrack.pdfPage);
     }
-  }, [currentSong?.id, currentSong?.pdfPage]);
+  }, [currentTrack?.id, currentTrack?.pdfPage]);
 
 
   return (
@@ -708,12 +708,12 @@ export default function Home() {
             <div className="w-1/2 flex flex-col min-w-0 border-r border-gray-700">
               {/* Main Content Area */}
               <div className="flex flex-1 min-h-0">
-                {/* Artist Sidebar */}
+                {/* Author Sidebar */}
                 <div className="w-56 border-r border-gray-700 shrink-0">
-                  <ArtistSidebar
-                    artists={artists}
-                    selectedArtist={selectedArtist}
-                    onArtistSelect={handleArtistSelect}
+                  <AuthorSidebar
+                    authors={authors}
+                    selectedAuthor={selectedAuthor}
+                    onAuthorSelect={handleAuthorSelect}
                     onScan={handleScan}
                     onUpload={handleUpload}
                     isScanning={isScanning}
@@ -721,30 +721,30 @@ export default function Home() {
                   />
                 </div>
 
-                {/* Content: AlbumGrid OR TrackListView */}
+                {/* Content: BookGrid OR TrackListView */}
                 <div className="flex-1 min-w-0">
-                  {selectedAlbum && selectedArtist ? (
+                  {selectedBook && selectedAuthor ? (
                     <TrackListView
-                      artist={selectedArtist}
-                      album={selectedAlbum}
-                      currentSong={currentSong}
-                      onSongSelect={handleSongSelect}
+                      author={selectedAuthor}
+                      book={selectedBook}
+                      currentTrack={currentTrack}
+                      onTrackSelect={handleTrackSelect}
                       onBack={() => {
-                        setSelectedAlbum(null);
-                        updateLibraryUrl(selectedArtist?.id || null, null);
+                        setSelectedBook(null);
+                        updateLibraryUrl(selectedAuthor?.id || null, null);
                       }}
-                      onAlbumUpdate={handleAlbumUpdate}
-                      onSongUpdate={handleMetadataUpdate}
-                      onSongComplete={handleSongComplete}
+                      onBookUpdate={handleBookUpdate}
+                      onTrackUpdate={handleMetadataUpdate}
+                      onTrackComplete={handleTrackComplete}
                       onShowPdf={handleShowPdf}
                       onPdfUpload={handlePdfUpload}
                       onPdfDelete={handlePdfDelete}
                       onPdfConvert={handlePdfConvert}
                     />
-                  ) : selectedArtist ? (
-                    <AlbumGrid
-                      artist={selectedArtist}
-                      onAlbumSelect={handleAlbumSelect}
+                  ) : selectedAuthor ? (
+                    <BookGrid
+                      author={selectedAuthor}
+                      onBookSelect={handleBookSelect}
                     />
                   ) : (
                     <div className="h-full flex items-center justify-center bg-gray-900 text-gray-500">
@@ -752,7 +752,7 @@ export default function Home() {
                         <svg className="w-16 h-16 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
                         </svg>
-                        <p className="text-lg">Select an artist to view albums</p>
+                        <p className="text-lg">Select an author to view books</p>
                       </div>
                     </div>
                   )}
@@ -762,7 +762,7 @@ export default function Home() {
               {/* Bottom Player - Fixed height for waveform visibility */}
               <div className="h-[30vh] min-h-55 max-h-80 shrink-0">
                 <BottomPlayer
-                  song={currentSong}
+                  track={currentTrack}
                   onMarkerAdd={handleMarkerAdd}
                   onMarkerUpdate={handleMarkerUpdate}
                   onMarkerRename={handleMarkerRename}
@@ -789,7 +789,7 @@ export default function Home() {
                     <svg className="w-16 h-16 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                     </svg>
-                    <p className="text-lg">Select an album with a PDF</p>
+                    <p className="text-lg">Select a book with a PDF</p>
                   </div>
                 </div>
               )}
@@ -797,9 +797,9 @@ export default function Home() {
           </div>
 
           {/* Markers Bar - Spans full width underneath both player and PDF */}
-          {currentSong && markerBarState && (
+          {currentTrack && markerBarState && (
             <MarkersBar
-              markers={currentSong.markers}
+              markers={currentTrack.markers}
               visible={markerBarState.showMarkers}
               leadIn={markerBarState.leadIn}
               newMarkerName={markerBarState.newMarkerName}
@@ -821,7 +821,7 @@ export default function Home() {
               }}
               onCancelEdit={() => markerBarState.setEditingMarkerId(null)}
               onDelete={handleMarkerDelete}
-              onClearAll={() => handleMarkersClear(currentSong.id)}
+              onClearAll={() => handleMarkersClear(currentTrack.id)}
               formatTime={markerBarState.formatTime}
             />
           )}

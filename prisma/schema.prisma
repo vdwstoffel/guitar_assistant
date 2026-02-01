@@ -9,42 +9,42 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model Artist {
-  id     String  @id @default(uuid())
-  name   String  @unique
-  albums Album[]
+model Author {
+  id    String @id @default(uuid())
+  name  String @unique
+  books Book[]
 }
 
-model Album {
+model Book {
   id       String  @id @default(uuid())
   name     String
-  artistId String
+  authorId String
   pdfPath  String?
-  artist   Artist  @relation(fields: [artistId], references: [id], onDelete: Cascade)
-  songs    Song[]
+  author   Author  @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  tracks   Track[]
 
-  @@unique([name, artistId])
+  @@unique([name, authorId])
 }
 
-model Song {
+model Track {
   id          String   @id @default(uuid())
   title       String
   trackNumber Int
   filePath    String   @unique
   duration    Float
-  albumId     String
+  bookId      String
   pdfPage     Int?
   completed   Boolean  @default(false)
   markers     Marker[]
-  album       Album    @relation(fields: [albumId], references: [id], onDelete: Cascade)
+  book        Book     @relation(fields: [bookId], references: [id], onDelete: Cascade)
 }
 
 model Marker {
   id        String @id @default(uuid())
   name      String
   timestamp Float
-  songId    String
-  song      Song   @relation(fields: [songId], references: [id], onDelete: Cascade)
+  trackId   String
+  track     Track  @relation(fields: [trackId], references: [id], onDelete: Cascade)
 }
 
 model Video {

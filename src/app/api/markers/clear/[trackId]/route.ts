@@ -3,13 +3,13 @@ import { prisma } from "@/lib/prisma";
 
 export async function DELETE(
   _request: NextRequest,
-  { params }: { params: Promise<{ songId: string }> }
+  { params }: { params: Promise<{ trackId: string }> }
 ) {
   try {
-    const { songId } = await params;
+    const { trackId } = await params;
 
     await prisma.marker.deleteMany({
-      where: { songId },
+      where: { trackId },
     });
 
     return NextResponse.json({ success: true });
