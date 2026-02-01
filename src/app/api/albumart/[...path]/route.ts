@@ -29,7 +29,7 @@ export async function GET(
     }
 
     // Return the image with the correct content type
-    return new NextResponse(picture.data, {
+    return new NextResponse(Buffer.from(picture.data), {
       headers: {
         "Content-Type": picture.format,
         "Cache-Control": "public, max-age=31536000, immutable",

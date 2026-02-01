@@ -62,3 +62,6 @@ All models use UUID primary keys. Cascade deletes are configured on foreign keys
 ## Environment
 - `DATABASE_URL` - SQLite path (default: `file:./prisma/guitar_assistant.db`)
 - `MUSIC_DIR` - Music directory path (used in Docker)
+
+## Documentation
+When adding new features, check if they should be documented in [README.md](README.md). Update the Features section or add new sections as appropriate.

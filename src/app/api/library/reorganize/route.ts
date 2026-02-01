@@ -16,7 +16,7 @@ function sanitizeFilename(name: string): string {
 
 function extractTrackNumberFromFilename(filename: string): number | null {
   // Try to extract track number from start of filename
-  // Patterns: "02_Song.mp3", "02 - Song.mp3", "02. Song.mp3", "02 Song.mp3"
+  // Patterns: "02_Track.mp3", "02 - Track.mp3", "02. Track.mp3", "02 Track.mp3"
   const basename = path.basename(filename, path.extname(filename));
   const match = basename.match(/^(\d{1,3})[\s_.\-]+/);
   if (match) {
@@ -27,7 +27,7 @@ function extractTrackNumberFromFilename(filename: string): number | null {
 
 function stripTrackNumberPrefix(title: string): string {
   // Remove track number prefix from title
-  // Patterns: "02_Song", "02 - Song", "02. Song", "02 Song"
+  // Patterns: "02_Track", "02 - Track", "02. Track", "02 Track"
   return title.replace(/^(\d{1,3})[\s_.\-]+/, "").trim();
 }
 
@@ -42,59 +42,59 @@ export async function POST() {
   try {
     const musicPath = path.resolve(MUSIC_DIR);
 
-    // Get all songs with their album and artist info
-    const songs = await prisma.song.findMany({
+    // Get all tracks with their book and author info
+    const tracks = await prisma.track.findMany({
       include: {
-        album: {
+        book: {
           include: {
-            artist: true,
-            songs: { select: { id: true } }, // Get song count for album
+            author: true,
+            tracks: { select: { id: true } }, // Get track count for book
           },
         },
       },
     });
 
-    const results: { song: string; oldPath: string; newPath: string; success: boolean; error?: string }[] = [];
+    const results: { track: string; oldPath: string; newPath: string; success: boolean; error?: string }[] = [];
 
-    for (const song of songs) {
-      const artistName = sanitizeFilename(song.album.artist.name);
-      const albumName = sanitizeFilename(song.album.name);
-      const ext = path.extname(song.filePath);
-      const totalTracksInAlbum = song.album.songs.length;
+    for (const track of tracks) {
+      const authorName = sanitizeFilename(track.book.author.name);
+      const bookName = sanitizeFilename(track.book.name);
+      const ext = path.extname(track.filePath);
+      const totalTracksInBook = track.book.tracks.length;
 
       // Determine track number
-      let trackNumber = song.trackNumber;
+      let trackNumber = track.trackNumber;
 
       // If no track number, try to extract from filename
       if (!trackNumber || trackNumber === 0) {
-        const extractedTrack = extractTrackNumberFromFilename(song.filePath);
+        const extractedTrack = extractTrackNumberFromFilename(track.filePath);
         if (extractedTrack) {
           trackNumber = extractedTrack;
         }
       }
 
       // Clean up the title by removing any track number prefix
-      const cleanTitle = stripTrackNumberPrefix(song.title);
+      const cleanTitle = stripTrackNumberPrefix(track.title);
 
       // Build filename with track number prefix if available
-      let songFilename: string;
+      let trackFilename: string;
       if (trackNumber && trackNumber > 0) {
-        const paddedTrack = padTrackNumber(trackNumber, totalTracksInAlbum);
-        songFilename = `${paddedTrack} - ${sanitizeFilename(cleanTitle)}${ext}`;
+        const paddedTrack = padTrackNumber(trackNumber, totalTracksInBook);
+        trackFilename = `${paddedTrack} - ${sanitizeFilename(cleanTitle)}${ext}`;
       } else {
-        songFilename = sanitizeFilename(cleanTitle) + ext;
+        trackFilename = sanitizeFilename(cleanTitle) + ext;
       }
 
-      // Build new path: Artist/Album/XX - song.mp3
-      const newRelativePath = path.join(artistName, albumName, songFilename);
-      const oldFullPath = path.join(musicPath, song.filePath);
+      // Build new path: Author/Book/XX - track.mp3
+      const newRelativePath = path.join(authorName, bookName, trackFilename);
+      const oldFullPath = path.join(musicPath, track.filePath);
       const newFullPath = path.join(musicPath, newRelativePath);
 
       // Skip if already in correct location and track number unchanged
-      if (song.filePath === newRelativePath && song.trackNumber === trackNumber) {
+      if (track.filePath === newRelativePath && track.trackNumber === trackNumber) {
         results.push({
-          song: song.title,
-          oldPath: song.filePath,
+          track: track.title,
+          oldPath: track.filePath,
           newPath: newRelativePath,
           success: true,
         });
@@ -108,8 +108,8 @@ export async function POST() {
         // Update metadata in file if it's an MP3 and something changed
         if (ext.toLowerCase() === ".mp3") {
           const needsUpdate =
-            (trackNumber && trackNumber !== song.trackNumber) ||
-            (cleanTitle !== song.title);
+            (trackNumber && trackNumber !== track.trackNumber) ||
+            (cleanTitle !== track.title);
 
           if (needsUpdate) {
             const tags: NodeID3.Tags = {
@@ -138,12 +138,12 @@ export async function POST() {
               const baseName = sanitizeFilename(cleanTitle);
               let newFilename: string;
               if (trackNumber && trackNumber > 0) {
-                const paddedTrack = padTrackNumber(trackNumber, totalTracksInAlbum);
+                const paddedTrack = padTrackNumber(trackNumber, totalTracksInBook);
                 newFilename = `${paddedTrack} - ${baseName} (${counter})${ext}`;
               } else {
                 newFilename = `${baseName} (${counter})${ext}`;
               }
-              finalRelativePath = path.join(artistName, albumName, newFilename);
+              finalRelativePath = path.join(authorName, bookName, newFilename);
               finalPath = path.join(musicPath, finalRelativePath);
               counter++;
             } catch {
@@ -157,8 +157,8 @@ export async function POST() {
         }
 
         // Update database with clean title
-        await prisma.song.update({
-          where: { id: song.id },
+        await prisma.track.update({
+          where: { id: track.id },
           data: {
             title: cleanTitle,
             filePath: finalRelativePath,
@@ -167,8 +167,8 @@ export async function POST() {
         });
 
         results.push({
-          song: song.title,
-          oldPath: song.filePath,
+          track: track.title,
+          oldPath: track.filePath,
           newPath: finalRelativePath,
           success: true,
         });
@@ -192,8 +192,8 @@ export async function POST() {
         }
       } catch (err) {
         results.push({
-          song: song.title,
-          oldPath: song.filePath,
+          track: track.title,
+          oldPath: track.filePath,
           newPath: newRelativePath,
           success: false,
           error: err instanceof Error ? err.message : "Unknown error",
@@ -204,7 +204,7 @@ export async function POST() {
     const successCount = results.filter((r) => r.success).length;
 
     return NextResponse.json({
-      message: `Reorganized ${successCount} of ${songs.length} songs`,
+      message: `Reorganized ${successCount} of ${tracks.length} tracks`,
       results,
     });
   } catch (error) {

@@ -7,6 +7,10 @@ import * as mm from "music-metadata";
 const MUSIC_DIR = process.env.MUSIC_DIR || "./music";
 const SUPPORTED_EXTENSIONS = [".mp3", ".flac", ".wav", ".ogg", ".m4a", ".aac"];
 
+function sanitizeName(name: string): string {
+  return name.replace(/[<>:"/\\|?*]/g, "_").trim();
+}
+
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
@@ -32,58 +36,79 @@ export async function POST(request: NextRequest) {
       }
 
       try {
-        // Save file to music directory
-        const filePath = path.join(musicPath, file.name);
+        // Save file temporarily to parse metadata
+        const tempPath = path.join(musicPath, file.name);
         const buffer = Buffer.from(await file.arrayBuffer());
-        await fs.writeFile(filePath, buffer);
+        await fs.writeFile(tempPath, buffer);
 
         // Parse metadata
-        const metadata = await mm.parseFile(filePath);
+        const metadata = await mm.parseFile(tempPath);
         const fileName = path.basename(file.name, ext);
 
         const title = metadata.common.title || fileName;
-        const artistName = metadata.common.artist || "Unknown Artist";
-        const albumName = metadata.common.album || "Unknown Album";
+        const authorName = sanitizeName(metadata.common.artist || "Unknown Author");
+        const bookName = sanitizeName(metadata.common.album || "Unknown Book");
         const trackNumber = metadata.common.track?.no || 0;
         const duration = metadata.format.duration || 0;
 
-        // Get or create artist
-        const artist = await prisma.artist.upsert({
-          where: { name: artistName },
+        // Create folder structure: music/Author/Book/
+        const authorDir = path.join(musicPath, authorName);
+        const bookDir = path.join(authorDir, bookName);
+        await fs.mkdir(bookDir, { recursive: true });
+
+        // Move file to organized location
+        const finalPath = path.join(bookDir, file.name);
+        const relativePath = path.join(authorName, bookName, file.name);
+
+        // If file already exists at destination, remove temp and skip
+        if (tempPath !== finalPath) {
+          try {
+            await fs.access(finalPath);
+            // File exists, remove temp file
+            await fs.unlink(tempPath);
+          } catch {
+            // File doesn't exist, move it
+            await fs.rename(tempPath, finalPath);
+          }
+        }
+
+        // Get or create author
+        const author = await prisma.author.upsert({
+          where: { name: authorName },
           update: {},
-          create: { name: artistName },
+          create: { name: authorName },
         });
 
-        // Get or create album
-        const album = await prisma.album.upsert({
+        // Get or create book
+        const book = await prisma.book.upsert({
           where: {
-            name_artistId: {
-              name: albumName,
-              artistId: artist.id,
+            name_authorId: {
+              name: bookName,
+              authorId: author.id,
             },
           },
           update: {},
           create: {
-            name: albumName,
-            artistId: artist.id,
+            name: bookName,
+            authorId: author.id,
           },
         });
 
-        // Create or update song
-        await prisma.song.upsert({
-          where: { filePath: file.name },
+        // Create or update track
+        await prisma.track.upsert({
+          where: { filePath: relativePath },
           update: {
             title,
             trackNumber,
             duration,
-            albumId: album.id,
+            bookId: book.id,
           },
           create: {
             title,
             trackNumber,
             duration,
-            filePath: file.name,
-            albumId: album.id,
+            filePath: relativePath,
+            bookId: book.id,
           },
         });
 

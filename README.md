@@ -1,36 +1,92 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Guitar Assistant
+
+A web application for managing and practicing guitar exercises, method books, and tracks with audio playback, PDF viewing, markers, and a built-in metronome.
+
+## Features
+
+- **Library Management** - Organize your guitar books and exercises by author, with automatic metadata scanning from audio files
+- **Audio Player** - Full-featured player with waveform visualization (WaveSurfer.js), playback speed control, and loop regions
+- **PDF Viewer** - View sheet music/tablature PDFs alongside audio playback, with automatic page linking to tracks
+- **Markers** - Add timestamped markers to tracks for quick navigation to specific sections
+- **Metronome** - Built-in practice metronome with tempo and time signature controls
+- **Fretboard Visualizer** - Interactive guitar fretboard reference
+- **Video Playlists** - Manage YouTube video playlists for lessons and tutorials
+- **Progress Tracking** - Mark tracks as completed and filter books by "in progress" status
+- **Track Tempo** - Store tempo information per track for practice reference
 
 ## Getting Started
 
-First, run the development server:
+### Prerequisites
+
+- Node.js 18+
+- npm
+
+### Installation
 
 ```bash
+# Clone the repository
+git clone <repository-url>
+cd guitar_assistant
+
+# Install dependencies
+npm install
+
+# Initialize the database
+npx prisma generate
+npx prisma db push
+
+# Start the development server
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Adding Music
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Upload music through the UI - the application automatically organizes files into the correct folder structure (`music/Author/Book/`) based on the metadata you provide during upload.
 
-## Learn More
+Supported formats: MP3, FLAC, WAV. You can also upload PDF files for sheet music/tablature which will be linked to the book.
 
-To learn more about Next.js, take a look at the following resources:
+## Docker Deployment
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Docker deployment includes Ghostscript for PDF processing.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+docker-compose up
+```
 
-## Deploy on Vercel
+Or build manually:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```bash
+docker build -t guitar-assistant .
+docker run -p 3000:3000 -v ./music:/app/music -v ./prisma:/app/prisma guitar-assistant
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `DATABASE_URL` | SQLite database path | `file:./prisma/guitar_assistant.db` |
+| `MUSIC_DIR` | Music directory path (Docker) | `./music` |
+
+## Tech Stack
+
+- **Framework**: Next.js 16 (App Router)
+- **UI**: React 19, Tailwind CSS 4
+- **Database**: SQLite with Prisma ORM
+- **Audio**: WaveSurfer.js for waveform visualization
+- **PDF**: react-pdf for document viewing
+- **Metadata**: music-metadata for audio file parsing
+
+## Available Scripts
+
+```bash
+npm run dev      # Start development server
+npm run build    # Production build
+npm run start    # Start production server
+npm run lint     # Run ESLint
+```
+
+## License
+
+Private project.
