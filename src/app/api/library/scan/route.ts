@@ -32,8 +32,32 @@ interface ScannedTrack {
   book: string;
 }
 
-async function findAudioFiles(dir: string): Promise<string[]> {
+interface ScannedJamTrack {
+  title: string;
+  duration: number;
+  filePath: string;
+  pdfPath: string | null;
+}
+
+const JAM_TRACKS_FOLDER = "JamTracks";
+
+async function findPdfInFolder(folderPath: string): Promise<string | null> {
+  try {
+    const entries = await fs.readdir(folderPath, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.isFile() && entry.name.toLowerCase().endsWith(".pdf")) {
+        return path.join(folderPath, entry.name);
+      }
+    }
+  } catch {
+    // Folder doesn't exist or can't be read
+  }
+  return null;
+}
+
+async function findAudioFiles(dir: string, skipJamTracks: boolean = true): Promise<string[]> {
   const audioFiles: string[] = [];
+  const musicPath = path.resolve(MUSIC_DIR);
 
   async function scanDir(currentDir: string) {
     const entries = await fs.readdir(currentDir, { withFileTypes: true });
@@ -42,6 +66,10 @@ async function findAudioFiles(dir: string): Promise<string[]> {
       const fullPath = path.join(currentDir, entry.name);
 
       if (entry.isDirectory()) {
+        // Skip JamTracks folder during regular scanning
+        if (skipJamTracks && currentDir === musicPath && entry.name === JAM_TRACKS_FOLDER) {
+          continue;
+        }
         await scanDir(fullPath);
       } else if (entry.isFile()) {
         const ext = path.extname(entry.name).toLowerCase();
@@ -54,6 +82,62 @@ async function findAudioFiles(dir: string): Promise<string[]> {
 
   await scanDir(dir);
   return audioFiles;
+}
+
+async function scanJamTracksFolder(): Promise<ScannedJamTrack[]> {
+  const jamTracks: ScannedJamTrack[] = [];
+  const musicPath = path.resolve(MUSIC_DIR);
+  const jamTracksPath = path.join(musicPath, JAM_TRACKS_FOLDER);
+
+  try {
+    await fs.access(jamTracksPath);
+  } catch {
+    // JamTracks folder doesn't exist, return empty array
+    return jamTracks;
+  }
+
+  const entries = await fs.readdir(jamTracksPath, { withFileTypes: true });
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+
+    const trackFolder = path.join(jamTracksPath, entry.name);
+    const folderEntries = await fs.readdir(trackFolder, { withFileTypes: true });
+
+    // Find audio file in folder
+    let audioFile: string | null = null;
+    let pdfFile: string | null = null;
+
+    for (const fileEntry of folderEntries) {
+      if (!fileEntry.isFile()) continue;
+
+      const ext = path.extname(fileEntry.name).toLowerCase();
+      if (SUPPORTED_EXTENSIONS.includes(ext) && !audioFile) {
+        audioFile = path.join(trackFolder, fileEntry.name);
+      } else if (ext === ".pdf" && !pdfFile) {
+        pdfFile = path.join(trackFolder, fileEntry.name);
+      }
+    }
+
+    if (!audioFile) continue;
+
+    try {
+      const metadata = await mm.parseFile(audioFile);
+      const title = metadata.common.title || entry.name;
+      const duration = metadata.format.duration || 0;
+
+      jamTracks.push({
+        title,
+        duration,
+        filePath: path.relative(musicPath, audioFile),
+        pdfPath: pdfFile ? path.relative(musicPath, pdfFile) : null,
+      });
+    } catch (err) {
+      console.error(`Error parsing jam track ${audioFile}:`, err);
+    }
+  }
+
+  return jamTracks;
 }
 
 async function scanMusicFolder(): Promise<ScannedTrack[]> {
@@ -108,6 +192,7 @@ async function scanMusicFolder(): Promise<ScannedTrack[]> {
 
 export async function POST() {
   try {
+    const musicPath = path.resolve(MUSIC_DIR);
     const tracks = await scanMusicFolder();
 
     if (tracks.length === 0) {
@@ -143,6 +228,11 @@ export async function POST() {
       });
 
       for (const [bookName, bookTracks] of books) {
+        // Check for PDF in the book folder
+        const bookFolderPath = path.join(musicPath, authorName, bookName);
+        const pdfFullPath = await findPdfInFolder(bookFolderPath);
+        const pdfPath = pdfFullPath ? path.relative(musicPath, pdfFullPath) : null;
+
         const book = await prisma.book.upsert({
           where: {
             name_authorId: {
@@ -150,10 +240,11 @@ export async function POST() {
               authorId: author.id,
             },
           },
-          update: {},
+          update: { pdfPath },
           create: {
             name: bookName,
             authorId: author.id,
+            pdfPath,
           },
         });
 
@@ -200,7 +291,6 @@ export async function POST() {
     });
 
     // Reorganize: move files into Author/Book/XX - Title.ext structure
-    const musicPath = path.resolve(MUSIC_DIR);
     const allTracks = await prisma.track.findMany({
       include: {
         book: {
@@ -316,11 +406,50 @@ export async function POST() {
       }
     }
 
+    // Scan and process JamTracks folder
+    const jamTracks = await scanJamTracksFolder();
+    let jamTracksAdded = 0;
+    let jamTracksRemoved = 0;
+
+    for (const jamTrack of jamTracks) {
+      await prisma.jamTrack.upsert({
+        where: { filePath: jamTrack.filePath },
+        update: {
+          title: jamTrack.title,
+          duration: jamTrack.duration,
+          pdfPath: jamTrack.pdfPath,
+        },
+        create: {
+          title: jamTrack.title,
+          duration: jamTrack.duration,
+          filePath: jamTrack.filePath,
+          pdfPath: jamTrack.pdfPath,
+        },
+      });
+      jamTracksAdded++;
+    }
+
+    // Clean up orphaned jam tracks
+    const validJamPaths = new Set(jamTracks.map((t) => t.filePath));
+    const allDbJamTracks = await prisma.jamTrack.findMany({ select: { id: true, filePath: true } });
+    const jamTracksToDelete = allDbJamTracks.filter((t) => !validJamPaths.has(t.filePath));
+
+    if (jamTracksToDelete.length > 0) {
+      await prisma.jamTrack.deleteMany({
+        where: { id: { in: jamTracksToDelete.map((t) => t.id) } },
+      });
+      jamTracksRemoved = jamTracksToDelete.length;
+    }
+
     return NextResponse.json({
       message: "Library scan complete",
       count: tracks.length,
       removed: tracksToDelete.length,
       reorganized: reorganizedCount,
+      jamTracks: {
+        found: jamTracks.length,
+        removed: jamTracksRemoved,
+      },
     });
   } catch (error) {
     console.error("Error scanning library:", error);

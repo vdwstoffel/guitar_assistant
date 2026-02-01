@@ -3,26 +3,36 @@ import { prisma } from "@/lib/prisma";
 
 export async function GET() {
   try {
-    const authors = await prisma.author.findMany({
-      include: {
-        books: {
-          include: {
-            tracks: {
-              orderBy: { trackNumber: "asc" },
-              include: {
-                markers: {
-                  orderBy: { timestamp: "asc" },
+    const [authors, jamTracks] = await Promise.all([
+      prisma.author.findMany({
+        include: {
+          books: {
+            include: {
+              tracks: {
+                orderBy: { trackNumber: "asc" },
+                include: {
+                  markers: {
+                    orderBy: { timestamp: "asc" },
+                  },
                 },
               },
             },
+            orderBy: { name: "asc" },
           },
-          orderBy: { name: "asc" },
         },
-      },
-      orderBy: { name: "asc" },
-    });
+        orderBy: { name: "asc" },
+      }),
+      prisma.jamTrack.findMany({
+        include: {
+          markers: {
+            orderBy: { timestamp: "asc" },
+          },
+        },
+        orderBy: { title: "asc" },
+      }),
+    ]);
 
-    return NextResponse.json(authors);
+    return NextResponse.json({ authors, jamTracks });
   } catch (error) {
     console.error("Error fetching library:", error);
     return NextResponse.json(

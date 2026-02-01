@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState, useEffect, useCallback } from "react";
-import { Track, Marker } from "@/types";
+import { Track, Marker, JamTrack, JamTrackMarker } from "@/types";
 import WaveSurfer from "wavesurfer.js";
 import RegionsPlugin from "wavesurfer.js/dist/plugins/regions.js";
 import { playCountIn } from "@/lib/clickGenerator";
@@ -31,7 +31,7 @@ export interface MarkerBarState {
 }
 
 interface BottomPlayerProps {
-  track: Track | null;
+  track: Track | JamTrack | null;
   onMarkerAdd: (trackId: string, name: string, timestamp: number) => void;
   onMarkerUpdate: (markerId: string, timestamp: number) => void;
   onMarkerRename: (markerId: string, name: string) => void;

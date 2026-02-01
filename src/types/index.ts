@@ -42,6 +42,26 @@ export interface Video {
   createdAt: string;
 }
 
+export interface JamTrackMarker {
+  id: string;
+  name: string;
+  timestamp: number;
+  jamTrackId: string;
+}
+
+export interface JamTrack {
+  id: string;
+  title: string;
+  filePath: string;
+  duration: number;
+  pdfPath: string | null;
+  completed: boolean;
+  tempo: number | null;
+  timeSignature: string;
+  markers: JamTrackMarker[];
+  createdAt: string;
+}
+
 // Backwards compatibility aliases (for gradual migration)
 export type Song = Track;
 export type Album = Book;

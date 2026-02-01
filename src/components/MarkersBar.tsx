@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback } from "react";
-import { Marker } from "@/types";
+import { Marker, JamTrackMarker } from "@/types";
 import { createTapTempo } from "@/lib/tapTempo";
 
 interface MarkersBarProps {
-  markers: Marker[];
+  markers: (Marker | JamTrackMarker)[];
   visible: boolean;
   leadIn: number;
   newMarkerName: string;

@@ -5,6 +5,7 @@ A web application for managing and practicing guitar exercises, method books, an
 ## Features
 
 - **Library Management** - Organize your guitar books and exercises by author, with automatic metadata scanning from audio files
+- **Jam Tracks** - Separate section for standalone play-along tracks (backing tracks, songs) with their own sheet music PDFs
 - **Audio Player** - Full-featured player with waveform visualization (WaveSurfer.js), playback speed control, and loop regions
 - **PDF Viewer** - View sheet music/tablature PDFs alongside audio playback, with automatic page linking to tracks
 - **Markers** - Add timestamped markers to tracks for quick navigation to specific sections
@@ -41,11 +42,31 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-### Adding Music
+### Adding Content
 
-Upload music through the UI - the application automatically organizes files into the correct folder structure (`music/Author/Book/`) based on the metadata you provide during upload.
+**Important:** All content should be uploaded through the application UI. Do not manually copy files into the music folders - use the upload functionality instead.
 
-Supported formats: MP3, FLAC, WAV. You can also upload PDF files for sheet music/tablature which will be linked to the book.
+#### Books & Exercises
+
+1. Click "Upload Files" in the sidebar
+2. Select your audio files (MP3, FLAC, WAV, OGG, M4A, AAC)
+3. Click "Scan Library" to process the files
+4. The application organizes files into `music/Author/Book/` based on audio metadata
+5. Add PDFs to books via the "Add PDF" button in the track list view
+
+#### Jam Tracks
+
+For standalone play-along tracks (backing tracks, songs you want to jam with):
+
+1. Click "Upload Files" and select your audio file
+2. Click "Scan Library"
+3. Navigate to "Jam Tracks" in the sidebar
+4. Each jam track can have its own PDF sheet music uploaded via "Add PDF"
+
+Jam tracks are stored separately from the book/author hierarchy and are perfect for:
+- Backing tracks from YouTube or other sources
+- Songs you want to practice playing along with
+- Any audio that doesn't belong to a specific method book
 
 ## Docker Deployment
 

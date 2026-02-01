@@ -14,6 +14,9 @@ interface AuthorSidebarProps {
   inProgressCount: number;
   isInProgressSelected: boolean;
   onInProgressSelect: () => void;
+  jamTracksCount: number;
+  isJamTracksSelected: boolean;
+  onJamTracksSelect: () => void;
 }
 
 export default function AuthorSidebar({
@@ -27,6 +30,9 @@ export default function AuthorSidebar({
   inProgressCount,
   isInProgressSelected,
   onInProgressSelect,
+  jamTracksCount,
+  isJamTracksSelected,
+  onJamTracksSelect,
 }: AuthorSidebarProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isBusy = isScanning || isUploading;
@@ -47,10 +53,30 @@ export default function AuthorSidebar({
 
       {/* Author List */}
       <div className="flex-1 overflow-y-auto">
+        {/* Jam Tracks Section */}
+        <button
+          onClick={onJamTracksSelect}
+          className={`w-full px-4 py-3 text-left transition-colors ${
+            isJamTracksSelected
+              ? "bg-gray-800 text-purple-400 border-l-2 border-purple-500"
+              : "hover:bg-gray-800 text-gray-300 border-l-2 border-transparent"
+          }`}
+        >
+          <span className="font-medium flex items-center gap-2">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+            </svg>
+            Jam Tracks
+          </span>
+          <span className="block text-xs text-gray-500 mt-0.5">
+            {jamTracksCount} track{jamTracksCount !== 1 ? "s" : ""}
+          </span>
+        </button>
+
         {/* In Progress Section */}
         <button
           onClick={onInProgressSelect}
-          className={`w-full px-4 py-3 text-left transition-colors border-b border-gray-700 ${
+          className={`w-full px-4 py-3 text-left transition-colors ${
             isInProgressSelected
               ? "bg-gray-800 text-yellow-400 border-l-2 border-yellow-500"
               : "hover:bg-gray-800 text-gray-300 border-l-2 border-transparent"
@@ -66,6 +92,9 @@ export default function AuthorSidebar({
             {inProgressCount} book{inProgressCount !== 1 ? "s" : ""}
           </span>
         </button>
+
+        {/* Separator */}
+        <div className="border-b border-gray-500 mx-3 my-2" />
 
         {authors.length === 0 ? (
           <div className="text-gray-500 text-center p-6 text-sm">

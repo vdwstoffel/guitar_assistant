@@ -6,6 +6,7 @@ import AuthorSidebar from "@/components/AuthorSidebar";
 import BookGrid from "@/components/BookGrid";
 import InProgressGrid from "@/components/InProgressGrid";
 import TrackListView from "@/components/TrackListView";
+import JamTracksView from "@/components/JamTracksView";
 import BottomPlayer, { MarkerBarState } from "@/components/BottomPlayer";
 import MarkersBar from "@/components/MarkersBar";
 import TopNav from "@/components/TopNav";
@@ -13,7 +14,7 @@ import Metronome from "@/components/Metronome";
 import Fretboard from "@/components/Fretboard";
 import PdfViewer from "@/components/PdfViewer";
 import Videos from "@/components/Videos";
-import { Author, Book, Track, Marker } from "@/types";
+import { Author, Book, Track, Marker, JamTrack, JamTrackMarker } from "@/types";
 
 type Section = 'library' | 'videos' | 'metronome' | 'fretboard';
 
@@ -32,14 +33,18 @@ export default function Home() {
   const searchParams = useSearchParams();
 
   const [authors, setAuthors] = useState<Author[]>([]);
+  const [jamTracks, setJamTracks] = useState<JamTrack[]>([]);
   const [selectedAuthor, setSelectedAuthor] = useState<Author | null>(null);
   const [selectedBook, setSelectedBook] = useState<Book | null>(null);
   const [currentTrack, setCurrentTrack] = useState<Track | null>(null);
+  const [currentJamTrack, setCurrentJamTrack] = useState<JamTrack | null>(null);
   const [currentAuthor, setCurrentAuthor] = useState<Author | null>(null);
   const [currentBook, setCurrentBook] = useState<Book | null>(null);
   const [isScanning, setIsScanning] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [isUploadingJamTracks, setIsUploadingJamTracks] = useState(false);
   const [isInProgressSelected, setIsInProgressSelected] = useState(false);
+  const [isJamTracksSelected, setIsJamTracksSelected] = useState(false);
 
   // Compute in-progress books from all authors
   const inProgressBooks = authors.flatMap((author) =>
@@ -85,14 +90,17 @@ export default function Home() {
       const response = await fetch("/api/library");
       if (response.ok) {
         const data = await response.json();
-        setAuthors(data);
+        const authorsData = data.authors || data; // Handle both old and new response format
+        const jamTracksData = data.jamTracks || [];
+        setAuthors(authorsData);
+        setJamTracks(jamTracksData);
 
         // Restore state from URL on initial load
         if (restoreFromUrl) {
           const authorId = searchParams.get('artist');
           const bookId = searchParams.get('album');
           if (authorId) {
-            const author = data.find((a: Author) => a.id === authorId);
+            const author = authorsData.find((a: Author) => a.id === authorId);
             if (author) {
               setSelectedAuthor(author);
               if (bookId) {
@@ -111,7 +119,7 @@ export default function Home() {
 
         // Update selected author if it exists in new data
         if (selectedAuthor) {
-          const updatedAuthor = data.find((a: Author) => a.id === selectedAuthor.id);
+          const updatedAuthor = authorsData.find((a: Author) => a.id === selectedAuthor.id);
           if (updatedAuthor) {
             setSelectedAuthor(updatedAuthor);
           }
@@ -119,7 +127,7 @@ export default function Home() {
 
         // Update selected book if it exists in new data
         if (selectedBook && selectedAuthor) {
-          const updatedAuthor = data.find((a: Author) => a.id === selectedAuthor.id);
+          const updatedAuthor = authorsData.find((a: Author) => a.id === selectedAuthor.id);
           if (updatedAuthor) {
             const updatedBook = updatedAuthor.books.find((b: Book) => b.id === selectedBook.id);
             if (updatedBook) {
@@ -130,7 +138,7 @@ export default function Home() {
 
         // Update current track markers if track is playing
         if (currentTrack) {
-          for (const author of data) {
+          for (const author of authorsData) {
             for (const book of author.books) {
               const track = book.tracks.find(
                 (t: Track) => t.id === currentTrack.id
@@ -142,11 +150,19 @@ export default function Home() {
             }
           }
         }
+
+        // Update current jam track if one is playing
+        if (currentJamTrack) {
+          const updatedJamTrack = jamTracksData.find((jt: JamTrack) => jt.id === currentJamTrack.id);
+          if (updatedJamTrack) {
+            setCurrentJamTrack(updatedJamTrack);
+          }
+        }
       }
     } catch (error) {
       console.error("Error fetching library:", error);
     }
-  }, [currentTrack, selectedAuthor, selectedBook, searchParams]);
+  }, [currentTrack, currentJamTrack, selectedAuthor, selectedBook, searchParams]);
 
   useEffect(() => {
     fetchLibrary(true); // Restore from URL on initial load
@@ -154,6 +170,7 @@ export default function Home() {
 
   const handleAuthorSelect = (author: Author) => {
     setIsInProgressSelected(false);
+    setIsJamTracksSelected(false);
     setSelectedAuthor(author);
     setSelectedBook(null);
     updateLibraryUrl(author.id, null);
@@ -161,6 +178,15 @@ export default function Home() {
 
   const handleInProgressSelect = () => {
     setIsInProgressSelected(true);
+    setIsJamTracksSelected(false);
+    setSelectedAuthor(null);
+    setSelectedBook(null);
+    updateLibraryUrl(null, null);
+  };
+
+  const handleJamTracksSelect = () => {
+    setIsJamTracksSelected(true);
+    setIsInProgressSelected(false);
     setSelectedAuthor(null);
     setSelectedBook(null);
     updateLibraryUrl(null, null);
@@ -221,13 +247,48 @@ export default function Home() {
     }
   };
 
+  const handleJamTrackUpload = async (files: FileList) => {
+    setIsUploadingJamTracks(true);
+    try {
+      const formData = new FormData();
+      for (let i = 0; i < files.length; i++) {
+        formData.append("files", files[i]);
+      }
+
+      const response = await fetch("/api/jamtracks/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (response.ok) {
+        await fetchLibrary();
+      }
+    } catch (error) {
+      console.error("Error uploading jam tracks:", error);
+    } finally {
+      setIsUploadingJamTracks(false);
+    }
+  };
+
   const handleTrackSelect = (track: Track, author: Author, book: Book) => {
     setCurrentTrack(track);
+    setCurrentJamTrack(null); // Clear jam track when selecting regular track
     setCurrentAuthor(author);
     setCurrentBook(book);
     // Update PDF path if book has one
     if (book.pdfPath) {
       setPdfPath(book.pdfPath);
+    }
+  };
+
+  const handleJamTrackSelect = (jamTrack: JamTrack) => {
+    setCurrentJamTrack(jamTrack);
+    setCurrentTrack(null); // Clear regular track when selecting jam track
+    setCurrentAuthor(null);
+    setCurrentBook(null);
+    // Update PDF path if jam track has one
+    if (jamTrack.pdfPath) {
+      setPdfPath(jamTrack.pdfPath);
     }
   };
 
@@ -818,6 +879,270 @@ export default function Home() {
     }
   };
 
+  // Jam Track handlers
+  const handleJamTrackUpdate = async (
+    jamTrackId: string,
+    title: string,
+    tempo: number | null,
+    timeSignature: string
+  ) => {
+    const response = await fetch(`/api/jamtracks/${jamTrackId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title, tempo, timeSignature }),
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to update jam track");
+    }
+
+    const updatedJamTrack = await response.json();
+
+    // Update local state
+    setJamTracks((prev) =>
+      prev.map((jt) => (jt.id === jamTrackId ? updatedJamTrack : jt))
+    );
+
+    if (currentJamTrack?.id === jamTrackId) {
+      setCurrentJamTrack(updatedJamTrack);
+    }
+  };
+
+  const handleJamTrackComplete = async (jamTrackId: string, completed: boolean) => {
+    const response = await fetch(`/api/jamtracks/${jamTrackId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ completed }),
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to update jam track completed status");
+    }
+
+    // Update local state
+    setJamTracks((prev) =>
+      prev.map((jt) => (jt.id === jamTrackId ? { ...jt, completed } : jt))
+    );
+
+    if (currentJamTrack?.id === jamTrackId) {
+      setCurrentJamTrack((prev) => (prev ? { ...prev, completed } : null));
+    }
+  };
+
+  const handleJamTrackDelete = async (jamTrackId: string) => {
+    const response = await fetch(`/api/jamtracks/${jamTrackId}`, {
+      method: "DELETE",
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to delete jam track");
+    }
+
+    // Update local state
+    setJamTracks((prev) => prev.filter((jt) => jt.id !== jamTrackId));
+
+    if (currentJamTrack?.id === jamTrackId) {
+      setCurrentJamTrack(null);
+    }
+  };
+
+  const handleJamTrackPdfUpload = async (jamTrackId: string, file: File) => {
+    const formData = new FormData();
+    formData.append("pdf", file);
+
+    try {
+      const response = await fetch(`/api/jamtracks/${jamTrackId}/pdf`, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (response.ok) {
+        const updatedJamTrack = await response.json();
+        setJamTracks((prev) =>
+          prev.map((jt) => (jt.id === jamTrackId ? updatedJamTrack : jt))
+        );
+        if (currentJamTrack?.id === jamTrackId) {
+          setCurrentJamTrack(updatedJamTrack);
+          if (updatedJamTrack.pdfPath) {
+            setPdfPath(updatedJamTrack.pdfPath);
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Error uploading jam track PDF:", error);
+    }
+  };
+
+  const handleJamTrackPdfDelete = async (jamTrackId: string) => {
+    try {
+      const response = await fetch(`/api/jamtracks/${jamTrackId}/pdf`, {
+        method: "DELETE",
+      });
+
+      if (response.ok) {
+        setJamTracks((prev) =>
+          prev.map((jt) => (jt.id === jamTrackId ? { ...jt, pdfPath: null } : jt))
+        );
+        if (currentJamTrack?.id === jamTrackId) {
+          setCurrentJamTrack((prev) => (prev ? { ...prev, pdfPath: null } : null));
+          setPdfPath(null);
+        }
+      }
+    } catch (error) {
+      console.error("Error deleting jam track PDF:", error);
+    }
+  };
+
+  // Jam Track Marker handlers
+  const handleJamTrackMarkerAdd = async (
+    jamTrackId: string,
+    name: string,
+    timestamp: number
+  ) => {
+    try {
+      const response = await fetch(`/api/jamtracks/${jamTrackId}/markers`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, timestamp }),
+      });
+      if (response.ok) {
+        const newMarker: JamTrackMarker = await response.json();
+        // Update the current jam track's markers
+        if (currentJamTrack && currentJamTrack.id === jamTrackId) {
+          setCurrentJamTrack({
+            ...currentJamTrack,
+            markers: [...currentJamTrack.markers, newMarker],
+          });
+        }
+        // Also update in the jamTracks list
+        setJamTracks((prev) =>
+          prev.map((jt) =>
+            jt.id === jamTrackId
+              ? { ...jt, markers: [...jt.markers, newMarker] }
+              : jt
+          )
+        );
+      }
+    } catch (error) {
+      console.error("Error adding jam track marker:", error);
+    }
+  };
+
+  const handleJamTrackMarkerUpdate = async (jamTrackId: string, markerId: string, timestamp: number) => {
+    try {
+      const response = await fetch(`/api/jamtracks/${jamTrackId}/markers`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ markerId, timestamp }),
+      });
+      if (response.ok) {
+        const updateMarkers = (markers: JamTrackMarker[]) =>
+          markers.map((m) => (m.id === markerId ? { ...m, timestamp } : m));
+
+        if (currentJamTrack) {
+          setCurrentJamTrack({
+            ...currentJamTrack,
+            markers: updateMarkers(currentJamTrack.markers),
+          });
+        }
+
+        setJamTracks((prev) =>
+          prev.map((jt) =>
+            jt.id === jamTrackId
+              ? { ...jt, markers: updateMarkers(jt.markers) }
+              : jt
+          )
+        );
+      }
+    } catch (error) {
+      console.error("Error updating jam track marker:", error);
+    }
+  };
+
+  const handleJamTrackMarkerRename = async (jamTrackId: string, markerId: string, name: string) => {
+    try {
+      const response = await fetch(`/api/jamtracks/${jamTrackId}/markers`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ markerId, name }),
+      });
+      if (response.ok) {
+        const updateMarkers = (markers: JamTrackMarker[]) =>
+          markers.map((m) => (m.id === markerId ? { ...m, name } : m));
+
+        if (currentJamTrack) {
+          setCurrentJamTrack({
+            ...currentJamTrack,
+            markers: updateMarkers(currentJamTrack.markers),
+          });
+        }
+
+        setJamTracks((prev) =>
+          prev.map((jt) =>
+            jt.id === jamTrackId
+              ? { ...jt, markers: updateMarkers(jt.markers) }
+              : jt
+          )
+        );
+      }
+    } catch (error) {
+      console.error("Error renaming jam track marker:", error);
+    }
+  };
+
+  const handleJamTrackMarkerDelete = async (jamTrackId: string, markerId: string) => {
+    try {
+      const response = await fetch(`/api/jamtracks/${jamTrackId}/markers?markerId=${markerId}`, {
+        method: "DELETE",
+      });
+      if (response.ok) {
+        const updateMarkers = (markers: JamTrackMarker[]) =>
+          markers.filter((m) => m.id !== markerId);
+
+        if (currentJamTrack) {
+          setCurrentJamTrack({
+            ...currentJamTrack,
+            markers: updateMarkers(currentJamTrack.markers),
+          });
+        }
+
+        setJamTracks((prev) =>
+          prev.map((jt) =>
+            jt.id === jamTrackId
+              ? { ...jt, markers: updateMarkers(jt.markers) }
+              : jt
+          )
+        );
+      }
+    } catch (error) {
+      console.error("Error deleting jam track marker:", error);
+    }
+  };
+
+  const handleJamTrackMarkersClear = async (jamTrackId: string) => {
+    try {
+      const response = await fetch(`/api/jamtracks/${jamTrackId}/markers`, {
+        method: "DELETE",
+      });
+      if (response.ok) {
+        if (currentJamTrack && currentJamTrack.id === jamTrackId) {
+          setCurrentJamTrack({
+            ...currentJamTrack,
+            markers: [],
+          });
+        }
+
+        setJamTracks((prev) =>
+          prev.map((jt) =>
+            jt.id === jamTrackId ? { ...jt, markers: [] } : jt
+          )
+        );
+      }
+    } catch (error) {
+      console.error("Error clearing jam track markers:", error);
+    }
+  };
+
   // Auto-navigate to track's PDF page when track changes
   useEffect(() => {
     if (currentTrack?.pdfPage) {
@@ -852,10 +1177,13 @@ export default function Home() {
                     inProgressCount={inProgressCount}
                     isInProgressSelected={isInProgressSelected}
                     onInProgressSelect={handleInProgressSelect}
+                    jamTracksCount={jamTracks.length}
+                    isJamTracksSelected={isJamTracksSelected}
+                    onJamTracksSelect={handleJamTracksSelect}
                   />
                 </div>
 
-                {/* Content: BookGrid OR TrackListView OR InProgressGrid */}
+                {/* Content: BookGrid OR TrackListView OR InProgressGrid OR JamTracksView */}
                 <div className="flex-1 min-w-0">
                   {selectedBook && selectedAuthor ? (
                     <TrackListView
@@ -879,6 +1207,20 @@ export default function Home() {
                       onPdfUpload={handlePdfUpload}
                       onPdfDelete={handlePdfDelete}
                       onPdfConvert={handlePdfConvert}
+                    />
+                  ) : isJamTracksSelected ? (
+                    <JamTracksView
+                      jamTracks={jamTracks}
+                      currentJamTrack={currentJamTrack}
+                      onJamTrackSelect={handleJamTrackSelect}
+                      onJamTrackUpdate={handleJamTrackUpdate}
+                      onJamTrackComplete={handleJamTrackComplete}
+                      onJamTrackDelete={handleJamTrackDelete}
+                      onShowPdf={handleShowPdf}
+                      onPdfUpload={handleJamTrackPdfUpload}
+                      onPdfDelete={handleJamTrackPdfDelete}
+                      onUpload={handleJamTrackUpload}
+                      isUploading={isUploadingJamTracks}
                     />
                   ) : isInProgressSelected ? (
                     <InProgressGrid
@@ -906,12 +1248,42 @@ export default function Home() {
               {/* Bottom Player - Fixed height for waveform visibility */}
               <div className="h-[30vh] min-h-55 max-h-80 shrink-0">
                 <BottomPlayer
-                  track={currentTrack}
-                  onMarkerAdd={handleMarkerAdd}
-                  onMarkerUpdate={handleMarkerUpdate}
-                  onMarkerRename={handleMarkerRename}
-                  onMarkerDelete={handleMarkerDelete}
-                  onMarkersClear={handleMarkersClear}
+                  track={currentTrack || currentJamTrack}
+                  onMarkerAdd={(trackId, name, timestamp) => {
+                    if (currentJamTrack) {
+                      handleJamTrackMarkerAdd(trackId, name, timestamp);
+                    } else {
+                      handleMarkerAdd(trackId, name, timestamp);
+                    }
+                  }}
+                  onMarkerUpdate={(markerId, timestamp) => {
+                    if (currentJamTrack) {
+                      handleJamTrackMarkerUpdate(currentJamTrack.id, markerId, timestamp);
+                    } else {
+                      handleMarkerUpdate(markerId, timestamp);
+                    }
+                  }}
+                  onMarkerRename={(markerId, name) => {
+                    if (currentJamTrack) {
+                      handleJamTrackMarkerRename(currentJamTrack.id, markerId, name);
+                    } else {
+                      handleMarkerRename(markerId, name);
+                    }
+                  }}
+                  onMarkerDelete={(markerId) => {
+                    if (currentJamTrack) {
+                      handleJamTrackMarkerDelete(currentJamTrack.id, markerId);
+                    } else {
+                      handleMarkerDelete(markerId);
+                    }
+                  }}
+                  onMarkersClear={(trackId) => {
+                    if (currentJamTrack) {
+                      handleJamTrackMarkersClear(trackId);
+                    } else {
+                      handleMarkersClear(trackId);
+                    }
+                  }}
                   externalMarkersBar={true}
                   onMarkerBarStateChange={setMarkerBarState}
                 />
@@ -941,9 +1313,9 @@ export default function Home() {
           </div>
 
           {/* Markers Bar - Spans full width underneath both player and PDF */}
-          {currentTrack && markerBarState && (
+          {(currentTrack || currentJamTrack) && markerBarState && (
             <MarkersBar
-              markers={currentTrack.markers}
+              markers={(currentTrack || currentJamTrack)!.markers}
               visible={markerBarState.showMarkers}
               leadIn={markerBarState.leadIn}
               newMarkerName={markerBarState.newMarkerName}
@@ -960,12 +1332,31 @@ export default function Home() {
               }}
               onEditNameChange={markerBarState.setEditingMarkerName}
               onSaveEdit={(markerId, name) => {
-                handleMarkerRename(markerId, name);
+                if (currentJamTrack) {
+                  handleJamTrackMarkerRename(currentJamTrack.id, markerId, name);
+                } else {
+                  handleMarkerRename(markerId, name);
+                }
                 markerBarState.setEditingMarkerId(null);
               }}
               onCancelEdit={() => markerBarState.setEditingMarkerId(null)}
-              onDelete={handleMarkerDelete}
-              onClearAll={() => handleMarkersClear(currentTrack.id)}
+              onDelete={(markerId) => {
+                if (currentJamTrack) {
+                  handleJamTrackMarkerDelete(currentJamTrack.id, markerId);
+                } else {
+                  handleMarkerDelete(markerId);
+                }
+              }}
+              onClearAll={() => {
+                const activeTrack = currentTrack || currentJamTrack;
+                if (activeTrack) {
+                  if (currentJamTrack) {
+                    handleJamTrackMarkersClear(activeTrack.id);
+                  } else {
+                    handleMarkersClear(activeTrack.id);
+                  }
+                }
+              }}
               formatTime={markerBarState.formatTime}
               isCountingIn={markerBarState.isCountingIn}
               currentCountInBeat={markerBarState.currentCountInBeat}

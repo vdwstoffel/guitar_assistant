@@ -57,3 +57,24 @@ model Video {
   sortOrder Int      @default(0)
   createdAt DateTime @default(now())
 }
+
+model JamTrack {
+  id            String           @id @default(uuid())
+  title         String
+  filePath      String           @unique
+  duration      Float
+  pdfPath       String?
+  completed     Boolean          @default(false)
+  tempo         Int?
+  timeSignature String           @default("4/4")
+  markers       JamTrackMarker[]
+  createdAt     DateTime         @default(now())
+}
+
+model JamTrackMarker {
+  id         String   @id @default(uuid())
+  name       String
+  timestamp  Float
+  jamTrackId String
+  jamTrack   JamTrack @relation(fields: [jamTrackId], references: [id], onDelete: Cascade)
+}

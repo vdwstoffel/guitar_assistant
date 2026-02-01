@@ -38,8 +38,20 @@ The codebase recently migrated naming conventions:
 
 ### Data Flow
 1. `/api/library/scan` scans `music/` directory and populates database from audio file metadata
-2. `/api/library` returns hierarchical data: Authors → Books → Tracks → Markers
+2. `/api/library` returns hierarchical data: Authors → Books → Tracks → Markers, plus standalone JamTracks
 3. Audio/PDF files are streamed via `/api/audio/[...path]` and `/api/pdf/[...path]`
+
+### Jam Tracks
+Standalone play-along tracks (backing tracks, songs) that exist outside the Author → Book hierarchy:
+- Stored in `music/JamTracks/` folder, one subfolder per track
+- Each jam track can have its own PDF (stored as `sheet.pdf` in the track folder)
+- API endpoints: `/api/jamtracks/`, `/api/jamtracks/[id]/`, `/api/jamtracks/[id]/markers/`, `/api/jamtracks/[id]/pdf/`
+
+### Important: File Uploads
+**All content must be uploaded through the application UI.** Do not suggest manually copying files into the music folders. The correct workflow is:
+1. Use "Upload Files" button in the sidebar
+2. Click "Scan Library" to process uploaded files
+3. The application handles file organization automatically
 
 ### Client Routing
 Single-page app with catch-all route `[[...section]]` supporting sections:
