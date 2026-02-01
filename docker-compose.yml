@@ -1,0 +1,12 @@
+services:
+  nextjs-app:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - DATABASE_URL=file:/app/prisma/guitar_assistant.db
+      - MUSIC_DIR=/app/music
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - ./music:/app/music

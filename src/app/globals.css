@@ -1,0 +1,79 @@
+@import "tailwindcss";
+
+:root {
+  --background: #111827;
+  --foreground: #f9fafb;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+}
+
+/* Custom scrollbar for webkit browsers */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #1f2937;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #4b5563;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #6b7280;
+}
+
+/* Hide default wavesurfer region content, only show our flag */
+.marker-region {
+  overflow: visible !important;
+  font-size: 0 !important;
+  color: transparent !important;
+  text-indent: -9999px !important;
+}
+
+.marker-region > *:not(.marker-flag) {
+  display: none !important;
+  visibility: hidden !important;
+}
+
+.marker-region::before,
+.marker-region::after {
+  display: none !important;
+}
+
+/* Marker flags on waveform - positioned inside at top */
+.marker-flag {
+  position: absolute;
+  top: 2px;
+  left: 0;
+  transform: translateX(-50%);
+  z-index: 10;
+  text-indent: 0 !important;
+  font-size: 10px !important;
+  color: #000 !important;
+}
+
+.marker-flag-text {
+  display: block;
+  background: #facc15;
+  color: #000 !important;
+  font-size: 9px !important;
+  font-weight: 600;
+  padding: 1px 4px;
+  border-radius: 2px;
+  white-space: nowrap;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}

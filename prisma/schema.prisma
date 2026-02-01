@@ -1,0 +1,56 @@
+generator client {
+  provider      = "prisma-client"
+  output        = "../src/generated/prisma"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Artist {
+  id     String  @id @default(uuid())
+  name   String  @unique
+  albums Album[]
+}
+
+model Album {
+  id       String  @id @default(uuid())
+  name     String
+  artistId String
+  pdfPath  String?
+  artist   Artist  @relation(fields: [artistId], references: [id], onDelete: Cascade)
+  songs    Song[]
+
+  @@unique([name, artistId])
+}
+
+model Song {
+  id          String   @id @default(uuid())
+  title       String
+  trackNumber Int
+  filePath    String   @unique
+  duration    Float
+  albumId     String
+  pdfPage     Int?
+  completed   Boolean  @default(false)
+  markers     Marker[]
+  album       Album    @relation(fields: [albumId], references: [id], onDelete: Cascade)
+}
+
+model Marker {
+  id        String @id @default(uuid())
+  name      String
+  timestamp Float
+  songId    String
+  song      Song   @relation(fields: [songId], references: [id], onDelete: Cascade)
+}
+
+model Video {
+  id        String   @id @default(uuid())
+  title     String
+  youtubeId String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+}
