@@ -254,6 +254,8 @@ interface TrackListViewProps {
   onPdfUpload?: (bookId: string, file: File) => Promise<void>;
   onPdfDelete?: (bookId: string) => Promise<void>;
   onPdfConvert?: (bookId: string) => Promise<void>;
+  currentPdfPage?: number;
+  onAssignPdfPage?: (trackId: string, page: number) => Promise<void>;
 }
 
 export default function TrackListView({
@@ -270,6 +272,8 @@ export default function TrackListView({
   onPdfUpload,
   onPdfDelete,
   onPdfConvert,
+  currentPdfPage,
+  onAssignPdfPage,
 }: TrackListViewProps) {
   const [editingBook, setEditingBook] = useState(false);
   const [editingTrack, setEditingTrack] = useState<Track | null>(null);
@@ -473,10 +477,33 @@ export default function TrackListView({
                 )}
               </button>
 
-              {/* Duration */}
-              <span className="text-gray-500 text-sm tabular-nums flex-shrink-0 w-12 text-right">
-                {formatDuration(track.duration)}
-              </span>
+              {/* Duration and PDF page */}
+              <div className="flex items-center gap-1 flex-shrink-0">
+                {/* Page number or assignment icon */}
+                {book.pdfPath && (
+                  track.pdfPage ? (
+                    <span className="text-xs text-gray-500 w-8 text-right">p.{track.pdfPage}</span>
+                  ) : onAssignPdfPage && currentPdfPage ? (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onAssignPdfPage(track.id, currentPdfPage);
+                      }}
+                      className="p-0.5 text-gray-500 hover:text-blue-400 opacity-0 group-hover:opacity-100 transition-opacity w-8 flex justify-end"
+                      title={`Assign current PDF page (${currentPdfPage})`}
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                    </button>
+                  ) : (
+                    <span className="w-8" />
+                  )
+                )}
+                <span className="text-gray-500 text-sm tabular-nums w-12 text-right">
+                  {formatDuration(track.duration)}
+                </span>
+              </div>
 
               {/* Edit button */}
               {onTrackUpdate && (
