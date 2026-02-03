@@ -102,6 +102,8 @@ interface JamTracksViewProps {
   onShowPdf?: (pdfPath: string) => void;
   onPdfUpload?: (jamTrackId: string, file: File) => Promise<void>;
   onPdfDelete?: (jamTrackId: string) => Promise<void>;
+  onTabUpload?: (jamTrackId: string, file: File) => Promise<void>;
+  onTabDelete?: (jamTrackId: string) => Promise<void>;
   onUpload?: (files: FileList) => Promise<void>;
   isUploading?: boolean;
 }
@@ -116,12 +118,15 @@ export default function JamTracksView({
   onShowPdf,
   onPdfUpload,
   onPdfDelete,
+  onTabUpload,
+  onTabDelete,
   onUpload,
   isUploading,
 }: JamTracksViewProps) {
   const [editingJamTrack, setEditingJamTrack] = useState<JamTrack | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const fileInputRefs = useRef<Map<string, HTMLInputElement>>(new Map());
+  const tabInputRefs = useRef<Map<string, HTMLInputElement>>(new Map());
   const uploadInputRef = useRef<HTMLInputElement>(null);
 
   const formatDuration = (seconds: number) => {
@@ -246,6 +251,11 @@ export default function JamTracksView({
                   {jamTrack.title}
                 </span>
 
+                {/* Tab indicator */}
+                {jamTrack.tabPath && (
+                  <span className="text-purple-400 text-xs flex-shrink-0">TAB</span>
+                )}
+
                 {/* PDF indicator */}
                 {jamTrack.pdfPath && (
                   <span className="text-blue-400 text-xs flex-shrink-0">PDF</span>
@@ -294,7 +304,48 @@ export default function JamTracksView({
               </div>
 
               {/* Actions row */}
-              <div className="flex items-center gap-2 px-4 pb-3 pt-0">
+              <div className="flex items-center gap-2 px-4 pb-3 pt-0 flex-wrap">
+                {/* Tab controls */}
+                {jamTrack.tabPath ? (
+                  <>
+                    <span className="flex items-center gap-1 px-2 py-1 bg-purple-600/20 rounded text-xs text-purple-300">
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+                      </svg>
+                      Tab loaded
+                    </span>
+                    {onTabDelete && (
+                      <button
+                        onClick={() => onTabDelete(jamTrack.id)}
+                        className="text-xs text-red-400 hover:text-red-300"
+                      >
+                        Remove Tab
+                      </button>
+                    )}
+                  </>
+                ) : onTabUpload && (
+                  <label className="flex items-center gap-1 px-2 py-1 bg-purple-700 hover:bg-purple-600 rounded text-xs text-white cursor-pointer">
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                    </svg>
+                    Add Tab
+                    <input
+                      type="file"
+                      accept=".gp,.gp3,.gp4,.gp5,.gpx"
+                      className="hidden"
+                      ref={(el) => {
+                        if (el) tabInputRefs.current.set(jamTrack.id, el);
+                      }}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) onTabUpload(jamTrack.id, file);
+                        e.target.value = '';
+                      }}
+                    />
+                  </label>
+                )}
+
+                {/* PDF controls */}
                 {jamTrack.pdfPath ? (
                   <>
                     <button

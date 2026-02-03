@@ -27,6 +27,9 @@ export async function GET() {
           markers: {
             orderBy: { timestamp: "asc" },
           },
+          tabSyncPoints: {
+            orderBy: { audioTime: "asc" },
+          },
         },
         orderBy: { title: "asc" },
       }),

@@ -64,10 +64,12 @@ model JamTrack {
   filePath      String           @unique
   duration      Float
   pdfPath       String?
+  tabPath       String?
   completed     Boolean          @default(false)
   tempo         Int?
   timeSignature String           @default("4/4")
   markers       JamTrackMarker[]
+  tabSyncPoints TabSyncPoint[]
   createdAt     DateTime         @default(now())
 }
 
@@ -77,4 +79,15 @@ model JamTrackMarker {
   timestamp  Float
   jamTrackId String
   jamTrack   JamTrack @relation(fields: [jamTrackId], references: [id], onDelete: Cascade)
+}
+
+model TabSyncPoint {
+  id         String   @id @default(uuid())
+  audioTime  Float
+  tabTick    Int
+  barIndex   Int?
+  jamTrackId String
+  jamTrack   JamTrack @relation(fields: [jamTrackId], references: [id], onDelete: Cascade)
+
+  @@index([jamTrackId])
 }

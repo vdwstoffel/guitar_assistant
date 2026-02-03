@@ -68,12 +68,28 @@ URL query params persist library selection state (author/book).
 - **Track** → has audio file, duration, PDF page reference, completion status, has many Markers
 - **Marker** → timestamp annotation on a Track
 - **Video** → YouTube video with sort order
+- **JamTrack** → standalone play-along track with audio, optional PDF/tab, has JamTrackMarkers and TabSyncPoints
+- **JamTrackMarker** → timestamp annotation on a JamTrack
+- **TabSyncPoint** → maps audio time to alphaTab tick position for cursor synchronization
 
 All models use UUID primary keys. Cascade deletes are configured on foreign keys.
 
 ## Environment
 - `DATABASE_URL` - SQLite path (default: `file:./prisma/guitar_assistant.db`)
 - `MUSIC_DIR` - Music directory path (used in Docker)
+
+## Database Safety (IMPORTANT)
+**ALWAYS backup the database before running any Prisma migrations.** The user's markers and other data are valuable.
+
+Before running `prisma migrate dev` or any migration command:
+```bash
+cp prisma/guitar_assistant.db prisma/guitar_assistant.db.backup
+```
+
+To restore from backup if something goes wrong:
+```bash
+cp prisma/guitar_assistant.db.backup prisma/guitar_assistant.db
+```
 
 ## Documentation
 When adding new features, check if they should be documented in [README.md](README.md). Update the Features section or add new sections as appropriate.

@@ -48,8 +48,9 @@ interface UpdateMetadataBody {
   timeSignature?: string;
 }
 
-interface ToggleCompletedBody {
-  completed: boolean;
+interface PatchBody {
+  completed?: boolean;
+  pdfPage?: number | null;
 }
 
 export async function PATCH(
@@ -58,19 +59,26 @@ export async function PATCH(
 ) {
   try {
     const { id } = await params;
-    const body: ToggleCompletedBody = await request.json();
-    const { completed } = body;
+    const body: PatchBody = await request.json();
+
+    const data: { completed?: boolean; pdfPage?: number | null } = {};
+    if (body.completed !== undefined) {
+      data.completed = body.completed;
+    }
+    if (body.pdfPage !== undefined) {
+      data.pdfPage = body.pdfPage;
+    }
 
     const updatedTrack = await prisma.track.update({
       where: { id },
-      data: { completed },
+      data,
     });
 
     return NextResponse.json(updatedTrack);
   } catch (error) {
-    console.error("Error toggling track completed status:", error);
+    console.error("Error updating track:", error);
     return NextResponse.json(
-      { error: "Failed to update completed status" },
+      { error: "Failed to update track" },
       { status: 500 }
     );
   }

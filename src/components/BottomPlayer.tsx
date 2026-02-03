@@ -39,6 +39,8 @@ interface BottomPlayerProps {
   onMarkersClear: (trackId: string) => void;
   externalMarkersBar?: boolean;
   onMarkerBarStateChange?: (state: MarkerBarState) => void;
+  onTimeUpdate?: (time: number, isPlaying: boolean) => void;
+  onSeekReady?: (seekFn: (time: number) => void) => void;
 }
 
 export default function BottomPlayer({
@@ -50,6 +52,8 @@ export default function BottomPlayer({
   onMarkersClear,
   externalMarkersBar = false,
   onMarkerBarStateChange,
+  onTimeUpdate,
+  onSeekReady,
 }: BottomPlayerProps) {
   const waveformRef = useRef<HTMLDivElement>(null);
   const waveformContainerRef = useRef<HTMLDivElement>(null);
@@ -272,6 +276,26 @@ export default function BottomPlayer({
       container.removeEventListener("wheel", handleWheelZoom);
     };
   }, [handleWheelZoom, track, isLoading]);
+
+  // Call onTimeUpdate when time or playing state changes
+  useEffect(() => {
+    if (onTimeUpdate) {
+      onTimeUpdate(currentTime, isPlaying);
+    }
+  }, [currentTime, isPlaying, onTimeUpdate]);
+
+  // Expose seek function for external control (e.g., alphaTab click-to-seek)
+  useEffect(() => {
+    if (onSeekReady && wavesurferRef.current && duration > 0) {
+      const seekFn = (time: number) => {
+        if (wavesurferRef.current && duration > 0) {
+          const normalizedPosition = Math.max(0, Math.min(1, time / duration));
+          wavesurferRef.current.seekTo(normalizedPosition);
+        }
+      };
+      onSeekReady(seekFn);
+    }
+  }, [onSeekReady, duration]);
 
   // Track scroll position and container width for marker labels
   useEffect(() => {

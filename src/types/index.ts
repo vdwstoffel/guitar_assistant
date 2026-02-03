@@ -49,16 +49,26 @@ export interface JamTrackMarker {
   jamTrackId: string;
 }
 
+export interface TabSyncPoint {
+  id: string;
+  audioTime: number;
+  tabTick: number;
+  barIndex: number | null;
+  jamTrackId: string;
+}
+
 export interface JamTrack {
   id: string;
   title: string;
   filePath: string;
   duration: number;
   pdfPath: string | null;
+  tabPath: string | null;
   completed: boolean;
   tempo: number | null;
   timeSignature: string;
   markers: JamTrackMarker[];
+  tabSyncPoints: TabSyncPoint[];
   createdAt: string;
 }
 
