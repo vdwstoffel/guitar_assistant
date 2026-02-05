@@ -60,6 +60,7 @@ model BookVideo {
   sortOrder   Int      @default(0)
   trackNumber Int?
   pdfPage     Int?
+  completed   Boolean  @default(false)
   bookId      String
   book        Book     @relation(fields: [bookId], references: [id], onDelete: Cascade)
   createdAt   DateTime @default(now())

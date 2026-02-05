@@ -20,7 +20,7 @@ export async function PUT(
 ) {
   try {
     const { videoId } = await params;
-    const { filename, sortOrder, title, trackNumber, pdfPage } = await request.json();
+    const { filename, sortOrder, title, trackNumber, pdfPage, completed } = await request.json();
 
     if (!filename || !filename.trim()) {
       return NextResponse.json(
@@ -128,6 +128,7 @@ export async function PUT(
       title?: string | null;
       trackNumber?: number | null;
       pdfPage?: number | null;
+      completed?: boolean;
     } = {
       filename: newFilename,
       filePath: newFilePath,
@@ -142,6 +143,9 @@ export async function PUT(
     }
     if (pdfPage !== undefined) {
       updateData.pdfPage = pdfPage;
+    }
+    if (completed !== undefined) {
+      updateData.completed = completed;
     }
 
     const updatedVideo = await prisma.bookVideo.update({

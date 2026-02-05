@@ -52,6 +52,7 @@ export interface BookVideo {
   sortOrder: number;
   trackNumber: number | null;
   pdfPage: number | null;
+  completed: boolean;
   bookId: string;
   createdAt: string;
 }

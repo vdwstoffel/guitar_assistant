@@ -715,7 +715,8 @@ export default function Home() {
     sortOrder: number,
     title?: string | null,
     trackNumber?: number | null,
-    pdfPage?: number | null
+    pdfPage?: number | null,
+    completed?: boolean
   ) => {
     try {
       const response = await fetch(`/api/books/${bookId}/videos/${videoId}/update`, {
@@ -723,7 +724,7 @@ export default function Home() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ filename, sortOrder, title, trackNumber, pdfPage }),
+        body: JSON.stringify({ filename, sortOrder, title, trackNumber, pdfPage, completed }),
       });
 
       if (response.ok) {
@@ -736,6 +737,23 @@ export default function Home() {
       console.error("Error updating video:", error);
       alert("Failed to update video");
     }
+  };
+
+  const handleVideoComplete = async (bookId: string, videoId: string, completed: boolean) => {
+    // Get the current video to pass its required fields
+    const video = selectedBook?.videos?.find(v => v.id === videoId);
+    if (!video) return;
+
+    await handleVideoUpdate(
+      bookId,
+      videoId,
+      video.filename,
+      video.sortOrder,
+      video.title,
+      video.trackNumber,
+      video.pdfPage,
+      completed
+    );
   };
 
   const handleBulkVideoUpload = async (files: File[], authorName: string, bookName: string) => {
@@ -1303,6 +1321,7 @@ export default function Home() {
                       onVideoUpload={handleVideoUpload}
                       onVideoDelete={handleVideoDelete}
                       onVideoUpdate={handleVideoUpdate}
+                      onVideoComplete={handleVideoComplete}
                     />
                   ) : isJamTracksSelected ? (
                     <JamTracksView

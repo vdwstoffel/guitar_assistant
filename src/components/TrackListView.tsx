@@ -431,6 +431,7 @@ interface TrackListViewProps {
   onVideoUpload?: (bookId: string, file: File) => Promise<void>;
   onVideoDelete?: (bookId: string, videoId: string) => Promise<void>;
   onVideoUpdate?: (bookId: string, videoId: string, filename: string, sortOrder: number, title?: string | null, trackNumber?: number | null, pdfPage?: number | null) => Promise<void>;
+  onVideoComplete?: (bookId: string, videoId: string, completed: boolean) => Promise<void>;
 }
 
 export default function TrackListView({
@@ -456,6 +457,7 @@ export default function TrackListView({
   onVideoUpload,
   onVideoDelete,
   onVideoUpdate,
+  onVideoComplete,
 }: TrackListViewProps) {
   const [editingBook, setEditingBook] = useState(false);
   const [editingTrack, setEditingTrack] = useState<Track | null>(null);
@@ -779,6 +781,26 @@ export default function TrackListView({
                     <span className="flex-1 truncate">
                       {video.title || video.filename.replace(/\.[^/.]+$/, '')}
                     </span>
+
+                    {/* Completion circle */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onVideoComplete?.(book.id, video.id, !video.completed);
+                      }}
+                      className={`w-5 h-5 rounded-full border-2 flex-shrink-0 transition-colors ${
+                        video.completed
+                          ? "bg-green-500 border-green-500"
+                          : "border-gray-500 hover:border-green-400"
+                      }`}
+                      title={video.completed ? "Mark as not completed" : "Mark as completed"}
+                    >
+                      {video.completed && (
+                        <svg className="w-full h-full text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                        </svg>
+                      )}
+                    </button>
 
                     {/* Duration and PDF page */}
                     <div className="flex items-center gap-1 flex-shrink-0">
