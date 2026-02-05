@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
-import { Author, Book, Track } from "@/types";
+import { useState, memo } from "react";
+import { Author, Book, Track, BookVideo } from "@/types";
 
-function BookCover({ book }: { book: Book }) {
+const BookCover = memo(function BookCover({ book }: { book: Book }) {
   const [hasError, setHasError] = useState(false);
+  const [isLoaded, setIsLoaded] = useState(false);
 
   const firstTrack = book.tracks[0];
   const artUrl = firstTrack ? `/api/albumart/${encodeURIComponent(firstTrack.filePath)}` : null;
@@ -20,14 +21,23 @@ function BookCover({ book }: { book: Book }) {
   }
 
   return (
-    <img
-      src={artUrl}
-      alt={`${book.name} cover`}
-      className="w-32 h-32 flex-shrink-0 rounded-lg object-cover bg-gray-700"
-      onError={() => setHasError(true)}
-    />
+    <div className="relative w-32 h-32 flex-shrink-0">
+      {!isLoaded && (
+        <div className="absolute inset-0 bg-gray-700 rounded-lg flex items-center justify-center">
+          <div className="w-6 h-6 border-3 border-gray-600 border-t-gray-400 rounded-full animate-spin"></div>
+        </div>
+      )}
+      <img
+        src={artUrl}
+        alt={`${book.name} cover`}
+        className={`w-full h-full rounded-lg object-cover bg-gray-700 transition-opacity duration-300 ${isLoaded ? 'opacity-100' : 'opacity-0'}`}
+        loading="lazy"
+        onLoad={() => setIsLoaded(true)}
+        onError={() => setHasError(true)}
+      />
+    </div>
   );
-}
+});
 
 interface TrackEditModalProps {
   track: Track;
@@ -240,11 +250,173 @@ function TrackEditModal({ track, authorName, bookName, bookHasPdf, onClose, onSa
   );
 }
 
+interface VideoEditModalProps {
+  video: BookVideo;
+  bookHasPdf: boolean;
+  onClose: () => void;
+  onSave: (videoId: string, filename: string, sortOrder: number, title: string | null, trackNumber: number | null, pdfPage: number | null) => Promise<void>;
+}
+
+function VideoEditModal({ video, bookHasPdf, onClose, onSave }: VideoEditModalProps) {
+  const [editFilename, setEditFilename] = useState(video.filename.replace(/\.[^/.]+$/, ""));
+  const [editTitle, setEditTitle] = useState(video.title || "");
+  const [editTrackNumber, setEditTrackNumber] = useState<number | null>(video.trackNumber);
+  const [editPdfPage, setEditPdfPage] = useState<number | null>(video.pdfPage);
+  const [isSaving, setIsSaving] = useState(false);
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+      // Get the file extension
+      const ext = video.filename.match(/\.[^/.]+$/)?.[0] || "";
+
+      // Format filename based on track number and title
+      let newFilename: string;
+      const titleToUse = editTitle.trim() || editFilename.trim();
+
+      if (editTrackNumber && titleToUse) {
+        // Format: "001 - Title.ext"
+        const paddedTrackNumber = String(editTrackNumber).padStart(3, '0');
+        newFilename = `${paddedTrackNumber} - ${titleToUse}${ext}`;
+      } else if (editTrackNumber) {
+        // Just track number: "001.ext"
+        const paddedTrackNumber = String(editTrackNumber).padStart(3, '0');
+        newFilename = `${paddedTrackNumber}${ext}`;
+      } else if (titleToUse) {
+        // Just title: "Title.ext"
+        newFilename = `${titleToUse}${ext}`;
+      } else {
+        // Fallback to original filename
+        alert("Please provide either a title or track number");
+        setIsSaving(false);
+        return;
+      }
+
+      await onSave(
+        video.id,
+        newFilename,
+        video.sortOrder,
+        editTitle.trim() || null,
+        editTrackNumber,
+        editPdfPage
+      );
+      onClose();
+    } catch (error) {
+      console.error("Failed to save video metadata:", error);
+      alert("Failed to save video");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Generate filename preview
+  const getFilenamePreview = () => {
+    const ext = video.filename.match(/\.[^/.]+$/)?.[0] || "";
+    const titleToUse = editTitle.trim() || editFilename.trim();
+
+    if (editTrackNumber && titleToUse) {
+      const paddedTrackNumber = String(editTrackNumber).padStart(3, '0');
+      return `${paddedTrackNumber} - ${titleToUse}${ext}`;
+    } else if (editTrackNumber) {
+      const paddedTrackNumber = String(editTrackNumber).padStart(3, '0');
+      return `${paddedTrackNumber}${ext}`;
+    } else if (titleToUse) {
+      return `${titleToUse}${ext}`;
+    }
+    return video.filename;
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md mx-4 shadow-xl">
+        <h3 className="text-lg font-semibold mb-4 text-white">Edit Video Info</h3>
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm text-gray-400 mb-1">Track Number</label>
+            <input
+              type="number"
+              min={1}
+              value={editTrackNumber ?? ''}
+              onChange={(e) => setEditTrackNumber(e.target.value ? Math.max(1, parseInt(e.target.value) || 1) : null)}
+              placeholder="None"
+              className="w-24 px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:border-blue-500"
+            />
+            <p className="text-xs text-gray-500 mt-1">Used for sorting and filename formatting</p>
+          </div>
+          <div>
+            <label className="block text-sm text-gray-400 mb-1">Title</label>
+            <input
+              type="text"
+              value={editTitle}
+              onChange={(e) => setEditTitle(e.target.value)}
+              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:border-blue-500"
+              placeholder="Display title"
+            />
+            <p className="text-xs text-gray-500 mt-1">Shown in UI and used for filename</p>
+          </div>
+          <div>
+            <label className="block text-sm text-gray-400 mb-1">Fallback Filename</label>
+            <input
+              type="text"
+              value={editFilename}
+              onChange={(e) => setEditFilename(e.target.value)}
+              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:border-blue-500"
+              placeholder="Used if title is empty"
+            />
+            <p className="text-xs text-gray-500 mt-1">Only used when title is not set</p>
+          </div>
+          {bookHasPdf && (
+            <div>
+              <label className="block text-sm text-gray-400 mb-1">PDF Page</label>
+              <input
+                type="number"
+                min={1}
+                value={editPdfPage ?? ''}
+                onChange={(e) => setEditPdfPage(e.target.value ? Math.max(1, parseInt(e.target.value) || 1) : null)}
+                placeholder="None"
+                className="w-24 px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:border-blue-500"
+              />
+              <p className="text-xs text-gray-500 mt-1">Opens this page when video is selected</p>
+            </div>
+          )}
+          <div className="pt-2 border-t border-gray-700">
+            <label className="block text-sm text-gray-400 mb-1">Filename Preview</label>
+            <div className="px-3 py-2 bg-gray-900 border border-gray-700 rounded text-blue-400 text-sm font-mono">
+              {getFilenamePreview()}
+            </div>
+            <p className="text-xs text-gray-500 mt-1">Auto-formatted as: [Track#] - [Title].ext</p>
+          </div>
+        </div>
+        <div className="flex justify-end gap-3 mt-6">
+          <button
+            onClick={onClose}
+            disabled={isSaving}
+            className="px-4 py-2 text-gray-400 hover:text-white transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={isSaving || !editFilename.trim()}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded font-medium transition-colors text-white"
+          >
+            {isSaving ? "Saving..." : "Save"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 interface TrackListViewProps {
   author: Author;
   book: Book;
   currentTrack: Track | null;
+  selectedVideo: BookVideo | null;
+  showVideo: boolean;
   onTrackSelect: (track: Track, author: Author, book: Book) => void;
+  onVideoSelect: (video: BookVideo) => void;
+  onToggleVideo: () => void;
   onBack: () => void;
   onBookUpdate?: (bookId: string, bookName: string, authorName: string) => Promise<void>;
   onTrackUpdate?: (trackId: string, title: string, author: string, book: string, trackNumber: number, pdfPage?: number | null, tempo?: number | null, timeSignature?: string) => Promise<void>;
@@ -256,13 +428,20 @@ interface TrackListViewProps {
   onPdfConvert?: (bookId: string) => Promise<void>;
   currentPdfPage?: number;
   onAssignPdfPage?: (trackId: string, page: number) => Promise<void>;
+  onVideoUpload?: (bookId: string, file: File) => Promise<void>;
+  onVideoDelete?: (bookId: string, videoId: string) => Promise<void>;
+  onVideoUpdate?: (bookId: string, videoId: string, filename: string, sortOrder: number, title?: string | null, trackNumber?: number | null, pdfPage?: number | null) => Promise<void>;
 }
 
 export default function TrackListView({
   author,
   book,
   currentTrack,
+  selectedVideo,
+  showVideo,
   onTrackSelect,
+  onVideoSelect,
+  onToggleVideo,
   onBack,
   onBookUpdate,
   onTrackUpdate,
@@ -274,9 +453,13 @@ export default function TrackListView({
   onPdfConvert,
   currentPdfPage,
   onAssignPdfPage,
+  onVideoUpload,
+  onVideoDelete,
+  onVideoUpdate,
 }: TrackListViewProps) {
   const [editingBook, setEditingBook] = useState(false);
   const [editingTrack, setEditingTrack] = useState<Track | null>(null);
+  const [editingVideo, setEditingVideo] = useState<BookVideo | null>(null);
   const [isConverting, setIsConverting] = useState(false);
 
   const formatDuration = (seconds: number) => {
@@ -306,6 +489,18 @@ export default function TrackListView({
           bookHasPdf={!!book.pdfPath}
           onClose={() => setEditingTrack(null)}
           onSave={onTrackUpdate}
+        />
+      )}
+
+      {/* Video Edit Modal */}
+      {editingVideo && onVideoUpdate && (
+        <VideoEditModal
+          video={editingVideo}
+          bookHasPdf={!!book.pdfPath}
+          onClose={() => setEditingVideo(null)}
+          onSave={async (videoId, filename, sortOrder, title, trackNumber, pdfPage) => {
+            await onVideoUpdate(book.id, videoId, filename, sortOrder, title, trackNumber, pdfPage);
+          }}
         />
       )}
 
@@ -414,12 +609,33 @@ export default function TrackListView({
               </label>
             )}
           </div>
+
+          {/* Video toggle button - only show when video is selected */}
+          {selectedVideo && (
+            <div className="flex items-center gap-2 mt-2">
+              <button
+                onClick={onToggleVideo}
+                className="flex items-center gap-1 px-2 py-1 bg-purple-600 hover:bg-purple-700 rounded text-xs text-white"
+              >
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
+                  />
+                </svg>
+                {showVideo ? 'Show PDF' : 'Show Video'}
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Track List - Single Column */}
-      <div className="flex flex-col gap-1">
-        {book.tracks
+      {/* Tracks and Videos List */}
+        <div className="flex flex-col gap-1">
+          {/* Audio Tracks */}
+          {book.tracks
           .sort((a, b) => (a.trackNumber || 0) - (b.trackNumber || 0))
           .map((track) => (
             <div
@@ -522,7 +738,101 @@ export default function TrackListView({
               )}
             </div>
           ))}
-      </div>
+
+          {/* Videos */}
+          {book.videos && book.videos.length > 0 && (
+            <>
+              {book.videos
+                .sort((a, b) => (a.trackNumber || a.sortOrder) - (b.trackNumber || b.sortOrder))
+                .map((video) => (
+                  <div
+                    key={video.id}
+                    onClick={() => onVideoSelect(video)}
+                    onKeyDown={(e) => e.key === "Enter" && onVideoSelect(video)}
+                    role="button"
+                    tabIndex={0}
+                    className={`flex items-center gap-3 px-3 py-2 rounded transition-colors group cursor-pointer ${
+                      selectedVideo?.id === video.id
+                        ? "bg-blue-900/50 text-blue-400"
+                        : "hover:bg-gray-800 text-gray-300"
+                    }`}
+                  >
+                    {/* Video Number / Icon */}
+                    <span className="w-6 text-center text-sm flex-shrink-0">
+                      {selectedVideo?.id === video.id ? (
+                        <svg className="w-4 h-4 mx-auto text-blue-400" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M8 5v14l11-7z" />
+                        </svg>
+                      ) : (
+                        <>
+                          <span className="text-gray-500 group-hover:hidden">
+                            {video.trackNumber || "V"}
+                          </span>
+                          <svg className="w-4 h-4 mx-auto hidden group-hover:block text-blue-400" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M8 5v14l11-7z" />
+                          </svg>
+                        </>
+                      )}
+                    </span>
+
+                    {/* Video Title */}
+                    <span className="flex-1 truncate">
+                      {video.title || video.filename.replace(/\.[^/.]+$/, '')}
+                    </span>
+
+                    {/* Duration and PDF page */}
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      {/* Page number or assignment icon */}
+                      {book.pdfPath && (
+                        video.pdfPage ? (
+                          <span className="text-xs text-gray-500 w-8 text-right">p.{video.pdfPage}</span>
+                        ) : onAssignPdfPage && currentPdfPage ? (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              // We'll need to add a video page assignment handler
+                              if (onVideoUpdate) {
+                                onVideoUpdate(book.id, video.id, video.filename, video.sortOrder, video.title, video.trackNumber, currentPdfPage);
+                              }
+                            }}
+                            className="p-0.5 text-gray-500 hover:text-blue-400 opacity-0 group-hover:opacity-100 transition-opacity w-8 flex justify-end"
+                            title={`Assign current PDF page (${currentPdfPage})`}
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                          </button>
+                        ) : (
+                          <span className="w-8" />
+                        )
+                      )}
+                      {video.duration && (
+                        <span className="text-gray-500 text-sm tabular-nums w-12 text-right">
+                          {formatDuration(video.duration)}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Edit button */}
+                    {onVideoUpdate && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditingVideo(video);
+                        }}
+                        className="p-1 text-gray-500 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+                        title="Edit video info"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                        </svg>
+                      </button>
+                    )}
+                  </div>
+                ))}
+            </>
+          )}
+        </div>
     </div>
   );
 }

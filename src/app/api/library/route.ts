@@ -16,6 +16,9 @@ export async function GET() {
                   },
                 },
               },
+              videos: {
+                orderBy: { sortOrder: "asc" },
+              },
             },
             orderBy: { name: "asc" },
           },

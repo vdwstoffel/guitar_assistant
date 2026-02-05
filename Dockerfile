@@ -1,7 +1,7 @@
 FROM node:20-alpine
 
-# Install openssl for Prisma and ghostscript for PDF conversion
-RUN apk add --no-cache openssl ghostscript
+# Install openssl for Prisma, ghostscript for PDF conversion, and ffmpeg for video processing
+RUN apk add --no-cache openssl ghostscript ffmpeg
 
 WORKDIR /app
 

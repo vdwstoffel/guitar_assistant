@@ -16,13 +16,14 @@ model Author {
 }
 
 model Book {
-  id         String  @id @default(uuid())
+  id         String      @id @default(uuid())
   name       String
   authorId   String
   pdfPath    String?
-  inProgress Boolean @default(false)
-  author     Author  @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  inProgress Boolean     @default(false)
+  author     Author      @relation(fields: [authorId], references: [id], onDelete: Cascade)
   tracks     Track[]
+  videos     BookVideo[]
 
   @@unique([name, authorId])
 }
@@ -48,6 +49,20 @@ model Marker {
   timestamp Float
   trackId   String
   track     Track  @relation(fields: [trackId], references: [id], onDelete: Cascade)
+}
+
+model BookVideo {
+  id          String   @id @default(uuid())
+  filename    String
+  title       String?
+  filePath    String   @unique
+  duration    Float?
+  sortOrder   Int      @default(0)
+  trackNumber Int?
+  pdfPage     Int?
+  bookId      String
+  book        Book     @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
 }
 
 model Video {

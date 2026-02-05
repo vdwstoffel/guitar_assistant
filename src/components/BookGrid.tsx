@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, memo } from "react";
 import { Author, Book } from "@/types";
 
-function BookCard({ book, onClick }: { book: Book; onClick: () => void }) {
+const BookCard = memo(function BookCard({ book, onClick }: { book: Book; onClick: () => void }) {
   const [hasError, setHasError] = useState(false);
+  const [isLoaded, setIsLoaded] = useState(false);
 
   // Use the first track's file path to get book cover art
   const firstTrack = book.tracks[0];
@@ -17,12 +18,21 @@ function BookCard({ book, onClick }: { book: Book; onClick: () => void }) {
     >
       {/* Book Cover */}
       {artUrl && !hasError ? (
-        <img
-          src={artUrl}
-          alt={`${book.name} cover`}
-          className="w-full aspect-square rounded-lg object-cover bg-gray-700 mb-3"
-          onError={() => setHasError(true)}
-        />
+        <div className="relative w-full aspect-square mb-3">
+          {!isLoaded && (
+            <div className="absolute inset-0 bg-gray-700 rounded-lg flex items-center justify-center">
+              <div className="w-8 h-8 border-4 border-gray-600 border-t-gray-400 rounded-full animate-spin"></div>
+            </div>
+          )}
+          <img
+            src={artUrl}
+            alt={`${book.name} cover`}
+            className={`w-full h-full rounded-lg object-cover bg-gray-700 transition-opacity duration-300 ${isLoaded ? 'opacity-100' : 'opacity-0'}`}
+            loading="lazy"
+            onLoad={() => setIsLoaded(true)}
+            onError={() => setHasError(true)}
+          />
+        </div>
       ) : (
         <div className="w-full aspect-square bg-gray-700 rounded-lg flex items-center justify-center mb-3">
           <svg className="w-16 h-16 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -42,7 +52,7 @@ function BookCard({ book, onClick }: { book: Book; onClick: () => void }) {
       </p>
     </button>
   );
-}
+});
 
 interface BookGridProps {
   author: Author;

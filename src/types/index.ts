@@ -26,6 +26,7 @@ export interface Book {
   pdfPath: string | null;
   inProgress: boolean;
   tracks: Track[];
+  videos?: BookVideo[];
 }
 
 export interface Author {
@@ -39,6 +40,19 @@ export interface Video {
   title: string;
   youtubeId: string;
   sortOrder: number;
+  createdAt: string;
+}
+
+export interface BookVideo {
+  id: string;
+  filename: string;
+  title: string | null;
+  filePath: string;
+  duration: number | null;
+  sortOrder: number;
+  trackNumber: number | null;
+  pdfPage: number | null;
+  bookId: string;
   createdAt: string;
 }
 

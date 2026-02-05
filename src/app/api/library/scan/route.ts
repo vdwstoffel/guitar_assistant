@@ -5,9 +5,13 @@ import * as path from "path";
 import * as mm from "music-metadata";
 import NodeID3 from "node-id3";
 import { File as TagFile } from "node-taglib-sharp";
+import ffmpeg from "fluent-ffmpeg";
+
+// ffmpeg is installed in the system PATH via Docker
 
 const MUSIC_DIR = process.env.MUSIC_DIR || "./music";
 const SUPPORTED_EXTENSIONS = [".mp3", ".flac", ".wav", ".ogg", ".m4a", ".aac"];
+const SUPPORTED_VIDEO_EXTENSIONS = [".mp4", ".mov", ".webm", ".m4v"];
 
 // Reorganize helpers
 function sanitizeFilename(name: string): string {
@@ -40,7 +44,28 @@ interface ScannedJamTrack {
   pdfPath: string | null;
 }
 
+interface ScannedVideo {
+  filename: string;
+  filePath: string;
+  duration: number | null;
+  bookId: string;
+}
+
 const JAM_TRACKS_FOLDER = "JamTracks";
+
+// Helper function to get video duration
+function getVideoDuration(filePath: string): Promise<number> {
+  return new Promise((resolve, reject) => {
+    ffmpeg.ffprobe(filePath, (err, metadata) => {
+      if (err) {
+        reject(err);
+      } else {
+        const duration = metadata.format.duration || 0;
+        resolve(duration);
+      }
+    });
+  });
+}
 
 async function findPdfInFolder(folderPath: string): Promise<string | null> {
   try {
@@ -139,6 +164,50 @@ async function scanJamTracksFolder(): Promise<ScannedJamTrack[]> {
   }
 
   return jamTracks;
+}
+
+async function scanBookVideos(bookId: string, bookFolderPath: string): Promise<ScannedVideo[]> {
+  const videos: ScannedVideo[] = [];
+  const musicPath = path.resolve(MUSIC_DIR);
+  const videosPath = path.join(bookFolderPath, "videos");
+
+  try {
+    await fs.access(videosPath);
+  } catch {
+    // No videos folder for this book
+    return videos;
+  }
+
+  try {
+    const entries = await fs.readdir(videosPath, { withFileTypes: true });
+
+    for (const entry of entries) {
+      if (!entry.isFile()) continue;
+
+      const ext = path.extname(entry.name).toLowerCase();
+      if (!SUPPORTED_VIDEO_EXTENSIONS.includes(ext)) continue;
+
+      const videoFullPath = path.join(videosPath, entry.name);
+      let duration: number | null = null;
+
+      try {
+        duration = await getVideoDuration(videoFullPath);
+      } catch (err) {
+        console.error(`Error getting video duration for ${videoFullPath}:`, err);
+      }
+
+      videos.push({
+        filename: entry.name,
+        filePath: path.relative(musicPath, videoFullPath),
+        duration,
+        bookId,
+      });
+    }
+  } catch (err) {
+    console.error(`Error scanning videos in ${videosPath}:`, err);
+  }
+
+  return videos;
 }
 
 async function scanMusicFolder(): Promise<ScannedTrack[]> {
@@ -273,6 +342,25 @@ export async function POST() {
             },
           });
         }
+
+        // Scan for videos in this book's folder
+        const bookVideos = await scanBookVideos(book.id, bookFolderPath);
+        for (const video of bookVideos) {
+          await prisma.bookVideo.upsert({
+            where: { filePath: video.filePath },
+            update: {
+              filename: video.filename,
+              duration: video.duration,
+              bookId: video.bookId,
+            },
+            create: {
+              filename: video.filename,
+              filePath: video.filePath,
+              duration: video.duration,
+              bookId: video.bookId,
+            },
+          });
+        }
       }
     }
 
@@ -284,6 +372,26 @@ export async function POST() {
     if (tracksToDelete.length > 0) {
       await prisma.track.deleteMany({
         where: { id: { in: tracksToDelete.map((t: { id: string }) => t.id) } },
+      });
+    }
+
+    // Clean up: remove videos that no longer exist on disk
+    const allDbVideos = await prisma.bookVideo.findMany({ select: { id: true, filePath: true } });
+    const videosToDelete: { id: string }[] = [];
+
+    for (const video of allDbVideos) {
+      const videoFullPath = path.join(musicPath, video.filePath);
+      try {
+        await fs.access(videoFullPath);
+      } catch {
+        // Video file doesn't exist, mark for deletion
+        videosToDelete.push({ id: video.id });
+      }
+    }
+
+    if (videosToDelete.length > 0) {
+      await prisma.bookVideo.deleteMany({
+        where: { id: { in: videosToDelete.map((v) => v.id) } },
       });
     }
 
@@ -467,6 +575,9 @@ export async function POST() {
       count: tracks.length,
       removed: tracksToDelete.length,
       reorganized: reorganizedCount,
+      videos: {
+        removed: videosToDelete.length,
+      },
       jamTracks: {
         found: jamTracks.length,
         removed: jamTracksRemoved,

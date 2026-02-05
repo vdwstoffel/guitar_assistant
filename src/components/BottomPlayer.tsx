@@ -260,6 +260,16 @@ export default function BottomPlayer({
     return () => {
       if (wavesurferRef.current) {
         try {
+          // Stop playback to release audio resources
+          wavesurferRef.current.stop();
+
+          // Explicitly destroy regions plugin first
+          if (regionsRef.current) {
+            regionsRef.current.destroy();
+            regionsRef.current = null;
+          }
+
+          // Destroy WaveSurfer instance
           wavesurferRef.current.destroy();
         } catch {
           // Ignore errors during cleanup (e.g., DOM already removed)

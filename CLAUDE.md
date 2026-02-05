@@ -8,6 +8,16 @@ Guitar/Music Assistant - a Next.js 16 web application for managing and practicin
 
 **Stack**: Next.js 16 (App Router), React 19, TypeScript 5, Tailwind CSS 4, Prisma ORM with SQLite
 
+## Deployment
+
+**This application runs in Docker.** The Docker setup includes:
+- Containerized Next.js application
+- Ghostscript for PDF conversion/processing
+- Volume mounts for persistent data (database, music files)
+- Port mapping: 3000 (host) → 3000 (container)
+
+Use `docker-compose up` to start the application. The Docker configuration handles all dependencies and environment setup.
+
 ## Common Commands
 
 ```bash

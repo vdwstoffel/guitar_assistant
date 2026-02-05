@@ -28,6 +28,10 @@ interface PdfViewerProps {
   version?: number; // Cache-busting version
 }
 
+// Only render pages within this distance from the visible page
+const PAGE_BUFFER = 2; // Renders current page ± 2 pages (5 total)
+const ESTIMATED_PAGE_HEIGHT = 1100; // Fallback height for unrendered pages
+
 export default function PdfViewer({
   pdfPath,
   currentPage,
@@ -42,6 +46,8 @@ export default function PdfViewer({
   const containerRef = useRef<HTMLDivElement>(null);
   const pageRefs = useRef<Map<number, HTMLDivElement>>(new Map());
   const isScrollingToPage = useRef(false);
+  const targetPage = useRef<number | null>(null);
+  const pageHeights = useRef<Map<number, number>>(new Map());
 
   useEffect(() => {
     const updateWidth = () => {
@@ -55,50 +61,88 @@ export default function PdfViewer({
     return () => window.removeEventListener("resize", updateWidth);
   }, []);
 
+  // Clear caches when PDF changes or component unmounts
+  useEffect(() => {
+    // Clear caches when switching to a new PDF
+    pageHeights.current.clear();
+    pageRefs.current.clear();
+
+    // Copy refs to local variables for cleanup
+    const heights = pageHeights.current;
+    const refs = pageRefs.current;
+
+    return () => {
+      // Cleanup on unmount
+      heights.clear();
+      refs.clear();
+    };
+  }, [pdfPath]);
+
   const onDocumentLoadSuccess = ({ numPages }: { numPages: number }) => {
     setNumPages(numPages);
     setIsLoading(false);
     setError(null);
+    // Clear stale page heights from previous PDF
+    pageHeights.current.clear();
   };
 
   const onDocumentLoadError = (err: Error) => {
     setError(err.message);
     setIsLoading(false);
+    // Clear page heights on error
+    pageHeights.current.clear();
   };
 
   // Scroll to page when currentPage prop changes
   useEffect(() => {
     if (currentPage && currentPage !== visiblePage && numPages > 0) {
-      const pageEl = pageRefs.current.get(currentPage);
-      if (pageEl && containerRef.current) {
-        isScrollingToPage.current = true;
-        pageEl.scrollIntoView({ behavior: "smooth", block: "start" });
-        setVisiblePage(currentPage);
-        // Reset the flag after scroll completes
-        setTimeout(() => {
-          isScrollingToPage.current = false;
-        }, 500);
-      }
-    }
-  }, [currentPage, numPages]);
+      // Update visiblePage first to trigger re-render with target page in buffer
+      setVisiblePage(currentPage);
 
-  // Track visible page on scroll
-  const handleScroll = useCallback(() => {
+      // Then scroll once the page is rendered (may need a small delay)
+      const scrollToPage = () => {
+        const pageEl = pageRefs.current.get(currentPage);
+        if (pageEl && containerRef.current) {
+          isScrollingToPage.current = true;
+          targetPage.current = currentPage;
+          pageEl.scrollIntoView({ behavior: "auto", block: "start" }); // Use instant scroll to avoid timing issues
+          setTimeout(() => {
+            isScrollingToPage.current = false;
+            targetPage.current = null;
+          }, 300); // Shorter timeout since instant scroll completes immediately
+        } else {
+          // If page not yet rendered, try again shortly
+          setTimeout(scrollToPage, 100);
+        }
+      };
+
+      // Small delay to allow React to render the new pages
+      setTimeout(scrollToPage, 0);
+    }
+  }, [currentPage, numPages, visiblePage, onPageChange]);
+
+  // Track visible page on scroll (debounced for performance)
+  const handleScrollInternal = useCallback(() => {
     if (isScrollingToPage.current || !containerRef.current) return;
+
+    // Don't update if we're targeting a specific page (prevents detecting intermediate pages during smooth scroll)
+    if (targetPage.current !== null) return;
 
     const container = containerRef.current;
     const containerTop = container.scrollTop;
     const containerHeight = container.clientHeight;
+    const viewCenter = containerTop + containerHeight / 2;
 
     let closestPage = 1;
     let closestDistance = Infinity;
 
+    // Cache container rect to avoid repeated getBoundingClientRect calls
+    const containerRect = container.getBoundingClientRect();
+
     pageRefs.current.forEach((el, pageNum) => {
       const rect = el.getBoundingClientRect();
-      const containerRect = container.getBoundingClientRect();
       const pageTop = rect.top - containerRect.top + containerTop;
       const pageCenter = pageTop + rect.height / 2;
-      const viewCenter = containerTop + containerHeight / 2;
       const distance = Math.abs(pageCenter - viewCenter);
 
       if (distance < closestDistance) {
@@ -113,18 +157,73 @@ export default function PdfViewer({
     }
   }, [visiblePage, onPageChange]);
 
+  // Debounced scroll handler to reduce DOM queries
+  const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const handleScroll = useCallback(() => {
+    if (scrollTimeoutRef.current) {
+      clearTimeout(scrollTimeoutRef.current);
+    }
+    scrollTimeoutRef.current = setTimeout(() => {
+      handleScrollInternal();
+    }, 100); // 100ms debounce
+  }, [handleScrollInternal]);
+
+  // Cleanup scroll timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+      }
+    };
+  }, []);
+
   const goToPage = (page: number) => {
     const clampedPage = Math.max(1, Math.min(numPages || 1, page));
-    const pageEl = pageRefs.current.get(clampedPage);
-    if (pageEl) {
-      isScrollingToPage.current = true;
-      pageEl.scrollIntoView({ behavior: "smooth", block: "start" });
-      setVisiblePage(clampedPage);
-      onPageChange(clampedPage);
-      setTimeout(() => {
-        isScrollingToPage.current = false;
-      }, 500);
+
+    // Update visiblePage first to render the target page
+    setVisiblePage(clampedPage);
+    onPageChange(clampedPage);
+
+    // Then scroll to it once rendered
+    const scrollToPage = () => {
+      const pageEl = pageRefs.current.get(clampedPage);
+      if (pageEl) {
+        isScrollingToPage.current = true;
+        targetPage.current = clampedPage;
+        pageEl.scrollIntoView({ behavior: "auto", block: "start" }); // Use instant scroll to avoid timing issues
+        setTimeout(() => {
+          isScrollingToPage.current = false;
+          targetPage.current = null;
+        }, 300); // Shorter timeout since instant scroll completes immediately
+      } else {
+        // Retry if not yet rendered
+        setTimeout(scrollToPage, 100);
+      }
+    };
+
+    setTimeout(scrollToPage, 0);
+  };
+
+  // Calculate which pages should be rendered (visible page ± buffer)
+  const getPageRange = () => {
+    const startPage = Math.max(1, visiblePage - PAGE_BUFFER);
+    const endPage = Math.min(numPages, visiblePage + PAGE_BUFFER);
+    return { startPage, endPage };
+  };
+
+  const shouldRenderPage = (pageNum: number) => {
+    const { startPage, endPage } = getPageRange();
+    return pageNum >= startPage && pageNum <= endPage;
+  };
+
+  // Get placeholder height for unrendered pages
+  const getPlaceholderHeight = (pageNum: number) => {
+    // Use actual height if we've rendered this page before
+    if (pageHeights.current.has(pageNum)) {
+      return pageHeights.current.get(pageNum);
     }
+    // Otherwise use estimated height
+    return ESTIMATED_PAGE_HEIGHT;
   };
 
   return (
@@ -170,22 +269,48 @@ export default function PdfViewer({
           className="flex flex-col items-center gap-4"
         >
           {containerWidth > 0 &&
-            Array.from({ length: numPages }, (_, i) => i + 1).map((pageNum) => (
-              <div
-                key={pageNum}
-                ref={(el) => {
-                  if (el) pageRefs.current.set(pageNum, el);
-                }}
-              >
-                <Page
-                  pageNumber={pageNum}
-                  width={containerWidth}
-                  renderTextLayer={false}
-                  renderAnnotationLayer={false}
-                  className="shadow-lg"
-                />
-              </div>
-            ))}
+            Array.from({ length: numPages }, (_, i) => i + 1).map((pageNum) => {
+              const shouldRender = shouldRenderPage(pageNum);
+
+              return (
+                <div
+                  key={pageNum}
+                  ref={(el) => {
+                    if (el) {
+                      pageRefs.current.set(pageNum, el);
+                      // Track actual page height when rendered
+                      if (shouldRender && el.offsetHeight > 0) {
+                        pageHeights.current.set(pageNum, el.offsetHeight);
+                      }
+                    } else {
+                      // Clean up refs for unmounted pages
+                      pageRefs.current.delete(pageNum);
+                    }
+                  }}
+                  style={
+                    !shouldRender
+                      ? {
+                          minHeight: `${getPlaceholderHeight(pageNum)}px`,
+                          width: containerWidth,
+                        }
+                      : undefined
+                  }
+                  className={!shouldRender ? "bg-gray-800 flex items-center justify-center" : ""}
+                >
+                  {shouldRender ? (
+                    <Page
+                      pageNumber={pageNum}
+                      width={containerWidth}
+                      renderTextLayer={false}
+                      renderAnnotationLayer={false}
+                      className="shadow-lg"
+                    />
+                  ) : (
+                    <span className="text-gray-600 text-sm">Page {pageNum}</span>
+                  )}
+                </div>
+              );
+            })}
         </Document>
       </div>
     </div>
