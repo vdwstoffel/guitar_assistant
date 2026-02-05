@@ -87,6 +87,8 @@ export default function BottomPlayer({
   const [isCountingIn, setIsCountingIn] = useState(false);
   const [currentCountInBeat, setCurrentCountInBeat] = useState(0);
   const [totalCountInBeats, setTotalCountInBeats] = useState(0);
+  const [stopMarker, setStopMarker] = useState<number | null>(null); // Timestamp where playback should stop
+  const lastSeekPositionRef = useRef<number | null>(null); // Track where we seeked to avoid false stop triggers
 
   const handleZoom = (newZoom: number) => {
     const clampedZoom = Math.max(1, Math.min(200, newZoom));
@@ -251,6 +253,7 @@ export default function BottomPlayer({
     if (track) {
       prevMarkerIdsRef.current = new Set();
       isInitialLoadRef.current = true;
+      setStopMarker(null); // Clear stop marker when track changes
       initWaveSurfer();
     }
 
@@ -341,11 +344,41 @@ export default function BottomPlayer({
         const markerCount = track.markers.length + 1;
         onMarkerAdd(track.id, `Marker ${markerCount}`, currentTime);
       }
+
+      if (e.code === "KeyR") {
+        e.preventDefault();
+        if (wavesurferRef.current) {
+          wavesurferRef.current.play();
+        }
+      }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [track, currentTime, onMarkerAdd]);
+
+  // Stop playback when reaching stop marker
+  useEffect(() => {
+    if (stopMarker === null || !isPlaying || !wavesurferRef.current || !duration) return;
+
+    // If we just seeked, wait until currentTime reflects the seek position
+    const seekPos = lastSeekPositionRef.current;
+    if (seekPos !== null) {
+      // Only clear the guard if currentTime is actually near where we seeked
+      // This prevents stale currentTime values from triggering false stops
+      if (Math.abs(currentTime - seekPos) < 1) {
+        lastSeekPositionRef.current = null;
+      } else {
+        return; // currentTime hasn't settled to the seek position yet
+      }
+    }
+
+    // Only stop if we're approaching the stop marker from before (not already past it)
+    if (currentTime >= stopMarker - 0.05 && currentTime < stopMarker + 1) {
+      wavesurferRef.current.pause();
+      wavesurferRef.current.seekTo(stopMarker / duration);
+    }
+  }, [isPlaying, currentTime, duration, stopMarker]);
 
   // Update markers on waveform when they change
   useEffect(() => {
@@ -381,9 +414,17 @@ export default function BottomPlayer({
     });
   }, [track?.markers, isLoading]);
 
-  const togglePlay = () => {
-    if (!wavesurferRef.current) return;
-    wavesurferRef.current.playPause();
+  const togglePlay = async () => {
+    if (!wavesurferRef.current || !duration) return;
+
+    // If playing, just pause
+    if (isPlaying) {
+      wavesurferRef.current.pause();
+      return;
+    }
+
+    // Normal play - will stop at stopMarker if set
+    wavesurferRef.current.play();
   };
 
   const restartFromBeginning = () => {
@@ -406,6 +447,7 @@ export default function BottomPlayer({
 
       // Seek to marker position (paused)
       wavesurferRef.current.seekTo(timestamp / duration);
+      lastSeekPositionRef.current = timestamp; // Guard against false stop triggers
 
       // Play count-in clicks
       await playCountIn({
@@ -427,6 +469,7 @@ export default function BottomPlayer({
       // Fallback to seconds-based lead-in
       const startTime = Math.max(0, timestamp - leadIn);
       wavesurferRef.current.seekTo(startTime / duration);
+      lastSeekPositionRef.current = startTime; // Guard against false stop triggers
       wavesurferRef.current.play();
     }
   }, [duration, leadIn, track?.tempo, track?.timeSignature, volume]);
@@ -442,6 +485,12 @@ export default function BottomPlayer({
     const secs = Math.floor(seconds % 60);
     return `${mins}:${secs.toString().padStart(2, "0")}`;
   }, []);
+
+  // Handle marker label click to set/clear stop marker
+  const handleMarkerLabelClick = useCallback((timestamp: number) => {
+    setStopMarker((prev) => (prev === timestamp ? null : timestamp));
+  }, []);
+
 
   // Store callback in ref to avoid dependency issues
   const onMarkerBarStateChangeRef = useRef(onMarkerBarStateChange);
@@ -627,6 +676,7 @@ export default function BottomPlayer({
               </svg>
               Markers ({track.markers.length})
             </button>
+
           </div>
 
           {/* Waveform - Full Width */}
@@ -641,16 +691,29 @@ export default function BottomPlayer({
                   const markerX = marker.timestamp * pixelsPerSecond - scrollLeft;
                   // Only render if within visible bounds (with some padding)
                   if (markerX < -50 || markerX > containerWidth + 50) return null;
+
+                  // Check if this marker is the stop marker
+                  const isStopMarker = stopMarker === marker.timestamp;
+
                   return (
                     <div
                       key={marker.id}
-                      className="absolute bottom-0"
+                      className="absolute bottom-0 pointer-events-auto"
                       style={{ left: markerX, transform: "translateX(-50%)" }}
                     >
-                      <span className="inline-block bg-yellow-400 text-black text-[9px] font-semibold px-1.5 py-0.5 rounded whitespace-nowrap shadow-sm">
+                      <button
+                        onClick={() => handleMarkerLabelClick(marker.timestamp)}
+                        className={`inline-block text-[9px] font-semibold px-1.5 py-0.5 rounded whitespace-nowrap shadow-sm cursor-pointer transition-colors ${
+                          isStopMarker
+                            ? "bg-red-500 hover:bg-red-400 text-white"
+                            : "bg-yellow-400 hover:bg-yellow-300 text-black"
+                        }`}
+                      >
                         {marker.name}
-                      </span>
-                      <div className="w-0 h-0 mx-auto border-l-4 border-r-4 border-t-4 border-transparent border-t-yellow-400" />
+                      </button>
+                      <div className={`w-0 h-0 mx-auto border-l-4 border-r-4 border-t-4 border-transparent ${
+                        isStopMarker ? "border-t-red-500" : "border-t-yellow-400"
+                      }`} />
                     </div>
                   );
                 })}
