@@ -51,6 +51,8 @@ interface UpdateMetadataBody {
 interface PatchBody {
   completed?: boolean;
   pdfPage?: number | null;
+  chapterId?: string | null;
+  sortOrder?: number;
 }
 
 export async function PATCH(
@@ -61,12 +63,23 @@ export async function PATCH(
     const { id } = await params;
     const body: PatchBody = await request.json();
 
-    const data: { completed?: boolean; pdfPage?: number | null } = {};
+    const data: {
+      completed?: boolean;
+      pdfPage?: number | null;
+      chapterId?: string | null;
+      sortOrder?: number;
+    } = {};
     if (body.completed !== undefined) {
       data.completed = body.completed;
     }
     if (body.pdfPage !== undefined) {
       data.pdfPage = body.pdfPage;
+    }
+    if (body.chapterId !== undefined) {
+      data.chapterId = body.chapterId;
+    }
+    if (body.sortOrder !== undefined) {
+      data.sortOrder = body.sortOrder;
     }
 
     const updatedTrack = await prisma.track.update({

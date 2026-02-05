@@ -24,8 +24,21 @@ model Book {
   author     Author      @relation(fields: [authorId], references: [id], onDelete: Cascade)
   tracks     Track[]
   videos     BookVideo[]
+  chapters   Chapter[]
 
   @@unique([name, authorId])
+}
+
+model Chapter {
+  id        String      @id @default(uuid())
+  name      String
+  bookId    String
+  sortOrder Int         @default(0)
+  book      Book        @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  tracks    Track[]
+  videos    BookVideo[]
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
 }
 
 model Track {
@@ -35,12 +48,15 @@ model Track {
   filePath      String   @unique
   duration      Float
   bookId        String
+  chapterId     String?
+  sortOrder     Int      @default(0)
   pdfPage       Int?
   completed     Boolean  @default(false)
   tempo         Int?
   timeSignature String   @default("4/4")
   markers       Marker[]
   book          Book     @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  chapter       Chapter? @relation(fields: [chapterId], references: [id], onDelete: SetNull)
 }
 
 model Marker {
@@ -62,7 +78,9 @@ model BookVideo {
   pdfPage     Int?
   completed   Boolean  @default(false)
   bookId      String
+  chapterId   String?
   book        Book     @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  chapter     Chapter? @relation(fields: [chapterId], references: [id], onDelete: SetNull)
   createdAt   DateTime @default(now())
 }
 

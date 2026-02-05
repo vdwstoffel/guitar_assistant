@@ -12,11 +12,24 @@ export interface Track {
   filePath: string;
   duration: number;
   bookId: string;
+  chapterId: string | null;
+  sortOrder: number;
   pdfPage: number | null;
   markers: Marker[];
   completed: boolean;
   tempo: number | null;
   timeSignature: string;
+}
+
+export interface Chapter {
+  id: string;
+  name: string;
+  bookId: string;
+  sortOrder: number;
+  tracks: Track[];
+  videos: BookVideo[];
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface Book {
@@ -27,6 +40,7 @@ export interface Book {
   inProgress: boolean;
   tracks: Track[];
   videos?: BookVideo[];
+  chapters?: Chapter[];
 }
 
 export interface Author {
@@ -54,6 +68,7 @@ export interface BookVideo {
   pdfPage: number | null;
   completed: boolean;
   bookId: string;
+  chapterId: string | null;
   createdAt: string;
 }
 

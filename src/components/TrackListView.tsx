@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, memo } from "react";
-import { Author, Book, Track, BookVideo } from "@/types";
+import { useState, memo, useEffect } from "react";
+import { Author, Book, Track, BookVideo, Chapter } from "@/types";
+import ChapterSection from "./ChapterSection";
 
 const BookCover = memo(function BookCover({ book }: { book: Book }) {
   const [hasError, setHasError] = useState(false);
@@ -44,8 +45,9 @@ interface TrackEditModalProps {
   authorName: string;
   bookName: string;
   bookHasPdf: boolean;
+  chapters: Chapter[];
   onClose: () => void;
-  onSave: (trackId: string, title: string, author: string, book: string, trackNumber: number, pdfPage?: number | null, tempo?: number | null, timeSignature?: string) => Promise<void>;
+  onSave: (trackId: string, title: string, author: string, book: string, trackNumber: number, pdfPage?: number | null, tempo?: number | null, timeSignature?: string, chapterId?: string | null) => Promise<void>;
 }
 
 interface BookEditModalProps {
@@ -121,7 +123,7 @@ function BookEditModal({ book, authorName, onClose, onSave }: BookEditModalProps
   );
 }
 
-function TrackEditModal({ track, authorName, bookName, bookHasPdf, onClose, onSave }: TrackEditModalProps) {
+function TrackEditModal({ track, authorName, bookName, bookHasPdf, chapters, onClose, onSave }: TrackEditModalProps) {
   const [editTitle, setEditTitle] = useState(track.title);
   const [editAuthor, setEditAuthor] = useState(authorName);
   const [editBook, setEditBook] = useState(bookName);
@@ -129,13 +131,14 @@ function TrackEditModal({ track, authorName, bookName, bookHasPdf, onClose, onSa
   const [editPdfPage, setEditPdfPage] = useState<number | null>(track.pdfPage);
   const [editTempo, setEditTempo] = useState<number | null>(track.tempo);
   const [editTimeSignature, setEditTimeSignature] = useState(track.timeSignature || "4/4");
+  const [editChapterId, setEditChapterId] = useState<string | null>(track.chapterId || null);
   const [isSaving, setIsSaving] = useState(false);
 
   const handleSave = async () => {
     if (!editTitle.trim() || !editAuthor.trim() || !editBook.trim()) return;
     setIsSaving(true);
     try {
-      await onSave(track.id, editTitle.trim(), editAuthor.trim(), editBook.trim(), editTrackNumber, editPdfPage, editTempo, editTimeSignature);
+      await onSave(track.id, editTitle.trim(), editAuthor.trim(), editBook.trim(), editTrackNumber, editPdfPage, editTempo, editTimeSignature, editChapterId);
       onClose();
     } catch (error) {
       console.error("Failed to save track metadata:", error);
@@ -229,6 +232,22 @@ function TrackEditModal({ track, authorName, bookName, bookHasPdf, onClose, onSa
           </div>
           <p className="text-xs text-gray-500">Set tempo for click track count-in when jumping to markers</p>
         </div>
+        <div>
+          <label className="block text-sm text-gray-400 mb-1">Chapter</label>
+          <select
+            value={editChapterId || ""}
+            onChange={(e) => setEditChapterId(e.target.value || null)}
+            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:border-green-500"
+          >
+            <option value="">Uncategorized</option>
+            {chapters.sort((a, b) => a.sortOrder - b.sortOrder).map((chapter) => (
+              <option key={chapter.id} value={chapter.id}>
+                {chapter.name}
+              </option>
+            ))}
+          </select>
+          <p className="text-xs text-gray-500 mt-1">Assign track to a chapter</p>
+        </div>
         <div className="flex justify-end gap-3 mt-6">
           <button
             onClick={onClose}
@@ -253,15 +272,17 @@ function TrackEditModal({ track, authorName, bookName, bookHasPdf, onClose, onSa
 interface VideoEditModalProps {
   video: BookVideo;
   bookHasPdf: boolean;
+  chapters: Chapter[];
   onClose: () => void;
-  onSave: (videoId: string, filename: string, sortOrder: number, title: string | null, trackNumber: number | null, pdfPage: number | null) => Promise<void>;
+  onSave: (videoId: string, filename: string, sortOrder: number, title: string | null, trackNumber: number | null, pdfPage: number | null, chapterId: string | null) => Promise<void>;
 }
 
-function VideoEditModal({ video, bookHasPdf, onClose, onSave }: VideoEditModalProps) {
+function VideoEditModal({ video, bookHasPdf, chapters, onClose, onSave }: VideoEditModalProps) {
   const [editFilename, setEditFilename] = useState(video.filename.replace(/\.[^/.]+$/, ""));
   const [editTitle, setEditTitle] = useState(video.title || "");
   const [editTrackNumber, setEditTrackNumber] = useState<number | null>(video.trackNumber);
   const [editPdfPage, setEditPdfPage] = useState<number | null>(video.pdfPage);
+  const [editChapterId, setEditChapterId] = useState<string | null>(video.chapterId || null);
   const [isSaving, setIsSaving] = useState(false);
 
   const handleSave = async () => {
@@ -298,7 +319,8 @@ function VideoEditModal({ video, bookHasPdf, onClose, onSave }: VideoEditModalPr
         video.sortOrder,
         editTitle.trim() || null,
         editTrackNumber,
-        editPdfPage
+        editPdfPage,
+        editChapterId
       );
       onClose();
     } catch (error) {
@@ -379,6 +401,22 @@ function VideoEditModal({ video, bookHasPdf, onClose, onSave }: VideoEditModalPr
               <p className="text-xs text-gray-500 mt-1">Opens this page when video is selected</p>
             </div>
           )}
+          <div>
+            <label className="block text-sm text-gray-400 mb-1">Chapter</label>
+            <select
+              value={editChapterId || ""}
+              onChange={(e) => setEditChapterId(e.target.value || null)}
+              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:border-blue-500"
+            >
+              <option value="">Uncategorized</option>
+              {chapters.sort((a, b) => a.sortOrder - b.sortOrder).map((chapter) => (
+                <option key={chapter.id} value={chapter.id}>
+                  {chapter.name}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-gray-500 mt-1">Assign video to a chapter</p>
+          </div>
           <div className="pt-2 border-t border-gray-700">
             <label className="block text-sm text-gray-400 mb-1">Filename Preview</label>
             <div className="px-3 py-2 bg-gray-900 border border-gray-700 rounded text-blue-400 text-sm font-mono">
@@ -408,6 +446,65 @@ function VideoEditModal({ video, bookHasPdf, onClose, onSave }: VideoEditModalPr
   );
 }
 
+interface ChapterEditModalProps {
+  chapter: Chapter;
+  onClose: () => void;
+  onSave: (chapterId: string, name: string) => Promise<void>;
+}
+
+function ChapterEditModal({ chapter, onClose, onSave }: ChapterEditModalProps) {
+  const [editName, setEditName] = useState(chapter.name);
+  const [isSaving, setIsSaving] = useState(false);
+
+  const handleSave = async () => {
+    if (!editName.trim()) return;
+    setIsSaving(true);
+    try {
+      await onSave(chapter.id, editName.trim());
+      onClose();
+    } catch (error) {
+      console.error("Failed to save chapter:", error);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md mx-4 shadow-xl">
+        <h3 className="text-lg font-semibold mb-4 text-white">Edit Chapter Name</h3>
+        <div>
+          <label className="block text-sm text-gray-400 mb-1">Chapter Name</label>
+          <input
+            type="text"
+            value={editName}
+            onChange={(e) => setEditName(e.target.value)}
+            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:border-purple-500"
+            autoFocus
+            onKeyDown={(e) => e.key === "Enter" && handleSave()}
+          />
+        </div>
+        <div className="flex justify-end gap-3 mt-6">
+          <button
+            onClick={onClose}
+            disabled={isSaving}
+            className="px-4 py-2 text-gray-400 hover:text-white transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={isSaving || !editName.trim()}
+            className="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded font-medium transition-colors text-white"
+          >
+            {isSaving ? "Saving..." : "Save"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 interface TrackListViewProps {
   author: Author;
   book: Book;
@@ -419,7 +516,7 @@ interface TrackListViewProps {
   onToggleVideo: () => void;
   onBack: () => void;
   onBookUpdate?: (bookId: string, bookName: string, authorName: string) => Promise<void>;
-  onTrackUpdate?: (trackId: string, title: string, author: string, book: string, trackNumber: number, pdfPage?: number | null, tempo?: number | null, timeSignature?: string) => Promise<void>;
+  onTrackUpdate?: (trackId: string, title: string, author: string, book: string, trackNumber: number, pdfPage?: number | null, tempo?: number | null, timeSignature?: string, chapterId?: string | null) => Promise<void>;
   onTrackComplete?: (trackId: string, completed: boolean) => Promise<void>;
   onBookInProgress?: (bookId: string, inProgress: boolean) => Promise<void>;
   onShowPdf?: (pdfPath: string, page?: number) => void;
@@ -430,8 +527,9 @@ interface TrackListViewProps {
   onAssignPdfPage?: (trackId: string, page: number) => Promise<void>;
   onVideoUpload?: (bookId: string, file: File) => Promise<void>;
   onVideoDelete?: (bookId: string, videoId: string) => Promise<void>;
-  onVideoUpdate?: (bookId: string, videoId: string, filename: string, sortOrder: number, title?: string | null, trackNumber?: number | null, pdfPage?: number | null) => Promise<void>;
+  onVideoUpdate?: (bookId: string, videoId: string, filename: string, sortOrder: number, title?: string | null, trackNumber?: number | null, pdfPage?: number | null, chapterId?: string | null) => Promise<void>;
   onVideoComplete?: (bookId: string, videoId: string, completed: boolean) => Promise<void>;
+  onLibraryRefresh?: () => Promise<void>;
 }
 
 export default function TrackListView({
@@ -458,16 +556,113 @@ export default function TrackListView({
   onVideoDelete,
   onVideoUpdate,
   onVideoComplete,
+  onLibraryRefresh,
 }: TrackListViewProps) {
   const [editingBook, setEditingBook] = useState(false);
   const [editingTrack, setEditingTrack] = useState<Track | null>(null);
   const [editingVideo, setEditingVideo] = useState<BookVideo | null>(null);
   const [isConverting, setIsConverting] = useState(false);
 
+  // Chapter management state
+  const [expandedChapters, setExpandedChapters] = useState<Set<string>>(new Set());
+  const [showAddChapter, setShowAddChapter] = useState(false);
+  const [editingChapter, setEditingChapter] = useState<Chapter | null>(null);
+  const [newChapterName, setNewChapterName] = useState("");
+  const [isCreatingChapter, setIsCreatingChapter] = useState(false);
+
+  // Load expanded state from localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem(`expanded-chapters-${book.id}`);
+    if (saved) {
+      setExpandedChapters(new Set(JSON.parse(saved)));
+    } else {
+      // Default: expand all chapters
+      const allChapterIds = book.chapters?.map(c => c.id) || [];
+      setExpandedChapters(new Set(allChapterIds));
+    }
+  }, [book.id, book.chapters]);
+
+  // Save expanded state to localStorage
+  useEffect(() => {
+    localStorage.setItem(
+      `expanded-chapters-${book.id}`,
+      JSON.stringify(Array.from(expandedChapters))
+    );
+  }, [expandedChapters, book.id]);
+
   const formatDuration = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
     return `${mins}:${secs.toString().padStart(2, "0")}`;
+  };
+
+  const toggleChapterExpanded = (chapterId: string) => {
+    setExpandedChapters(prev => {
+      const next = new Set(prev);
+      if (next.has(chapterId)) {
+        next.delete(chapterId);
+      } else {
+        next.add(chapterId);
+      }
+      return next;
+    });
+  };
+
+  const handleCreateChapter = async () => {
+    if (!newChapterName.trim()) return;
+    setIsCreatingChapter(true);
+    try {
+      const res = await fetch(`/api/books/${book.id}/chapters`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: newChapterName.trim() }),
+      });
+
+      if (!res.ok) throw new Error("Failed to create chapter");
+
+      setNewChapterName("");
+      setShowAddChapter(false);
+      await onLibraryRefresh?.();
+    } catch (error) {
+      console.error("Failed to create chapter:", error);
+      alert("Failed to create chapter");
+    } finally {
+      setIsCreatingChapter(false);
+    }
+  };
+
+  const handleEditChapter = async (chapterId: string, newName: string) => {
+    if (!newName.trim()) return;
+    try {
+      const res = await fetch(`/api/chapters/${chapterId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: newName.trim() }),
+      });
+
+      if (!res.ok) throw new Error("Failed to update chapter");
+
+      setEditingChapter(null);
+      await onLibraryRefresh?.();
+    } catch (error) {
+      console.error("Failed to update chapter:", error);
+      alert("Failed to update chapter");
+    }
+  };
+
+  const handleDeleteChapter = async (chapterId: string) => {
+    try {
+      const res = await fetch(`/api/chapters/${chapterId}`, {
+        method: "DELETE",
+      });
+
+      if (!res.ok) throw new Error("Failed to delete chapter");
+
+      await onLibraryRefresh?.();
+    } catch (error) {
+      console.error("Failed to delete chapter:", error);
+      throw error;
+    }
   };
 
   return (
@@ -489,6 +684,7 @@ export default function TrackListView({
           authorName={author.name}
           bookName={book.name}
           bookHasPdf={!!book.pdfPath}
+          chapters={book.chapters || []}
           onClose={() => setEditingTrack(null)}
           onSave={onTrackUpdate}
         />
@@ -499,11 +695,61 @@ export default function TrackListView({
         <VideoEditModal
           video={editingVideo}
           bookHasPdf={!!book.pdfPath}
+          chapters={book.chapters || []}
           onClose={() => setEditingVideo(null)}
-          onSave={async (videoId, filename, sortOrder, title, trackNumber, pdfPage) => {
-            await onVideoUpdate(book.id, videoId, filename, sortOrder, title, trackNumber, pdfPage);
+          onSave={async (videoId, filename, sortOrder, title, trackNumber, pdfPage, chapterId) => {
+            await onVideoUpdate(book.id, videoId, filename, sortOrder, title, trackNumber, pdfPage, chapterId);
           }}
         />
+      )}
+
+      {/* Chapter Edit Modal */}
+      {editingChapter && (
+        <ChapterEditModal
+          chapter={editingChapter}
+          onClose={() => setEditingChapter(null)}
+          onSave={handleEditChapter}
+        />
+      )}
+
+      {/* Add Chapter Modal */}
+      {showAddChapter && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md mx-4 shadow-xl">
+            <h3 className="text-lg font-semibold mb-4 text-white">Add New Chapter</h3>
+            <div>
+              <label className="block text-sm text-gray-400 mb-1">Chapter Name</label>
+              <input
+                type="text"
+                value={newChapterName}
+                onChange={(e) => setNewChapterName(e.target.value)}
+                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:border-purple-500"
+                placeholder="e.g., Chapter 1: Basic Techniques"
+                autoFocus
+                onKeyDown={(e) => e.key === "Enter" && handleCreateChapter()}
+              />
+            </div>
+            <div className="flex justify-end gap-3 mt-6">
+              <button
+                onClick={() => {
+                  setShowAddChapter(false);
+                  setNewChapterName("");
+                }}
+                disabled={isCreatingChapter}
+                className="px-4 py-2 text-gray-400 hover:text-white transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreateChapter}
+                disabled={isCreatingChapter || !newChapterName.trim()}
+                className="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded font-medium transition-colors text-white"
+              >
+                {isCreatingChapter ? "Creating..." : "Create"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Back Button */}
@@ -634,24 +880,83 @@ export default function TrackListView({
         </div>
       </div>
 
-      {/* Tracks and Videos List */}
-        <div className="flex flex-col gap-1">
-          {/* Audio Tracks */}
-          {book.tracks
-          .sort((a, b) => (a.trackNumber || 0) - (b.trackNumber || 0))
-          .map((track) => (
-            <div
-              key={track.id}
-              onClick={() => onTrackSelect(track, author, book)}
-              onKeyDown={(e) => e.key === "Enter" && onTrackSelect(track, author, book)}
-              role="button"
-              tabIndex={0}
-              className={`flex items-center gap-3 px-3 py-2 rounded transition-colors group cursor-pointer ${
-                currentTrack?.id === track.id
-                  ? "bg-green-900/50 text-green-400"
-                  : "hover:bg-gray-800 text-gray-300"
-              }`}
-            >
+      {/* Add Chapter Button */}
+      <div className="mb-4">
+        <button
+          onClick={() => setShowAddChapter(true)}
+          className="flex items-center gap-2 px-3 py-2 bg-purple-600 hover:bg-purple-700 rounded text-white transition-colors"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+          </svg>
+          Add Chapter
+        </button>
+      </div>
+
+      {/* Chapters */}
+      {book.chapters && book.chapters.length > 0 && (
+        <div className="mb-4">
+          {book.chapters
+            .sort((a, b) => a.sortOrder - b.sortOrder)
+            .map((chapter) => (
+              <ChapterSection
+                key={chapter.id}
+                chapter={chapter}
+                author={author}
+                book={book}
+                currentTrack={currentTrack}
+                selectedVideo={selectedVideo}
+                bookHasPdf={!!book.pdfPath}
+                currentPdfPage={currentPdfPage}
+                isExpanded={expandedChapters.has(chapter.id)}
+                onToggleExpanded={() => toggleChapterExpanded(chapter.id)}
+                onTrackSelect={onTrackSelect}
+                onVideoSelect={onVideoSelect}
+                onTrackComplete={onTrackComplete}
+                onVideoComplete={onVideoComplete}
+                onAssignPdfPage={onAssignPdfPage}
+                onTrackUpdate={(track) => setEditingTrack(track)}
+                onVideoUpdate={(video) => setEditingVideo(video)}
+                onVideoAssignPdfPage={async (bookId, video, page) => {
+                  if (onVideoUpdate) {
+                    await onVideoUpdate(bookId, video.id, video.filename, video.sortOrder, video.title, video.trackNumber, page);
+                  }
+                }}
+                onChapterEdit={setEditingChapter}
+                onChapterDelete={handleDeleteChapter}
+              />
+            ))}
+        </div>
+      )}
+
+      {/* Uncategorized Tracks and Videos */}
+      {(() => {
+        const uncategorizedTracks = book.tracks.filter(t => !t.chapterId);
+        const uncategorizedVideos = book.videos?.filter(v => !v.chapterId) || [];
+        const hasUncategorized = uncategorizedTracks.length > 0 || uncategorizedVideos.length > 0;
+
+        if (!hasUncategorized) return null;
+
+        return (
+          <>
+            <h3 className="text-sm font-semibold text-gray-400 mb-2 px-3">Uncategorized</h3>
+            <div className="flex flex-col gap-1">
+              {/* Audio Tracks */}
+              {uncategorizedTracks
+                .sort((a, b) => (a.trackNumber || 0) - (b.trackNumber || 0))
+                .map((track) => (
+                  <div
+                    key={track.id}
+                    onClick={() => onTrackSelect(track, author, book)}
+                    onKeyDown={(e) => e.key === "Enter" && onTrackSelect(track, author, book)}
+                    role="button"
+                    tabIndex={0}
+                    className={`flex items-center gap-3 px-3 py-2 rounded transition-colors group cursor-pointer ${
+                      currentTrack?.id === track.id
+                        ? "bg-green-900/50 text-green-400"
+                        : "hover:bg-gray-800 text-gray-300"
+                    }`}
+                  >
               {/* Track Number / Play Icon */}
               <span className="w-6 text-center text-sm flex-shrink-0">
                 {currentTrack?.id === track.id ? (
@@ -723,6 +1028,37 @@ export default function TrackListView({
                 </span>
               </div>
 
+              {/* Chapter assignment dropdown */}
+              {book.chapters && book.chapters.length > 0 && (
+                <select
+                  value=""
+                  onChange={async (e) => {
+                    e.stopPropagation();
+                    const chapterId = e.target.value || null;
+                    try {
+                      await fetch(`/api/tracks/${track.id}`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ chapterId }),
+                      });
+                      await onLibraryRefresh?.();
+                    } catch (error) {
+                      console.error('Failed to assign chapter:', error);
+                    }
+                  }}
+                  className="px-2 py-1 bg-gray-700 border border-gray-600 rounded text-xs text-white focus:outline-none focus:border-purple-500 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+                  onClick={(e) => e.stopPropagation()}
+                  title="Move to chapter"
+                >
+                  <option value="">Move to...</option>
+                  {book.chapters.sort((a, b) => a.sortOrder - b.sortOrder).map((chapter) => (
+                    <option key={chapter.id} value={chapter.id}>
+                      {chapter.name}
+                    </option>
+                  ))}
+                </select>
+              )}
+
               {/* Edit button */}
               {onTrackUpdate && (
                 <button
@@ -742,11 +1078,9 @@ export default function TrackListView({
           ))}
 
           {/* Videos */}
-          {book.videos && book.videos.length > 0 && (
-            <>
-              {book.videos
-                .sort((a, b) => (a.trackNumber || a.sortOrder) - (b.trackNumber || b.sortOrder))
-                .map((video) => (
+          {uncategorizedVideos.length > 0 && uncategorizedVideos
+            .sort((a, b) => (a.trackNumber || a.sortOrder) - (b.trackNumber || b.sortOrder))
+            .map((video) => (
                   <div
                     key={video.id}
                     onClick={() => onVideoSelect(video)}
@@ -835,6 +1169,44 @@ export default function TrackListView({
                       )}
                     </div>
 
+                    {/* Chapter assignment dropdown */}
+                    {book.chapters && book.chapters.length > 0 && (
+                      <select
+                        value=""
+                        onChange={async (e) => {
+                          e.stopPropagation();
+                          const chapterId = e.target.value || null;
+                          try {
+                            await fetch(`/api/books/${book.id}/videos/${video.id}/update`, {
+                              method: 'PUT',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({
+                                filename: video.filename,
+                                sortOrder: video.sortOrder,
+                                title: video.title,
+                                trackNumber: video.trackNumber,
+                                pdfPage: video.pdfPage,
+                                chapterId
+                              }),
+                            });
+                            await onLibraryRefresh?.();
+                          } catch (error) {
+                            console.error('Failed to assign chapter:', error);
+                          }
+                        }}
+                        className="px-2 py-1 bg-gray-700 border border-gray-600 rounded text-xs text-white focus:outline-none focus:border-purple-500 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+                        onClick={(e) => e.stopPropagation()}
+                        title="Move to chapter"
+                      >
+                        <option value="">Move to...</option>
+                        {book.chapters.sort((a, b) => a.sortOrder - b.sortOrder).map((chapter) => (
+                          <option key={chapter.id} value={chapter.id}>
+                            {chapter.name}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+
                     {/* Edit button */}
                     {onVideoUpdate && (
                       <button
@@ -852,9 +1224,10 @@ export default function TrackListView({
                     )}
                   </div>
                 ))}
-            </>
-          )}
-        </div>
+            </div>
+          </>
+        );
+      })()}
     </div>
   );
 }

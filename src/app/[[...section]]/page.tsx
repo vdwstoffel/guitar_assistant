@@ -505,7 +505,8 @@ export default function Home() {
     trackNumber: number,
     pdfPage?: number | null,
     tempo?: number | null,
-    timeSignature?: string
+    timeSignature?: string,
+    chapterId?: string | null
   ) => {
     const response = await fetch(`/api/tracks/${trackId}`, {
       method: "PUT",
@@ -515,6 +516,15 @@ export default function Home() {
 
     if (!response.ok) {
       throw new Error("Failed to update metadata");
+    }
+
+    // Update chapterId separately using PATCH
+    if (chapterId !== undefined) {
+      await fetch(`/api/tracks/${trackId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chapterId }),
+      });
     }
 
     // Fetch library to refresh all data - derived states will update automatically
@@ -716,6 +726,7 @@ export default function Home() {
     title?: string | null,
     trackNumber?: number | null,
     pdfPage?: number | null,
+    chapterId?: string | null,
     completed?: boolean
   ) => {
     try {
@@ -724,7 +735,7 @@ export default function Home() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ filename, sortOrder, title, trackNumber, pdfPage, completed }),
+        body: JSON.stringify({ filename, sortOrder, title, trackNumber, pdfPage, chapterId, completed }),
       });
 
       if (response.ok) {
@@ -1301,7 +1312,7 @@ export default function Home() {
                       onVideoSelect={handleVideoSelect}
                       onToggleVideo={() => setShowVideo(!showVideo)}
                       onBack={() => {
-                        setSelectedBook(null);
+                        setSelectedBookId(null);
                         if (isInProgressSelected) {
                           updateLibraryUrl(null, null);
                         } else {
@@ -1322,6 +1333,7 @@ export default function Home() {
                       onVideoDelete={handleVideoDelete}
                       onVideoUpdate={handleVideoUpdate}
                       onVideoComplete={handleVideoComplete}
+                      onLibraryRefresh={fetchLibrary}
                     />
                   ) : isJamTracksSelected ? (
                     <JamTracksView

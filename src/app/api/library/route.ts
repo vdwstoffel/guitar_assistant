@@ -19,6 +19,22 @@ export async function GET() {
               videos: {
                 orderBy: { sortOrder: "asc" },
               },
+              chapters: {
+                orderBy: { sortOrder: "asc" },
+                include: {
+                  tracks: {
+                    orderBy: { sortOrder: "asc" },
+                    include: {
+                      markers: {
+                        orderBy: { timestamp: "asc" },
+                      },
+                    },
+                  },
+                  videos: {
+                    orderBy: { sortOrder: "asc" },
+                  },
+                },
+              },
             },
             orderBy: { name: "asc" },
           },
