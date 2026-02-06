@@ -1,23 +1,51 @@
 "use client";
 
 import { useState, useRef } from "react";
+import { Author } from "@/types";
 
 interface VideoUploadModalProps {
   isOpen: boolean;
   onClose: () => void;
   onUpload: (files: File[], authorName: string, bookName: string) => Promise<void>;
+  authors: Author[];
 }
 
 export default function VideoUploadModal({
   isOpen,
   onClose,
   onUpload,
+  authors,
 }: VideoUploadModalProps) {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [authorName, setAuthorName] = useState("");
   const [bookName, setBookName] = useState("");
   const [isUploading, setIsUploading] = useState(false);
+  const [mode, setMode] = useState<"existing" | "new">("existing");
+  const [selectedBookKey, setSelectedBookKey] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleModeChange = (newMode: "existing" | "new") => {
+    setMode(newMode);
+    setAuthorName("");
+    setBookName("");
+    setSelectedBookKey("");
+  };
+
+  const handleBookSelect = (key: string) => {
+    setSelectedBookKey(key);
+    if (key) {
+      const [authorIdx, bookIdx] = key.split("-").map(Number);
+      const author = authors[authorIdx];
+      const book = author?.books[bookIdx];
+      if (author && book) {
+        setAuthorName(author.name);
+        setBookName(book.name);
+      }
+    } else {
+      setAuthorName("");
+      setBookName("");
+    }
+  };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
@@ -38,6 +66,8 @@ export default function VideoUploadModal({
       setSelectedFiles([]);
       setAuthorName("");
       setBookName("");
+      setSelectedBookKey("");
+      setMode("existing");
       onClose();
     } catch (error) {
       console.error("Error uploading videos:", error);
@@ -66,29 +96,84 @@ export default function VideoUploadModal({
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-6 space-y-4">
-          {/* Author Name */}
-          <div>
-            <label className="block text-sm text-gray-400 mb-2">Author Name *</label>
-            <input
-              type="text"
-              value={authorName}
-              onChange={(e) => setAuthorName(e.target.value)}
-              placeholder="e.g., Joseph Alexander"
-              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:border-blue-500"
-            />
+          {/* Mode Toggle */}
+          <div className="flex rounded overflow-hidden border border-gray-600">
+            <button
+              type="button"
+              onClick={() => handleModeChange("existing")}
+              className={`flex-1 px-4 py-2 text-sm font-medium transition-colors ${
+                mode === "existing"
+                  ? "bg-blue-600 text-white"
+                  : "bg-gray-700 text-gray-400 hover:text-white"
+              }`}
+            >
+              Existing Book
+            </button>
+            <button
+              type="button"
+              onClick={() => handleModeChange("new")}
+              className={`flex-1 px-4 py-2 text-sm font-medium transition-colors ${
+                mode === "new"
+                  ? "bg-blue-600 text-white"
+                  : "bg-gray-700 text-gray-400 hover:text-white"
+              }`}
+            >
+              New Book
+            </button>
           </div>
 
-          {/* Book Name */}
-          <div>
-            <label className="block text-sm text-gray-400 mb-2">Book/Course Name *</label>
-            <input
-              type="text"
-              value={bookName}
-              onChange={(e) => setBookName(e.target.value)}
-              placeholder="e.g., Complete Technique for Modern Guitar"
-              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:border-blue-500"
-            />
-          </div>
+          {mode === "existing" ? (
+            <div>
+              <label className="block text-sm text-gray-400 mb-2">Select Book *</label>
+              <select
+                value={selectedBookKey}
+                onChange={(e) => handleBookSelect(e.target.value)}
+                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:border-blue-500"
+              >
+                <option value="">Select a book...</option>
+                {authors.map((author, authorIdx) => (
+                  <optgroup key={author.id} label={author.name}>
+                    {author.books.map((book, bookIdx) => (
+                      <option key={book.id} value={`${authorIdx}-${bookIdx}`}>
+                        {book.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+              {selectedBookKey && (
+                <p className="text-xs text-gray-500 mt-1">
+                  {authorName} &mdash; {bookName}
+                </p>
+              )}
+            </div>
+          ) : (
+            <>
+              {/* Author Name */}
+              <div>
+                <label className="block text-sm text-gray-400 mb-2">Author Name *</label>
+                <input
+                  type="text"
+                  value={authorName}
+                  onChange={(e) => setAuthorName(e.target.value)}
+                  placeholder="e.g., Joseph Alexander"
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              {/* Book Name */}
+              <div>
+                <label className="block text-sm text-gray-400 mb-2">Book/Course Name *</label>
+                <input
+                  type="text"
+                  value={bookName}
+                  onChange={(e) => setBookName(e.target.value)}
+                  placeholder="e.g., Complete Technique for Modern Guitar"
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:border-blue-500"
+                />
+              </div>
+            </>
+          )}
 
           {/* File Selection */}
           <div>

@@ -38,8 +38,8 @@ export async function PUT(
       return NextResponse.json({ error: "Video not found" }, { status: 404 });
     }
 
-    // Validate sortOrder if provided
-    if (sortOrder !== undefined) {
+    // Validate sortOrder if it changed
+    if (sortOrder !== undefined && sortOrder !== video.sortOrder) {
       const videoCount = await prisma.bookVideo.count({
         where: { bookId: video.bookId },
       });

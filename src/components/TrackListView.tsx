@@ -275,15 +275,18 @@ interface VideoEditModalProps {
   chapters: Chapter[];
   onClose: () => void;
   onSave: (videoId: string, filename: string, sortOrder: number, title: string | null, trackNumber: number | null, pdfPage: number | null, chapterId: string | null) => Promise<void>;
+  onDelete?: (videoId: string) => Promise<void>;
 }
 
-function VideoEditModal({ video, bookHasPdf, chapters, onClose, onSave }: VideoEditModalProps) {
+function VideoEditModal({ video, bookHasPdf, chapters, onClose, onSave, onDelete }: VideoEditModalProps) {
   const [editFilename, setEditFilename] = useState(video.filename.replace(/\.[^/.]+$/, ""));
   const [editTitle, setEditTitle] = useState(video.title || "");
   const [editTrackNumber, setEditTrackNumber] = useState<number | null>(video.trackNumber);
   const [editPdfPage, setEditPdfPage] = useState<number | null>(video.pdfPage);
   const [editChapterId, setEditChapterId] = useState<string | null>(video.chapterId || null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   const handleSave = async () => {
     setIsSaving(true);
@@ -425,22 +428,69 @@ function VideoEditModal({ video, bookHasPdf, chapters, onClose, onSave }: VideoE
             <p className="text-xs text-gray-500 mt-1">Auto-formatted as: [Track#] - [Title].ext</p>
           </div>
         </div>
-        <div className="flex justify-end gap-3 mt-6">
-          <button
-            onClick={onClose}
-            disabled={isSaving}
-            className="px-4 py-2 text-gray-400 hover:text-white transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={isSaving || !editFilename.trim()}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded font-medium transition-colors text-white"
-          >
-            {isSaving ? "Saving..." : "Save"}
-          </button>
-        </div>
+        {confirmingDelete ? (
+          <div className="mt-6 border border-red-800 bg-red-950/50 rounded-lg p-4">
+            <p className="text-sm text-red-300 mb-3">
+              Delete <span className="font-medium text-white">{video.title || video.filename}</span>? This cannot be undone.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setConfirmingDelete(false)}
+                disabled={isDeleting}
+                className="px-4 py-2 text-gray-400 hover:text-white transition-colors"
+              >
+                Keep
+              </button>
+              <button
+                onClick={async () => {
+                  if (!onDelete) return;
+                  setIsDeleting(true);
+                  try {
+                    await onDelete(video.id);
+                    onClose();
+                  } catch (error) {
+                    console.error("Failed to delete video:", error);
+                    setIsDeleting(false);
+                  }
+                }}
+                disabled={isDeleting}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:bg-red-800 disabled:cursor-not-allowed rounded font-medium transition-colors text-white"
+              >
+                {isDeleting ? "Deleting..." : "Yes, Delete"}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex justify-between items-center mt-6">
+            {onDelete ? (
+              <button
+                onClick={() => setConfirmingDelete(true)}
+                disabled={isSaving}
+                className="px-4 py-2 text-red-400 hover:text-red-300 hover:bg-red-900/30 rounded transition-colors disabled:text-gray-600"
+              >
+                Delete
+              </button>
+            ) : (
+              <div />
+            )}
+            <div className="flex gap-3">
+              <button
+                onClick={onClose}
+                disabled={isSaving}
+                className="px-4 py-2 text-gray-400 hover:text-white transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={isSaving || !editFilename.trim()}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded font-medium transition-colors text-white"
+              >
+                {isSaving ? "Saving..." : "Save"}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -576,9 +626,9 @@ export default function TrackListView({
     if (saved) {
       setExpandedChapters(new Set(JSON.parse(saved)));
     } else {
-      // Default: expand all chapters
-      const allChapterIds = book.chapters?.map(c => c.id) || [];
-      setExpandedChapters(new Set(allChapterIds));
+      // Default: expand the first chapter
+      const firstChapter = book.chapters?.[0];
+      setExpandedChapters(firstChapter ? new Set([firstChapter.id]) : new Set());
     }
   }, [book.id, book.chapters]);
 
@@ -598,13 +648,10 @@ export default function TrackListView({
 
   const toggleChapterExpanded = (chapterId: string) => {
     setExpandedChapters(prev => {
-      const next = new Set(prev);
-      if (next.has(chapterId)) {
-        next.delete(chapterId);
-      } else {
-        next.add(chapterId);
+      if (prev.has(chapterId)) {
+        return new Set();
       }
-      return next;
+      return new Set([chapterId]);
     });
   };
 
@@ -700,6 +747,9 @@ export default function TrackListView({
           onSave={async (videoId, filename, sortOrder, title, trackNumber, pdfPage, chapterId) => {
             await onVideoUpdate(book.id, videoId, filename, sortOrder, title, trackNumber, pdfPage, chapterId);
           }}
+          onDelete={onVideoDelete ? async (videoId) => {
+            await onVideoDelete(book.id, videoId);
+          } : undefined}
         />
       )}
 

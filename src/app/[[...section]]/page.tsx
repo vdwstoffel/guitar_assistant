@@ -1548,6 +1548,7 @@ export default function Home() {
         isOpen={isVideoUploadModalOpen}
         onClose={() => setIsVideoUploadModalOpen(false)}
         onUpload={handleBulkVideoUpload}
+        authors={authors}
       />
     </div>
   );
