@@ -51,3 +51,5 @@ next-env.d.ts
 /prisma/*.db-journal
 /prisma/migrations/
 /prisma/prisma/
+
+/reports
