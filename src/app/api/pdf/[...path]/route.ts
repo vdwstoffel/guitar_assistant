@@ -72,7 +72,7 @@ export async function GET(
         "Content-Length": fileSize.toString(),
         "Content-Type": "application/pdf",
         "Accept-Ranges": "bytes",
-        "Cache-Control": "public, max-age=3600",
+        "Cache-Control": "no-cache",
         "ETag": etag,
       },
     });

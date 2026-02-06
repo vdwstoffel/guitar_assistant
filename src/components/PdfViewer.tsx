@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import dynamic from "next/dynamic";
 
 // Dynamically import react-pdf to avoid SSR issues
@@ -48,6 +48,10 @@ export default function PdfViewer({
   const isScrollingToPage = useRef(false);
   const targetPage = useRef<number | null>(null);
   const pageHeights = useRef<Map<number, number>>(new Map());
+
+  // Stable URL that busts cache when pdfPath or version changes
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const pdfUrl = useMemo(() => `/api/pdf/${encodeURIComponent(pdfPath)}?v=${Date.now()}`, [pdfPath, version]);
 
   useEffect(() => {
     const updateWidth = () => {
@@ -262,7 +266,7 @@ export default function PdfViewer({
         )}
 
         <Document
-          file={`/api/pdf/${encodeURIComponent(pdfPath)}${version ? `?v=${version}` : ''}`}
+          file={pdfUrl}
           onLoadSuccess={onDocumentLoadSuccess}
           onLoadError={onDocumentLoadError}
           loading=""

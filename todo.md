@@ -1,24 +1,21 @@
 # TODO
 
-## Create a tools section
+## Tools Section
 
-### Should have the option to concatenate pdf.
+Create a dedicated "Tools" page/section accessible from the top navigation.
 
-    Some books I have to manually create digital version from, I will make the first 5 pages, then later I will add 5 more pages. Should have an option to select a book pdf and then add more pages to it by uploading another pdf and concatenating them.
+- [ ] **Extract Audio from Video** — Extract the audio track from video files and save them as standalone audio files. Useful for video lessons that don't have separate audio tracks.
 
-### Ability to create audio files from the video files.
+## Videos
 
-    Some video files I have are just lessons with no audio files. It would be great to have an option to extract audio from video files and create audio files from them.
+- [ ] **Link uploads to existing books** — When uploading videos, allow selecting an existing book to associate them with.
 
-## Upload videos
+## Audio Player
 
-### when uploading videos, should have an option to select existing books that contain videos
+- [ ] **Hide player when no track selected** — The bottom audio player should be hidden or collapsed when no track is actively selected.
 
-## Audio player
-
-### When no track is selected hide audio player
-
-### When clicking away from book/ on a new book clear the current track
+- [ ] **Clear track on book navigation** — When clicking away from the current book or selecting a different book, clear the currently playing track.
 
 ## UI
-### Should have the option to upload images for books with missing covers
+
+- [ ] **Custom book cover upload** — Allow uploading cover images for books that are missing artwork.

@@ -13,18 +13,19 @@ import TopNav from "@/components/TopNav";
 import Fretboard from "@/components/Fretboard";
 import PdfViewer from "@/components/PdfViewer";
 import Videos from "@/components/Videos";
+import Tools from "@/components/Tools";
 import AlphaTabViewer from "@/components/AlphaTabViewer";
 import SyncPointControls from "@/components/SyncPointControls";
 import VideoUploadModal from "@/components/VideoUploadModal";
 import VideoPlayer from "@/components/VideoPlayer";
 import { Author, Book, Track, Marker, JamTrack, JamTrackMarker, TabSyncPoint, BookVideo } from "@/types";
 
-type Section = 'library' | 'videos' | 'fretboard';
+type Section = 'library' | 'videos' | 'fretboard' | 'tools';
 
 const getSectionFromPath = (section: string[] | undefined): Section => {
   if (!section || section.length === 0) return 'library';
   const first = section[0];
-  if (first === 'videos' || first === 'fretboard') {
+  if (first === 'videos' || first === 'fretboard' || first === 'tools') {
     return first;
   }
   return 'library';
@@ -205,8 +206,8 @@ export default function Home() {
       // Ignore if typing in an input field
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
 
-      // 'r' to restart from beginning
-      if (e.key === 'r' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      // Left arrow to restart from beginning
+      if (e.key === 'ArrowLeft' && !e.ctrlKey && !e.metaKey && !e.altKey) {
         if ((currentTrack || currentJamTrack) && seekFnRef.current) {
           e.preventDefault();
           seekFnRef.current(0);
@@ -1536,6 +1537,8 @@ export default function Home() {
         </>
       ) : activeSection === 'videos' ? (
         <Videos />
+      ) : activeSection === 'tools' ? (
+        <Tools />
       ) : (
         <Fretboard />
       )}

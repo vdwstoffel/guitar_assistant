@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useState, useEffect, useRef, useCallback } from 'react';
 
-type Section = 'library' | 'videos' | 'fretboard';
+type Section = 'library' | 'videos' | 'fretboard' | 'tools';
 type TimeSignature = '4/4' | '3/4' | '2/4' | '6/8';
 
 interface TopNavProps {
@@ -31,6 +31,7 @@ export default function TopNav({ activeSection, onSectionChange }: TopNavProps) 
     { id: 'library', label: 'Library', href: '/' },
     { id: 'videos', label: 'Videos', href: '/videos' },
     { id: 'fretboard', label: 'Fretboard', href: '/fretboard' },
+    { id: 'tools', label: 'Tools', href: '/tools' },
   ];
 
   const getBeatsPerMeasure = (sig: TimeSignature): number => {
