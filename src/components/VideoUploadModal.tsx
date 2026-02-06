@@ -1,13 +1,13 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { Author } from "@/types";
+import { AuthorSummary } from "@/types";
 
 interface VideoUploadModalProps {
   isOpen: boolean;
   onClose: () => void;
   onUpload: (files: File[], authorName: string, bookName: string) => Promise<void>;
-  authors: Author[];
+  authors: AuthorSummary[];
 }
 
 export default function VideoUploadModal({

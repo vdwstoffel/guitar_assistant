@@ -1,11 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { Chapter, Track, BookVideo, Author, Book } from "@/types";
+import { Chapter, Track, BookVideo, AuthorSummary, Book } from "@/types";
 
 interface ChapterSectionProps {
   chapter: Chapter;
-  author: Author;
+  author: AuthorSummary;
   book: Book;
   currentTrack: Track | null;
   selectedVideo: BookVideo | null;
@@ -13,7 +13,7 @@ interface ChapterSectionProps {
   currentPdfPage?: number;
   isExpanded: boolean;
   onToggleExpanded: () => void;
-  onTrackSelect: (track: Track, author: Author, book: Book) => void;
+  onTrackSelect: (track: Track, author: AuthorSummary, book: Book) => void;
   onVideoSelect: (video: BookVideo) => void;
   onTrackComplete?: (trackId: string, completed: boolean) => Promise<void>;
   onVideoComplete?: (bookId: string, videoId: string, completed: boolean) => Promise<void>;

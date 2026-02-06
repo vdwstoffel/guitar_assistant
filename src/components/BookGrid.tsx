@@ -1,15 +1,14 @@
 "use client";
 
 import { useState, memo } from "react";
-import { Author, Book } from "@/types";
+import { AuthorSummary, BookSummary } from "@/types";
 
-const BookCard = memo(function BookCard({ book, onClick }: { book: Book; onClick: () => void }) {
+const BookCard = memo(function BookCard({ book, onClick }: { book: BookSummary; onClick: () => void }) {
   const [hasError, setHasError] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
 
-  // Use the first track's file path to get book cover art
-  const firstTrack = book.tracks[0];
-  const artUrl = firstTrack ? `/api/albumart/${encodeURIComponent(firstTrack.filePath)}` : null;
+  // Use coverTrackPath for book cover art
+  const artUrl = book.coverTrackPath ? `/api/albumart/${encodeURIComponent(book.coverTrackPath)}` : null;
 
   return (
     <button
@@ -48,15 +47,15 @@ const BookCard = memo(function BookCard({ book, onClick }: { book: Book; onClick
 
       {/* Track Count */}
       <p className="text-gray-500 text-xs mt-1">
-        {book.tracks.length} track{book.tracks.length !== 1 ? "s" : ""}
+        {book.trackCount} track{book.trackCount !== 1 ? "s" : ""}
       </p>
     </button>
   );
 });
 
 interface BookGridProps {
-  author: Author;
-  onBookSelect: (book: Book) => void;
+  author: AuthorSummary;
+  onBookSelect: (book: BookSummary) => void;
 }
 
 export default function BookGrid({ author, onBookSelect }: BookGridProps) {
@@ -67,7 +66,7 @@ export default function BookGrid({ author, onBookSelect }: BookGridProps) {
         <h1 className="text-3xl font-bold text-white">{author.name}</h1>
         <p className="text-gray-400 mt-1">
           {author.books.length} book{author.books.length !== 1 ? "s" : ""} •{" "}
-          {author.books.reduce((acc, book) => acc + book.tracks.length, 0)} tracks
+          {author.books.reduce((acc, book) => acc + book.trackCount, 0)} tracks
         </p>
       </div>
 

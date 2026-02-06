@@ -18,7 +18,7 @@ import AlphaTabViewer from "@/components/AlphaTabViewer";
 import SyncPointControls from "@/components/SyncPointControls";
 import VideoUploadModal from "@/components/VideoUploadModal";
 import VideoPlayer from "@/components/VideoPlayer";
-import { Author, Book, Track, Marker, JamTrack, JamTrackMarker, TabSyncPoint, BookVideo } from "@/types";
+import { AuthorSummary, BookSummary, Book, Track, Marker, JamTrack, JamTrackMarker, TabSyncPoint, BookVideo } from "@/types";
 
 type Section = 'library' | 'videos' | 'fretboard' | 'tools';
 
@@ -36,61 +36,33 @@ export default function Home() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const [authors, setAuthors] = useState<Author[]>([]);
+  // Lightweight library data (authors with book summaries, no tracks/markers)
+  const [authors, setAuthors] = useState<AuthorSummary[]>([]);
   const [jamTracks, setJamTracks] = useState<JamTrack[]>([]);
 
-  // Use IDs instead of duplicating full objects to save memory
+  // Navigation state
   const [selectedAuthorId, setSelectedAuthorId] = useState<string | null>(null);
   const [selectedBookId, setSelectedBookId] = useState<string | null>(null);
-  const [currentTrackId, setCurrentTrackId] = useState<string | null>(null);
+  const [selectedBookDetail, setSelectedBookDetail] = useState<Book | null>(null);
+  const [currentTrack, setCurrentTrack] = useState<Track | null>(null);
+  const [currentAuthorId, setCurrentAuthorId] = useState<string | null>(null);
+  const [currentBookId, setCurrentBookId] = useState<string | null>(null);
   const [currentJamTrackId, setCurrentJamTrackId] = useState<string | null>(null);
 
-  // Derive actual objects from IDs (single source of truth in authors/jamTracks arrays)
+  // Ref so fetchLibrary callback can access current selectedBookId
+  const selectedBookIdRef = useRef<string | null>(null);
+  selectedBookIdRef.current = selectedBookId;
+
+  // Derive lightweight objects from IDs
   const selectedAuthor = useMemo(() =>
     authors.find(a => a.id === selectedAuthorId) || null,
     [authors, selectedAuthorId]
   );
 
-  const selectedBook = useMemo(() =>
-    selectedAuthor?.books.find(b => b.id === selectedBookId) || null,
-    [selectedAuthor, selectedBookId]
-  );
-
-  const currentTrack = useMemo(() => {
-    if (!currentTrackId) return null;
-    for (const author of authors) {
-      for (const book of author.books) {
-        const track = book.tracks.find(t => t.id === currentTrackId);
-        if (track) return track;
-      }
-    }
-    return null;
-  }, [authors, currentTrackId]);
-
   const currentJamTrack = useMemo(() =>
     jamTracks.find(jt => jt.id === currentJamTrackId) || null,
     [jamTracks, currentJamTrackId]
   );
-
-  const currentAuthor = useMemo(() => {
-    if (!currentTrackId) return null;
-    for (const author of authors) {
-      for (const book of author.books) {
-        if (book.tracks.some(t => t.id === currentTrackId)) return author;
-      }
-    }
-    return null;
-  }, [authors, currentTrackId]);
-
-  const currentBook = useMemo(() => {
-    if (!currentTrackId) return null;
-    for (const author of authors) {
-      for (const book of author.books) {
-        if (book.tracks.some(t => t.id === currentTrackId)) return book;
-      }
-    }
-    return null;
-  }, [authors, currentTrackId]);
   const [isScanning, setIsScanning] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isUploadingJamTracks, setIsUploadingJamTracks] = useState(false);
@@ -99,6 +71,21 @@ export default function Home() {
   const [isVideoUploadModalOpen, setIsVideoUploadModalOpen] = useState(false);
   const [selectedVideo, setSelectedVideo] = useState<BookVideo | null>(null);
   const [showVideo, setShowVideo] = useState(false);
+
+  // Helper: update a track inside selectedBookDetail (both uncategorized and chapter tracks)
+  const updateTrackInBookDetail = useCallback((trackId: string, updater: (track: Track) => Track) => {
+    setSelectedBookDetail(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        tracks: prev.tracks.map(t => t.id === trackId ? updater(t) : t),
+        chapters: prev.chapters?.map(ch => ({
+          ...ch,
+          tracks: ch.tracks.map(t => t.id === trackId ? updater(t) : t),
+        })),
+      };
+    });
+  }, []);
 
   // Compute in-progress books from all authors (memoized to prevent recalculation on every render)
   const inProgressBooks = useMemo(() =>
@@ -140,8 +127,9 @@ export default function Home() {
 
   const handleSectionChange = (section: Section) => {
     if (section !== 'library') {
-      setCurrentTrackId(null);
-      // currentAuthor and currentBook are derived, no need to clear them
+      setCurrentTrack(null);
+      setCurrentAuthorId(null);
+      setCurrentBookId(null);
     }
     if (section === 'library') {
       router.push('/');
@@ -150,12 +138,32 @@ export default function Home() {
     }
   };
 
+  const fetchBookDetail = useCallback(async (bookId: string) => {
+    try {
+      const response = await fetch(`/api/books/${bookId}/detail`);
+      if (response.ok) {
+        const bookData: Book = await response.json();
+        setSelectedBookDetail(bookData);
+
+        // Update currentTrack if it belongs to this book
+        setCurrentTrack(prev => {
+          if (!prev) return prev;
+          const found = bookData.tracks.find(t => t.id === prev.id)
+            || bookData.chapters?.flatMap(ch => ch.tracks).find(t => t.id === prev.id);
+          return found || prev;
+        });
+      }
+    } catch (error) {
+      console.error("Error fetching book detail:", error);
+    }
+  }, []);
+
   const fetchLibrary = useCallback(async (restoreFromUrl = false) => {
     try {
       const response = await fetch("/api/library");
       if (response.ok) {
         const data = await response.json();
-        const authorsData = data.authors || data; // Handle both old and new response format
+        const authorsData: AuthorSummary[] = data.authors || [];
         const jamTracksData = data.jamTracks || [];
         setAuthors(authorsData);
         setJamTracks(jamTracksData);
@@ -165,16 +173,17 @@ export default function Home() {
           const authorId = searchParams.get('artist');
           const bookId = searchParams.get('album');
           if (authorId) {
-            const author = authorsData.find((a: Author) => a.id === authorId);
+            const author = authorsData.find((a: AuthorSummary) => a.id === authorId);
             if (author) {
               setSelectedAuthorId(authorId);
               if (bookId) {
-                const book = author.books.find((b: Book) => b.id === bookId);
+                const book = author.books.find((b: BookSummary) => b.id === bookId);
                 if (book) {
                   setSelectedBookId(bookId);
                   if (book.pdfPath) {
                     setPdfPath(book.pdfPath);
                   }
+                  await fetchBookDetail(bookId);
                 }
               }
             }
@@ -182,16 +191,16 @@ export default function Home() {
           return;
         }
 
-        // No need to update selected author/book - they're derived from IDs
-        // IDs remain valid as long as the data exists in authorsData
-
-        // No need to update current track - it's derived from currentTrackId
-        // No need to update current jam track - it's derived from currentJamTrackId
+        // Refresh current book detail if one is selected
+        const bookId = selectedBookIdRef.current;
+        if (bookId) {
+          await fetchBookDetail(bookId);
+        }
       }
     } catch (error) {
       console.error("Error fetching library:", error);
     }
-  }, [searchParams]);
+  }, [searchParams, fetchBookDetail]);
 
   useEffect(() => {
     fetchLibrary(true); // Restore from URL on initial load
@@ -219,11 +228,12 @@ export default function Home() {
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [activeSection, currentTrack, currentJamTrack]);
 
-  const handleAuthorSelect = (author: Author) => {
+  const handleAuthorSelect = (author: AuthorSummary) => {
     setIsInProgressSelected(false);
     setIsJamTracksSelected(false);
     setSelectedAuthorId(author.id);
     setSelectedBookId(null);
+    setSelectedBookDetail(null);
     updateLibraryUrl(author.id, null);
   };
 
@@ -232,6 +242,7 @@ export default function Home() {
     setIsJamTracksSelected(false);
     setSelectedAuthorId(null);
     setSelectedBookId(null);
+    setSelectedBookDetail(null);
     updateLibraryUrl(null, null);
   };
 
@@ -240,29 +251,31 @@ export default function Home() {
     setIsInProgressSelected(false);
     setSelectedAuthorId(null);
     setSelectedBookId(null);
+    setSelectedBookDetail(null);
     updateLibraryUrl(null, null);
   };
 
-  const handleInProgressBookSelect = (book: Book, author: Author) => {
+  const handleInProgressBookSelect = (book: BookSummary, author: AuthorSummary) => {
     setSelectedAuthorId(author.id);
     setSelectedBookId(book.id);
-    // Clear jam track when selecting a book (so PDF shows instead of tab)
+    setSelectedBookDetail(null);
     setCurrentJamTrackId(null);
     if (book.pdfPath) {
       setPdfPath(book.pdfPath);
     }
     updateLibraryUrl(author.id, book.id);
+    fetchBookDetail(book.id);
   };
 
-  const handleBookSelect = (book: Book) => {
+  const handleBookSelect = (book: BookSummary) => {
     setSelectedBookId(book.id);
-    // Clear jam track when selecting a book (so PDF shows instead of tab)
+    setSelectedBookDetail(null);
     setCurrentJamTrackId(null);
-    // Auto-show PDF if book has one
     if (book.pdfPath) {
       setPdfPath(book.pdfPath);
     }
     updateLibraryUrl(selectedAuthorId || null, book.id);
+    fetchBookDetail(book.id);
   };
 
   const handleScan = async () => {
@@ -325,33 +338,34 @@ export default function Home() {
     }
   };
 
-  const handleTrackSelect = (track: Track, author: Author, book: Book) => {
-    setCurrentTrackId(track.id);
-    setCurrentJamTrackId(null); // Clear jam track when selecting regular track
-    setSelectedVideo(null); // Clear video when selecting regular track
-    // No need to set currentAuthor/currentBook - they're derived from currentTrackId
-    // Update PDF path if book has one
-    if (book.pdfPath) {
-      setPdfPath(book.pdfPath);
+  const handleTrackSelect = (track: Track) => {
+    setCurrentTrack(track);
+    setCurrentAuthorId(selectedAuthorId);
+    setCurrentBookId(selectedBookId);
+    setCurrentJamTrackId(null);
+    setSelectedVideo(null);
+    if (selectedBookDetail?.pdfPath) {
+      setPdfPath(selectedBookDetail.pdfPath);
     }
   };
 
   const handleVideoSelect = (video: BookVideo) => {
     setSelectedVideo(video);
-    setShowVideo(false); // Default to showing PDF, user can toggle to show video
-    setCurrentTrackId(null); // Clear track when selecting video
-    setCurrentJamTrackId(null); // Clear jam track when selecting video
-    // Jump to video's PDF page if it has one
-    if (video.pdfPage && selectedBook?.pdfPath) {
+    setShowVideo(false);
+    setCurrentTrack(null);
+    setCurrentAuthorId(null);
+    setCurrentBookId(null);
+    setCurrentJamTrackId(null);
+    if (video.pdfPage && selectedBookDetail?.pdfPath) {
       setPdfPage(video.pdfPage);
     }
   };
 
   const handleJamTrackSelect = (jamTrack: JamTrack) => {
     setCurrentJamTrackId(jamTrack.id);
-    setCurrentTrackId(null); // Clear regular track when selecting jam track
-    // No need to set currentAuthor/currentBook - not applicable for jam tracks
-    // Update PDF path if jam track has one
+    setCurrentTrack(null);
+    setCurrentAuthorId(null);
+    setCurrentBookId(null);
     if (jamTrack.pdfPath) {
       setPdfPath(jamTrack.pdfPath);
     }
@@ -370,21 +384,10 @@ export default function Home() {
       });
       if (response.ok) {
         const newMarker: Marker = await response.json();
-        // Only update authors array - all other states are derived!
-        // This is MUCH more efficient than the previous approach that updated 4 separate states
-        setAuthors((prevAuthors) =>
-          prevAuthors.map((author) => ({
-            ...author,
-            books: author.books.map((book) => ({
-              ...book,
-              tracks: book.tracks.map((track) =>
-                track.id === trackId
-                  ? { ...track, markers: [...track.markers, newMarker] }
-                  : track
-              ),
-            })),
-          }))
+        setCurrentTrack(prev =>
+          prev?.id === trackId ? { ...prev, markers: [...prev.markers, newMarker] } : prev
         );
+        updateTrackInBookDetail(trackId, t => ({ ...t, markers: [...t.markers, newMarker] }));
       }
     } catch (error) {
       console.error("Error adding marker:", error);
@@ -399,21 +402,12 @@ export default function Home() {
         body: JSON.stringify({ timestamp }),
       });
       if (response.ok) {
-        // Only update authors array - all other states are derived!
-        setAuthors((prevAuthors) =>
-          prevAuthors.map((author) => ({
-            ...author,
-            books: author.books.map((book) => ({
-              ...book,
-              tracks: book.tracks.map((track) => ({
-                ...track,
-                markers: track.markers.map((m) =>
-                  m.id === markerId ? { ...m, timestamp } : m
-                ),
-              })),
-            })),
-          }))
+        const updateMarkers = (markers: Marker[]) =>
+          markers.map(m => m.id === markerId ? { ...m, timestamp } : m);
+        setCurrentTrack(prev =>
+          prev ? { ...prev, markers: updateMarkers(prev.markers) } : prev
         );
+        updateTrackInBookDetail(currentTrack?.id || '', t => ({ ...t, markers: updateMarkers(t.markers) }));
       }
     } catch (error) {
       console.error("Error updating marker:", error);
@@ -428,21 +422,12 @@ export default function Home() {
         body: JSON.stringify({ name }),
       });
       if (response.ok) {
-        // Only update authors array - all other states are derived!
-        setAuthors((prevAuthors) =>
-          prevAuthors.map((author) => ({
-            ...author,
-            books: author.books.map((book) => ({
-              ...book,
-              tracks: book.tracks.map((track) => ({
-                ...track,
-                markers: track.markers.map((m) =>
-                  m.id === markerId ? { ...m, name } : m
-                ),
-              })),
-            })),
-          }))
+        const updateMarkers = (markers: Marker[]) =>
+          markers.map(m => m.id === markerId ? { ...m, name } : m);
+        setCurrentTrack(prev =>
+          prev ? { ...prev, markers: updateMarkers(prev.markers) } : prev
         );
+        updateTrackInBookDetail(currentTrack?.id || '', t => ({ ...t, markers: updateMarkers(t.markers) }));
       }
     } catch (error) {
       console.error("Error renaming marker:", error);
@@ -455,19 +440,11 @@ export default function Home() {
         method: "DELETE",
       });
       if (response.ok) {
-        // Only update authors array - all other states are derived!
-        setAuthors((prevAuthors) =>
-          prevAuthors.map((author) => ({
-            ...author,
-            books: author.books.map((book) => ({
-              ...book,
-              tracks: book.tracks.map((track) => ({
-                ...track,
-                markers: track.markers.filter((m) => m.id !== markerId),
-              })),
-            })),
-          }))
+        const removeMarker = (markers: Marker[]) => markers.filter(m => m.id !== markerId);
+        setCurrentTrack(prev =>
+          prev ? { ...prev, markers: removeMarker(prev.markers) } : prev
         );
+        updateTrackInBookDetail(currentTrack?.id || '', t => ({ ...t, markers: removeMarker(t.markers) }));
       }
     } catch (error) {
       console.error("Error deleting marker:", error);
@@ -480,18 +457,10 @@ export default function Home() {
         method: "DELETE",
       });
       if (response.ok) {
-        // Only update authors array - all other states are derived!
-        setAuthors((prevAuthors) =>
-          prevAuthors.map((author) => ({
-            ...author,
-            books: author.books.map((book) => ({
-              ...book,
-              tracks: book.tracks.map((track) =>
-                track.id === trackId ? { ...track, markers: [] } : track
-              ),
-            })),
-          }))
+        setCurrentTrack(prev =>
+          prev?.id === trackId ? { ...prev, markers: [] } : prev
         );
+        updateTrackInBookDetail(trackId, t => ({ ...t, markers: [] }));
       }
     } catch (error) {
       console.error("Error clearing markers:", error);
@@ -546,18 +515,10 @@ export default function Home() {
         throw new Error("Failed to update tempo");
       }
 
-      // Only update authors array - all other states are derived!
-      setAuthors((prevAuthors) =>
-        prevAuthors.map((author) => ({
-          ...author,
-          books: author.books.map((book) => ({
-            ...book,
-            tracks: book.tracks.map((track) =>
-              track.id === currentTrack.id ? { ...track, tempo, timeSignature } : track
-            ),
-          })),
-        }))
+      setCurrentTrack(prev =>
+        prev?.id === currentTrack.id ? { ...prev, tempo, timeSignature } : prev
       );
+      updateTrackInBookDetail(currentTrack.id, t => ({ ...t, tempo, timeSignature }));
     } catch (error) {
       console.error("Error updating tempo:", error);
     }
@@ -592,7 +553,7 @@ export default function Home() {
       throw new Error("Failed to update book in-progress status");
     }
 
-    // Only update authors array - all other states are derived!
+    // Update lightweight authors data
     setAuthors((prevAuthors) =>
       prevAuthors.map((author) => ({
         ...author,
@@ -600,6 +561,10 @@ export default function Home() {
           book.id === bookId ? { ...book, inProgress } : book
         ),
       }))
+    );
+    // Update book detail if it's the currently selected book
+    setSelectedBookDetail(prev =>
+      prev?.id === bookId ? { ...prev, inProgress } : prev
     );
   };
 
@@ -614,18 +579,10 @@ export default function Home() {
       throw new Error("Failed to update track completed status");
     }
 
-    // Only update authors array - all other states are derived!
-    setAuthors((prevAuthors) =>
-      prevAuthors.map((author) => ({
-        ...author,
-        books: author.books.map((book) => ({
-          ...book,
-          tracks: book.tracks.map((track) =>
-            track.id === trackId ? { ...track, completed } : track
-          ),
-        })),
-      }))
+    setCurrentTrack(prev =>
+      prev?.id === trackId ? { ...prev, completed } : prev
     );
+    updateTrackInBookDetail(trackId, t => ({ ...t, completed }));
   };
 
   const handleAssignPdfPage = async (trackId: string, page: number) => {
@@ -639,18 +596,10 @@ export default function Home() {
       throw new Error("Failed to assign PDF page");
     }
 
-    // Only update authors array - all other states are derived!
-    setAuthors((prevAuthors) =>
-      prevAuthors.map((author) => ({
-        ...author,
-        books: author.books.map((book) => ({
-          ...book,
-          tracks: book.tracks.map((track) =>
-            track.id === trackId ? { ...track, pdfPage: page } : track
-          ),
-        })),
-      }))
+    setCurrentTrack(prev =>
+      prev?.id === trackId ? { ...prev, pdfPage: page } : prev
     );
+    updateTrackInBookDetail(trackId, t => ({ ...t, pdfPage: page }));
   };
 
   // PDF handlers
@@ -752,8 +701,9 @@ export default function Home() {
   };
 
   const handleVideoComplete = async (bookId: string, videoId: string, completed: boolean) => {
-    // Get the current video to pass its required fields
-    const video = selectedBook?.videos?.find(v => v.id === videoId);
+    // Get the current video to pass its required fields - search both book-level and chapter videos
+    const video = selectedBookDetail?.videos?.find(v => v.id === videoId)
+      || selectedBookDetail?.chapters?.flatMap(ch => ch.videos).find(v => v.id === videoId);
     if (!video) return;
 
     await handleVideoUpdate(
@@ -764,6 +714,7 @@ export default function Home() {
       video.title,
       video.trackNumber,
       video.pdfPage,
+      video.chapterId,
       completed
     );
   };
@@ -843,10 +794,6 @@ export default function Home() {
     setJamTracks((prev) =>
       prev.map((jt) => (jt.id === jamTrackId ? updatedJamTrack : jt))
     );
-
-    if (currentJamTrack?.id === jamTrackId) {
-      setCurrentJamTrack(updatedJamTrack);
-    }
   };
 
   const handleJamTrackComplete = async (jamTrackId: string, completed: boolean) => {
@@ -864,10 +811,6 @@ export default function Home() {
     setJamTracks((prev) =>
       prev.map((jt) => (jt.id === jamTrackId ? { ...jt, completed } : jt))
     );
-
-    if (currentJamTrack?.id === jamTrackId) {
-      setCurrentJamTrack((prev) => (prev ? { ...prev, completed } : null));
-    }
   };
 
   const handleJamTrackDelete = async (jamTrackId: string) => {
@@ -882,8 +825,8 @@ export default function Home() {
     // Update local state
     setJamTracks((prev) => prev.filter((jt) => jt.id !== jamTrackId));
 
-    if (currentJamTrack?.id === jamTrackId) {
-      setCurrentJamTrack(null);
+    if (currentJamTrackId === jamTrackId) {
+      setCurrentJamTrackId(null);
     }
   };
 
@@ -902,11 +845,8 @@ export default function Home() {
         setJamTracks((prev) =>
           prev.map((jt) => (jt.id === jamTrackId ? updatedJamTrack : jt))
         );
-        if (currentJamTrack?.id === jamTrackId) {
-          setCurrentJamTrack(updatedJamTrack);
-          if (updatedJamTrack.pdfPath) {
-            setPdfPath(updatedJamTrack.pdfPath);
-          }
+        if (currentJamTrackId === jamTrackId && updatedJamTrack.pdfPath) {
+          setPdfPath(updatedJamTrack.pdfPath);
         }
       }
     } catch (error) {
@@ -924,8 +864,7 @@ export default function Home() {
         setJamTracks((prev) =>
           prev.map((jt) => (jt.id === jamTrackId ? { ...jt, pdfPath: null } : jt))
         );
-        if (currentJamTrack?.id === jamTrackId) {
-          setCurrentJamTrack((prev) => (prev ? { ...prev, pdfPath: null } : null));
+        if (currentJamTrackId === jamTrackId) {
           setPdfPath(null);
         }
       }
@@ -950,8 +889,7 @@ export default function Home() {
         setJamTracks((prev) =>
           prev.map((jt) => (jt.id === jamTrackId ? updatedJamTrack : jt))
         );
-        if (currentJamTrack?.id === jamTrackId) {
-          setCurrentJamTrack(updatedJamTrack);
+        if (currentJamTrackId === jamTrackId) {
           setTabVersion((v) => v + 1);
         }
       }
@@ -972,10 +910,7 @@ export default function Home() {
             jt.id === jamTrackId ? { ...jt, tabPath: null, tabSyncPoints: [] } : jt
           )
         );
-        if (currentJamTrack?.id === jamTrackId) {
-          setCurrentJamTrack((prev) =>
-            prev ? { ...prev, tabPath: null, tabSyncPoints: [] } : null
-          );
+        if (currentJamTrackId === jamTrackId) {
           setSyncEditMode(false);
           setPendingTabTick(null);
           setPendingBarIndex(null);
@@ -1011,10 +946,6 @@ export default function Home() {
           newSyncPoint,
         ].sort((a, b) => a.audioTime - b.audioTime);
 
-        setCurrentJamTrack({
-          ...currentJamTrack,
-          tabSyncPoints: updatedSyncPoints,
-        });
         setJamTracks((prev) =>
           prev.map((jt) =>
             jt.id === currentJamTrack.id
@@ -1043,10 +974,6 @@ export default function Home() {
         const updatedSyncPoints = currentJamTrack.tabSyncPoints.filter(
           (sp) => sp.id !== syncPointId
         );
-        setCurrentJamTrack({
-          ...currentJamTrack,
-          tabSyncPoints: updatedSyncPoints,
-        });
         setJamTracks((prev) =>
           prev.map((jt) =>
             jt.id === currentJamTrack.id
@@ -1070,10 +997,6 @@ export default function Home() {
       );
 
       if (response.ok) {
-        setCurrentJamTrack({
-          ...currentJamTrack,
-          tabSyncPoints: [],
-        });
         setJamTracks((prev) =>
           prev.map((jt) =>
             jt.id === currentJamTrack.id ? { ...jt, tabSyncPoints: [] } : jt
@@ -1110,14 +1033,6 @@ export default function Home() {
       });
       if (response.ok) {
         const newMarker: JamTrackMarker = await response.json();
-        // Update the current jam track's markers
-        if (currentJamTrack && currentJamTrack.id === jamTrackId) {
-          setCurrentJamTrack({
-            ...currentJamTrack,
-            markers: [...currentJamTrack.markers, newMarker],
-          });
-        }
-        // Also update in the jamTracks list
         setJamTracks((prev) =>
           prev.map((jt) =>
             jt.id === jamTrackId
@@ -1139,20 +1054,10 @@ export default function Home() {
         body: JSON.stringify({ markerId, timestamp }),
       });
       if (response.ok) {
-        const updateMarkers = (markers: JamTrackMarker[]) =>
-          markers.map((m) => (m.id === markerId ? { ...m, timestamp } : m));
-
-        if (currentJamTrack) {
-          setCurrentJamTrack({
-            ...currentJamTrack,
-            markers: updateMarkers(currentJamTrack.markers),
-          });
-        }
-
         setJamTracks((prev) =>
           prev.map((jt) =>
             jt.id === jamTrackId
-              ? { ...jt, markers: updateMarkers(jt.markers) }
+              ? { ...jt, markers: jt.markers.map(m => m.id === markerId ? { ...m, timestamp } : m) }
               : jt
           )
         );
@@ -1170,20 +1075,10 @@ export default function Home() {
         body: JSON.stringify({ markerId, name }),
       });
       if (response.ok) {
-        const updateMarkers = (markers: JamTrackMarker[]) =>
-          markers.map((m) => (m.id === markerId ? { ...m, name } : m));
-
-        if (currentJamTrack) {
-          setCurrentJamTrack({
-            ...currentJamTrack,
-            markers: updateMarkers(currentJamTrack.markers),
-          });
-        }
-
         setJamTracks((prev) =>
           prev.map((jt) =>
             jt.id === jamTrackId
-              ? { ...jt, markers: updateMarkers(jt.markers) }
+              ? { ...jt, markers: jt.markers.map(m => m.id === markerId ? { ...m, name } : m) }
               : jt
           )
         );
@@ -1199,20 +1094,10 @@ export default function Home() {
         method: "DELETE",
       });
       if (response.ok) {
-        const updateMarkers = (markers: JamTrackMarker[]) =>
-          markers.filter((m) => m.id !== markerId);
-
-        if (currentJamTrack) {
-          setCurrentJamTrack({
-            ...currentJamTrack,
-            markers: updateMarkers(currentJamTrack.markers),
-          });
-        }
-
         setJamTracks((prev) =>
           prev.map((jt) =>
             jt.id === jamTrackId
-              ? { ...jt, markers: updateMarkers(jt.markers) }
+              ? { ...jt, markers: jt.markers.filter(m => m.id !== markerId) }
               : jt
           )
         );
@@ -1228,13 +1113,6 @@ export default function Home() {
         method: "DELETE",
       });
       if (response.ok) {
-        if (currentJamTrack && currentJamTrack.id === jamTrackId) {
-          setCurrentJamTrack({
-            ...currentJamTrack,
-            markers: [],
-          });
-        }
-
         setJamTracks((prev) =>
           prev.map((jt) =>
             jt.id === jamTrackId ? { ...jt, markers: [] } : jt
@@ -1264,7 +1142,7 @@ export default function Home() {
   useEffect(() => {
     setSelectedVideo(null);
     setShowVideo(false);
-  }, [selectedBook?.id]);
+  }, [selectedBookId]);
 
 
   return (
@@ -1302,18 +1180,23 @@ export default function Home() {
 
                 {/* Content: BookGrid OR TrackListView OR InProgressGrid OR JamTracksView */}
                 <div className="flex-1 min-w-0">
-                  {selectedBook && selectedAuthor ? (
+                  {selectedBookId && !selectedBookDetail ? (
+                    <div className="h-full flex items-center justify-center bg-gray-900">
+                      <div className="w-8 h-8 border-4 border-gray-600 border-t-gray-400 rounded-full animate-spin"></div>
+                    </div>
+                  ) : selectedBookDetail && selectedAuthor ? (
                     <TrackListView
                       author={selectedAuthor}
-                      book={selectedBook}
+                      book={selectedBookDetail}
                       currentTrack={currentTrack}
                       selectedVideo={selectedVideo}
                       showVideo={showVideo}
-                      onTrackSelect={handleTrackSelect}
+                      onTrackSelect={(track) => handleTrackSelect(track)}
                       onVideoSelect={handleVideoSelect}
                       onToggleVideo={() => setShowVideo(!showVideo)}
                       onBack={() => {
                         setSelectedBookId(null);
+                        setSelectedBookDetail(null);
                         if (isInProgressSelected) {
                           updateLibraryUrl(null, null);
                         } else {

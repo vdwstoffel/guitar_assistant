@@ -3,40 +3,19 @@ import { prisma } from "@/lib/prisma";
 
 export async function GET() {
   try {
-    const [authors, jamTracks] = await Promise.all([
+    const [authorsRaw, jamTracks] = await Promise.all([
       prisma.author.findMany({
         include: {
           books: {
+            orderBy: { name: "asc" },
             include: {
+              _count: { select: { tracks: true } },
               tracks: {
+                take: 1,
                 orderBy: { trackNumber: "asc" },
-                include: {
-                  markers: {
-                    orderBy: { timestamp: "asc" },
-                  },
-                },
-              },
-              videos: {
-                orderBy: { sortOrder: "asc" },
-              },
-              chapters: {
-                orderBy: { sortOrder: "asc" },
-                include: {
-                  tracks: {
-                    orderBy: { sortOrder: "asc" },
-                    include: {
-                      markers: {
-                        orderBy: { timestamp: "asc" },
-                      },
-                    },
-                  },
-                  videos: {
-                    orderBy: { sortOrder: "asc" },
-                  },
-                },
+                select: { filePath: true },
               },
             },
-            orderBy: { name: "asc" },
           },
         },
         orderBy: { name: "asc" },
@@ -53,6 +32,21 @@ export async function GET() {
         orderBy: { title: "asc" },
       }),
     ]);
+
+    // Transform to lightweight AuthorSummary format
+    const authors = authorsRaw.map((author) => ({
+      id: author.id,
+      name: author.name,
+      books: author.books.map((book) => ({
+        id: book.id,
+        name: book.name,
+        authorId: book.authorId,
+        pdfPath: book.pdfPath,
+        inProgress: book.inProgress,
+        trackCount: book._count.tracks,
+        coverTrackPath: book.tracks[0]?.filePath ?? null,
+      })),
+    }));
 
     return NextResponse.json({ authors, jamTracks });
   } catch (error) {

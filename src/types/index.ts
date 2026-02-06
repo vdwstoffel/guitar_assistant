@@ -38,6 +38,8 @@ export interface Book {
   authorId: string;
   pdfPath: string | null;
   inProgress: boolean;
+  trackCount: number;
+  coverTrackPath: string | null;
   tracks: Track[];
   videos?: BookVideo[];
   chapters?: Chapter[];
@@ -100,6 +102,23 @@ export interface JamTrack {
   markers: JamTrackMarker[];
   tabSyncPoints: TabSyncPoint[];
   createdAt: string;
+}
+
+// Lightweight types for library listing (no tracks/chapters/markers)
+export interface BookSummary {
+  id: string;
+  name: string;
+  authorId: string;
+  pdfPath: string | null;
+  inProgress: boolean;
+  trackCount: number;
+  coverTrackPath: string | null;
+}
+
+export interface AuthorSummary {
+  id: string;
+  name: string;
+  books: BookSummary[];
 }
 
 // Backwards compatibility aliases (for gradual migration)

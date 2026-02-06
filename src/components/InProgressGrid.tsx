@@ -1,19 +1,18 @@
 "use client";
 
 import { useState } from "react";
-import { Author, Book } from "@/types";
+import { AuthorSummary, BookSummary } from "@/types";
 
 interface InProgressBookCardProps {
-  book: Book;
-  author: Author;
+  book: BookSummary;
+  author: AuthorSummary;
   onClick: () => void;
 }
 
 function InProgressBookCard({ book, author, onClick }: InProgressBookCardProps) {
   const [hasError, setHasError] = useState(false);
 
-  const firstTrack = book.tracks[0];
-  const artUrl = firstTrack ? `/api/albumart/${encodeURIComponent(firstTrack.filePath)}` : null;
+  const artUrl = book.coverTrackPath ? `/api/albumart/${encodeURIComponent(book.coverTrackPath)}` : null;
 
   return (
     <button
@@ -48,15 +47,15 @@ function InProgressBookCard({ book, author, onClick }: InProgressBookCardProps) 
 
       {/* Track Count */}
       <p className="text-gray-500 text-xs mt-1">
-        {book.tracks.length} track{book.tracks.length !== 1 ? "s" : ""}
+        {book.trackCount} track{book.trackCount !== 1 ? "s" : ""}
       </p>
     </button>
   );
 }
 
 interface InProgressGridProps {
-  books: { book: Book; author: Author }[];
-  onBookSelect: (book: Book, author: Author) => void;
+  books: { book: BookSummary; author: AuthorSummary }[];
+  onBookSelect: (book: BookSummary, author: AuthorSummary) => void;
 }
 
 export default function InProgressGrid({ books, onBookSelect }: InProgressGridProps) {

@@ -1,15 +1,14 @@
 "use client";
 
 import { useState, memo, useEffect } from "react";
-import { Author, Book, Track, BookVideo, Chapter } from "@/types";
+import { AuthorSummary, Book, Track, BookVideo, Chapter } from "@/types";
 import ChapterSection from "./ChapterSection";
 
 const BookCover = memo(function BookCover({ book }: { book: Book }) {
   const [hasError, setHasError] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
 
-  const firstTrack = book.tracks[0];
-  const artUrl = firstTrack ? `/api/albumart/${encodeURIComponent(firstTrack.filePath)}` : null;
+  const artUrl = book.coverTrackPath ? `/api/albumart/${encodeURIComponent(book.coverTrackPath)}` : null;
 
   if (!artUrl || hasError) {
     return (
@@ -80,7 +79,7 @@ function BookEditModal({ book, authorName, onClose, onSave }: BookEditModalProps
       <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md mx-4 shadow-xl">
         <h3 className="text-lg font-semibold mb-4 text-white">Edit Book Info</h3>
         <p className="text-sm text-gray-400 mb-4">
-          This will update all {book.tracks.length} track{book.tracks.length !== 1 ? "s" : ""} in this book.
+          This will update all {book.trackCount} track{book.trackCount !== 1 ? "s" : ""} in this book.
         </p>
         <div className="space-y-4">
           <div>
@@ -556,12 +555,12 @@ function ChapterEditModal({ chapter, onClose, onSave }: ChapterEditModalProps) {
 }
 
 interface TrackListViewProps {
-  author: Author;
+  author: AuthorSummary;
   book: Book;
   currentTrack: Track | null;
   selectedVideo: BookVideo | null;
   showVideo: boolean;
-  onTrackSelect: (track: Track, author: Author, book: Book) => void;
+  onTrackSelect: (track: Track, author: AuthorSummary, book: Book) => void;
   onVideoSelect: (video: BookVideo) => void;
   onToggleVideo: () => void;
   onBack: () => void;
@@ -848,7 +847,7 @@ export default function TrackListView({
           </div>
           <p className="text-gray-400">{author.name}</p>
           <p className="text-gray-500 text-sm mt-1">
-            {book.tracks.length} track{book.tracks.length !== 1 ? "s" : ""}
+            {book.trackCount} track{book.trackCount !== 1 ? "s" : ""}
           </p>
 
           {/* PDF controls */}
@@ -981,8 +980,8 @@ export default function TrackListView({
 
       {/* Uncategorized Tracks and Videos */}
       {(() => {
-        const uncategorizedTracks = book.tracks.filter(t => !t.chapterId);
-        const uncategorizedVideos = book.videos?.filter(v => !v.chapterId) || [];
+        const uncategorizedTracks = book.tracks; // Already filtered by API (only uncategorized)
+        const uncategorizedVideos = book.videos || []; // Already filtered by API
         const hasUncategorized = uncategorizedTracks.length > 0 || uncategorizedVideos.length > 0;
 
         if (!hasUncategorized) return null;

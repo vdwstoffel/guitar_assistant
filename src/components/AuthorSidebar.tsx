@@ -1,12 +1,12 @@
 "use client";
 
 import { useRef } from "react";
-import { Author } from "@/types";
+import { AuthorSummary } from "@/types";
 
 interface AuthorSidebarProps {
-  authors: Author[];
-  selectedAuthor: Author | null;
-  onAuthorSelect: (author: Author) => void;
+  authors: AuthorSummary[];
+  selectedAuthor: AuthorSummary | null;
+  onAuthorSelect: (author: AuthorSummary) => void;
   onScan: () => void;
   onUpload: (files: FileList) => Promise<void>;
   onVideoUploadClick: () => void;
