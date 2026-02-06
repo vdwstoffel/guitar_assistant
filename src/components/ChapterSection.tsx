@@ -61,6 +61,9 @@ export default function ChapterSection({
     .sort((a, b) => (a.trackNumber || a.sortOrder || 0) - (b.trackNumber || b.sortOrder || 0));
 
   const totalItems = sortedTracks.length + sortedVideos.length;
+  const allCompleted = totalItems > 0
+    && sortedTracks.every((t) => t.completed)
+    && sortedVideos.every((v) => v.completed);
 
   const handleDelete = async () => {
     if (!onChapterDelete) return;
@@ -85,7 +88,11 @@ export default function ChapterSection({
   return (
     <div className="mb-4">
       {/* Chapter Header */}
-      <div className="flex items-center gap-2 px-3 py-2 bg-gray-800 rounded-t group hover:bg-gray-750 transition-colors">
+      <div className={`flex items-center gap-2 px-3 py-2 rounded-t group transition-colors ${
+        allCompleted
+          ? "bg-green-900/40 hover:bg-green-900/50"
+          : "bg-gray-800 hover:bg-gray-750"
+      }`}>
         <button
           onClick={onToggleExpanded}
           className="flex items-center gap-2 flex-1 text-left"
@@ -105,10 +112,15 @@ export default function ChapterSection({
               d="M9 5l7 7-7 7"
             />
           </svg>
-          <span className="font-semibold text-white">{chapter.name}</span>
+          <span className={`font-semibold ${allCompleted ? "text-green-300" : "text-white"}`}>{chapter.name}</span>
           <span className="text-sm text-gray-500">
             ({totalItems} item{totalItems !== 1 ? "s" : ""})
           </span>
+          {allCompleted && (
+            <svg className="w-4 h-4 text-green-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+            </svg>
+          )}
         </button>
 
         {/* Chapter Actions */}
