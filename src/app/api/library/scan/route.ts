@@ -28,6 +28,27 @@ function padTrackNumber(trackNumber: number, totalTracks: number): string {
   return trackNumber.toString().padStart(2, "0");
 }
 
+// Extract track number from video filename (e.g., "001 - First String Notes.mp4" → 1)
+function extractTrackNumberFromFilename(filename: string): number | null {
+  // Match leading digits followed by optional separator (space, dash, underscore, dot)
+  const match = filename.match(/^(\d+)[\s\-_.]*/);
+  if (match) {
+    const num = parseInt(match[1], 10);
+    return isNaN(num) ? null : num;
+  }
+  return null;
+}
+
+// Extract title from video filename (e.g., "001 - Power Chords 1.mp4" → "Power Chords 1")
+function extractTitleFromFilename(filename: string): string {
+  // Remove extension
+  const withoutExt = filename.replace(/\.[^.]+$/, "");
+  // Remove leading track number and separator (digits followed by space/dash/underscore/dot combinations)
+  const withoutNumber = withoutExt.replace(/^\d+[\s\-_.]*/, "");
+  // Return the cleaned title, or the filename without extension if nothing left
+  return withoutNumber.trim() || withoutExt;
+}
+
 interface ScannedTrack {
   title: string;
   trackNumber: number;
@@ -46,9 +67,11 @@ interface ScannedJamTrack {
 
 interface ScannedVideo {
   filename: string;
+  title: string;
   filePath: string;
   duration: number | null;
   bookId: string;
+  trackNumber: number | null;
 }
 
 const JAM_TRACKS_FOLDER = "JamTracks";
@@ -196,11 +219,15 @@ async function scanBookVideos(bookId: string, bookFolderPath: string): Promise<S
         console.error(`Error getting video duration for ${videoFullPath}:`, err);
       }
 
+      const trackNumber = extractTrackNumberFromFilename(entry.name);
+      const title = extractTitleFromFilename(entry.name);
       videos.push({
         filename: entry.name,
+        title,
         filePath: path.relative(musicPath, videoFullPath),
         duration,
         bookId,
+        trackNumber,
       });
     }
   } catch (err) {
@@ -413,14 +440,20 @@ export async function POST() {
             where: { filePath: video.filePath },
             update: {
               filename: video.filename,
+              title: video.title,
               duration: video.duration,
               bookId: video.bookId,
+              trackNumber: video.trackNumber,
+              sortOrder: video.trackNumber ?? 0,
             },
             create: {
               filename: video.filename,
+              title: video.title,
               filePath: video.filePath,
               duration: video.duration,
               bookId: video.bookId,
+              trackNumber: video.trackNumber,
+              sortOrder: video.trackNumber ?? 0,
             },
           });
         }
