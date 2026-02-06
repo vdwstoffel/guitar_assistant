@@ -266,17 +266,60 @@ async function scanMusicFolder(): Promise<ScannedTrack[]> {
   return tracks;
 }
 
+async function discoverVideoOnlyBooks(): Promise<Map<string, Set<string>>> {
+  const musicPath = path.resolve(MUSIC_DIR);
+  const videoOnlyBooks = new Map<string, Set<string>>();
+
+  try {
+    const authorDirs = await fs.readdir(musicPath, { withFileTypes: true });
+
+    for (const authorEntry of authorDirs) {
+      if (!authorEntry.isDirectory()) continue;
+      if (authorEntry.name === JAM_TRACKS_FOLDER) continue;
+
+      const authorPath = path.join(musicPath, authorEntry.name);
+      const bookDirs = await fs.readdir(authorPath, { withFileTypes: true });
+
+      for (const bookEntry of bookDirs) {
+        if (!bookEntry.isDirectory()) continue;
+
+        const bookPath = path.join(authorPath, bookEntry.name);
+        const videosPath = path.join(bookPath, "videos");
+
+        // Check if book has a videos folder with video files
+        try {
+          await fs.access(videosPath);
+          const videoEntries = await fs.readdir(videosPath, { withFileTypes: true });
+          const hasVideos = videoEntries.some(entry => {
+            const ext = path.extname(entry.name).toLowerCase();
+            return entry.isFile() && SUPPORTED_VIDEO_EXTENSIONS.includes(ext);
+          });
+
+          if (hasVideos) {
+            if (!videoOnlyBooks.has(authorEntry.name)) {
+              videoOnlyBooks.set(authorEntry.name, new Set());
+            }
+            videoOnlyBooks.get(authorEntry.name)!.add(bookEntry.name);
+          }
+        } catch {
+          // No videos folder, skip
+        }
+      }
+    }
+  } catch (err) {
+    console.error("Error discovering video-only books:", err);
+  }
+
+  return videoOnlyBooks;
+}
+
 export async function POST() {
   try {
     const musicPath = path.resolve(MUSIC_DIR);
     const tracks = await scanMusicFolder();
 
-    if (tracks.length === 0) {
-      return NextResponse.json({
-        message: "No tracks found in music folder",
-        count: 0,
-      });
-    }
+    // Discover books that might have only videos (no audio tracks)
+    const videoOnlyBooks = await discoverVideoOnlyBooks();
 
     // Group tracks by author and book
     const authorBookMap = new Map<
@@ -293,6 +336,26 @@ export async function POST() {
         bookMap.set(track.book, []);
       }
       bookMap.get(track.book)!.push(track);
+    }
+
+    // Add video-only books to the map with empty track arrays
+    for (const [authorName, bookNames] of videoOnlyBooks) {
+      if (!authorBookMap.has(authorName)) {
+        authorBookMap.set(authorName, new Map());
+      }
+      const bookMap = authorBookMap.get(authorName)!;
+      for (const bookName of bookNames) {
+        if (!bookMap.has(bookName)) {
+          bookMap.set(bookName, []);
+        }
+      }
+    }
+
+    if (authorBookMap.size === 0) {
+      return NextResponse.json({
+        message: "No tracks or videos found in music folder",
+        count: 0,
+      });
     }
 
     // Upsert authors, books, and tracks
@@ -395,9 +458,14 @@ export async function POST() {
       });
     }
 
-    // Clean up empty books
+    // Clean up empty books (only delete if no tracks AND no videos)
     await prisma.book.deleteMany({
-      where: { tracks: { none: {} } },
+      where: {
+        AND: [
+          { tracks: { none: {} } },
+          { videos: { none: {} } },
+        ],
+      },
     });
 
     // Clean up empty authors
