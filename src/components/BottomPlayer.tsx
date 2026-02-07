@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useEffect, useCallback, memo } from "react";
+import { useRef, useState, useEffect, useCallback, memo, useMemo } from "react";
 import { Track, Marker, JamTrack, JamTrackMarker } from "@/types";
 import WaveSurfer from "wavesurfer.js";
 import RegionsPlugin from "wavesurfer.js/dist/plugins/regions.js";
@@ -814,9 +814,9 @@ function BottomPlayer({
               {/* Markers List - Spread across full width and centered */}
               {track.markers.length > 0 && (
                 <div className="flex flex-wrap justify-evenly items-center gap-2 mt-2 w-full">
-                  {track.markers
+                  {[...track.markers]
                     .sort((a, b) => a.timestamp - b.timestamp)
-                    .map((marker: Marker) => (
+                    .map((marker) => (
                       <div
                         key={marker.id}
                         className="flex items-center gap-1 px-2 py-1 bg-gray-700 rounded text-xs group"

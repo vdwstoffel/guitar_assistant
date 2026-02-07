@@ -51,8 +51,7 @@ export default function PdfViewer({
   const pageHeights = useRef<Map<number, number>>(new Map());
 
   // Stable URL that busts cache when pdfPath or version changes
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const pdfUrl = useMemo(() => `/api/pdf/${encodeURIComponent(pdfPath)}?v=${Date.now()}`, [pdfPath, version]);
+  const pdfUrl = useMemo(() => `/api/pdf/${encodeURIComponent(pdfPath)}?v=${version}`, [pdfPath, version]);
 
   useEffect(() => {
     const updateWidth = () => {

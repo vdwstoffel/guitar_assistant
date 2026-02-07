@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef, useCallback, memo } from "react";
+import { useEffect, useState, useRef, useCallback, memo, useMemo } from "react";
 import { Marker, JamTrackMarker } from "@/types";
 import { createTapTempo } from "@/lib/tapTempo";
 
@@ -118,6 +118,12 @@ const MarkersBar = memo(function MarkersBar({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [visible, markers, onJumpToMarker]);
 
+  // Memoize sorted markers to avoid re-sorting on every render
+  const sortedMarkers = useMemo(
+    () => [...markers].sort((a, b) => a.timestamp - b.timestamp),
+    [markers]
+  );
+
   if (!visible) return null;
 
   return (
@@ -226,9 +232,7 @@ const MarkersBar = memo(function MarkersBar({
       {/* Markers List - Spread across full width and centered */}
       {markers.length > 0 && (
         <div className="flex flex-wrap justify-evenly items-center gap-2 mt-2 w-full">
-          {markers
-            .sort((a, b) => a.timestamp - b.timestamp)
-            .map((marker: Marker, index: number) => {
+          {sortedMarkers.map((marker, index) => {
               const isPassed = marker.timestamp <= currentTime;
               // Show shortcut key: 1-9 for first 9, 0 for 10th
               const shortcutKey = index < 9 ? String(index + 1) : index === 9 ? '0' : null;

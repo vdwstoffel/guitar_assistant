@@ -145,6 +145,9 @@ export default function Metronome() {
       if (timerIdRef.current !== null) {
         clearTimeout(timerIdRef.current);
       }
+      if (audioContextRef.current) {
+        audioContextRef.current.close();
+      }
     };
   }, []);
 
