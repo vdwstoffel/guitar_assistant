@@ -385,80 +385,100 @@ export async function POST() {
       });
     }
 
-    // Upsert authors, books, and tracks
-    for (const [authorName, books] of authorBookMap) {
-      const author = await prisma.author.upsert({
-        where: { name: authorName },
-        update: {},
-        create: { name: authorName },
-      });
+    // Pre-scan all book videos (file I/O) before the transaction
+    const bookVideoMap = new Map<string, ScannedVideo[]>();
+    const bookPdfMap = new Map<string, string | null>();
 
-      for (const [bookName, bookTracks] of books) {
-        // Check for PDF in the book folder
+    for (const [authorName, books] of authorBookMap) {
+      for (const [bookName] of books) {
+        const bookKey = `${authorName}/${bookName}`;
         const bookFolderPath = path.join(musicPath, authorName, bookName);
         const pdfFullPath = await findPdfInFolder(bookFolderPath);
-        const pdfPath = pdfFullPath ? path.relative(musicPath, pdfFullPath) : null;
-
-        const book = await prisma.book.upsert({
-          where: {
-            name_authorId: {
-              name: bookName,
-              authorId: author.id,
-            },
-          },
-          update: { pdfPath },
-          create: {
-            name: bookName,
-            authorId: author.id,
-            pdfPath,
-          },
-        });
-
-        for (const track of bookTracks) {
-          await prisma.track.upsert({
-            where: { filePath: track.filePath },
-            update: {
-              title: track.title,
-              trackNumber: track.trackNumber,
-              duration: track.duration,
-              bookId: book.id,
-            },
-            create: {
-              title: track.title,
-              trackNumber: track.trackNumber,
-              duration: track.duration,
-              filePath: track.filePath,
-              bookId: book.id,
-            },
-          });
-        }
-
-        // Scan for videos in this book's folder
-        const bookVideos = await scanBookVideos(book.id, bookFolderPath);
-        for (const video of bookVideos) {
-          await prisma.bookVideo.upsert({
-            where: { filePath: video.filePath },
-            update: {
-              filename: video.filename,
-              title: video.title,
-              duration: video.duration,
-              bookId: video.bookId,
-              trackNumber: video.trackNumber,
-              sortOrder: video.trackNumber ?? 0,
-            },
-            create: {
-              filename: video.filename,
-              title: video.title,
-              filePath: video.filePath,
-              duration: video.duration,
-              bookId: video.bookId,
-              trackNumber: video.trackNumber,
-              sortOrder: video.trackNumber ?? 0,
-            },
-          });
-        }
+        bookPdfMap.set(bookKey, pdfFullPath ? path.relative(musicPath, pdfFullPath) : null);
+        // Use a placeholder bookId; we'll set the real one inside the transaction
+        bookVideoMap.set(bookKey, await scanBookVideos("", bookFolderPath));
       }
     }
+
+    // Upsert authors, books, tracks, and videos in a single transaction
+    await prisma.$transaction(async (tx) => {
+      for (const [authorName, books] of authorBookMap) {
+        const author = await tx.author.upsert({
+          where: { name: authorName },
+          update: {},
+          create: { name: authorName },
+        });
+
+        for (const [bookName, bookTracks] of books) {
+          const bookKey = `${authorName}/${bookName}`;
+          const pdfPath = bookPdfMap.get(bookKey) ?? null;
+
+          const book = await tx.book.upsert({
+            where: {
+              name_authorId: {
+                name: bookName,
+                authorId: author.id,
+              },
+            },
+            update: { pdfPath },
+            create: {
+              name: bookName,
+              authorId: author.id,
+              pdfPath,
+            },
+          });
+
+          // Batch upsert all tracks for this book in parallel
+          await Promise.all(
+            bookTracks.map((track) =>
+              tx.track.upsert({
+                where: { filePath: track.filePath },
+                update: {
+                  title: track.title,
+                  trackNumber: track.trackNumber,
+                  duration: track.duration,
+                  bookId: book.id,
+                },
+                create: {
+                  title: track.title,
+                  trackNumber: track.trackNumber,
+                  duration: track.duration,
+                  filePath: track.filePath,
+                  bookId: book.id,
+                },
+              })
+            )
+          );
+
+          // Batch upsert all videos for this book in parallel
+          const bookVideos = bookVideoMap.get(bookKey) || [];
+          await Promise.all(
+            bookVideos.map((video) =>
+              tx.bookVideo.upsert({
+                where: { filePath: video.filePath },
+                update: {
+                  filename: video.filename,
+                  title: video.title,
+                  duration: video.duration,
+                  bookId: book.id,
+                  trackNumber: video.trackNumber,
+                  sortOrder: video.trackNumber ?? 0,
+                },
+                create: {
+                  filename: video.filename,
+                  title: video.title,
+                  filePath: video.filePath,
+                  duration: video.duration,
+                  bookId: book.id,
+                  trackNumber: video.trackNumber,
+                  sortOrder: video.trackNumber ?? 0,
+                },
+              })
+            )
+          );
+        }
+      }
+    });
 
     // Clean up: remove tracks that no longer exist on disk
     const validPaths = new Set(tracks.map((t: ScannedTrack) => t.filePath));
@@ -638,26 +658,29 @@ export async function POST() {
 
     // Scan and process JamTracks folder
     const jamTracks = await scanJamTracksFolder();
-    let jamTracksAdded = 0;
     let jamTracksRemoved = 0;
 
-    for (const jamTrack of jamTracks) {
-      await prisma.jamTrack.upsert({
-        where: { filePath: jamTrack.filePath },
-        update: {
-          title: jamTrack.title,
-          duration: jamTrack.duration,
-          pdfPath: jamTrack.pdfPath,
-        },
-        create: {
-          title: jamTrack.title,
-          duration: jamTrack.duration,
-          filePath: jamTrack.filePath,
-          pdfPath: jamTrack.pdfPath,
-        },
-      });
-      jamTracksAdded++;
-    }
+    // Batch upsert all jam tracks in a single transaction
+    await prisma.$transaction(async (tx) => {
+      await Promise.all(
+        jamTracks.map((jamTrack) =>
+          tx.jamTrack.upsert({
+            where: { filePath: jamTrack.filePath },
+            update: {
+              title: jamTrack.title,
+              duration: jamTrack.duration,
+              pdfPath: jamTrack.pdfPath,
+            },
+            create: {
+              title: jamTrack.title,
+              duration: jamTrack.duration,
+              filePath: jamTrack.filePath,
+              pdfPath: jamTrack.pdfPath,
+            },
+          })
+        )
+      );
+    });
 
     // Clean up orphaned jam tracks
     const validJamPaths = new Set(jamTracks.map((t) => t.filePath));
