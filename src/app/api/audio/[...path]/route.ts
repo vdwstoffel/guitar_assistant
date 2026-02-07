@@ -34,6 +34,26 @@ export async function GET(
     };
     const contentType = mimeTypes[ext] || "application/octet-stream";
 
+    const etag = `"${stat.mtimeMs.toString(36)}-${fileSize.toString(36)}"`;
+    const lastModified = stat.mtime.toUTCString();
+
+    // Handle conditional requests
+    const ifNoneMatch = request.headers.get("if-none-match");
+    const ifModifiedSince = request.headers.get("if-modified-since");
+
+    if (ifNoneMatch === etag || (ifModifiedSince && new Date(ifModifiedSince) >= stat.mtime)) {
+      return new NextResponse(null, {
+        status: 304,
+        headers: { ETag: etag, "Last-Modified": lastModified },
+      });
+    }
+
+    const cacheHeaders = {
+      "Cache-Control": "public, max-age=86400, immutable",
+      ETag: etag,
+      "Last-Modified": lastModified,
+    };
+
     if (range) {
       const parts = range.replace(/bytes=/, "").split("-");
       const start = parseInt(parts[0], 10);
@@ -52,6 +72,7 @@ export async function GET(
       return new NextResponse(readableStream, {
         status: 206,
         headers: {
+          ...cacheHeaders,
           "Content-Range": `bytes ${start}-${end}/${fileSize}`,
           "Accept-Ranges": "bytes",
           "Content-Length": chunkSize.toString(),
@@ -71,6 +92,7 @@ export async function GET(
 
     return new NextResponse(readableStream, {
       headers: {
+        ...cacheHeaders,
         "Content-Length": fileSize.toString(),
         "Content-Type": contentType,
         "Accept-Ranges": "bytes",
