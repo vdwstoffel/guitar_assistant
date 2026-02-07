@@ -56,7 +56,7 @@ export async function GET(
     // Check cache first
     const cached = albumArtCache.get(filePath);
     if (cached) {
-      return new NextResponse(cached.data, {
+      return new NextResponse(new Uint8Array(cached.data), {
         headers: {
           "Content-Type": cached.format,
           "Cache-Control": "public, max-age=31536000, immutable",
