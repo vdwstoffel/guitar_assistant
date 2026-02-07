@@ -315,16 +315,30 @@ function BottomPlayer({
     const container = waveformContainerRef.current;
     if (!container) return;
 
+    let scrollRafId: number | null = null;
+    let resizeRafId: number | null = null;
+
     const handleScroll = () => {
-      setScrollLeft(container.scrollLeft);
+      // Throttle scroll updates with requestAnimationFrame to prevent
+      // excessive state updates on every scroll event
+      if (scrollRafId !== null) return;
+      scrollRafId = requestAnimationFrame(() => {
+        setScrollLeft(container.scrollLeft);
+        scrollRafId = null;
+      });
     };
 
     const handleResize = () => {
-      setContainerWidth(container.clientWidth);
+      // Throttle resize updates with requestAnimationFrame
+      if (resizeRafId !== null) return;
+      resizeRafId = requestAnimationFrame(() => {
+        setContainerWidth(container.clientWidth);
+        resizeRafId = null;
+      });
     };
 
     // Initial measurement
-    handleResize();
+    setContainerWidth(container.clientWidth);
 
     container.addEventListener("scroll", handleScroll);
     window.addEventListener("resize", handleResize);
@@ -332,6 +346,13 @@ function BottomPlayer({
     return () => {
       container.removeEventListener("scroll", handleScroll);
       window.removeEventListener("resize", handleResize);
+      // Clean up any pending animation frames to prevent memory leaks
+      if (scrollRafId !== null) {
+        cancelAnimationFrame(scrollRafId);
+      }
+      if (resizeRafId !== null) {
+        cancelAnimationFrame(resizeRafId);
+      }
     };
   }, [track, isLoading]);
 
