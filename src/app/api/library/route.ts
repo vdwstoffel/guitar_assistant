@@ -25,8 +25,9 @@ export async function GET() {
           markers: {
             orderBy: { timestamp: "asc" },
           },
-          tabSyncPoints: {
-            orderBy: { audioTime: "asc" },
+          pdfs: {
+            include: { pageSyncPoints: { orderBy: { timeInSeconds: "asc" } } },
+            orderBy: { sortOrder: "asc" },
           },
         },
         orderBy: { title: "asc" },

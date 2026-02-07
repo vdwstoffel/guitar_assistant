@@ -15,11 +15,10 @@ import CircleOfFifths from "@/components/CircleOfFifths";
 import PdfViewer from "@/components/PdfViewer";
 import Videos from "@/components/Videos";
 import Tools from "@/components/Tools";
-import AlphaTabViewer from "@/components/AlphaTabViewer";
-import SyncPointControls from "@/components/SyncPointControls";
+import PageSyncEditor from "@/components/PageSyncEditor";
 import VideoUploadModal from "@/components/VideoUploadModal";
 import VideoPlayer from "@/components/VideoPlayer";
-import { AuthorSummary, BookSummary, Book, Track, Marker, JamTrack, JamTrackMarker, TabSyncPoint, BookVideo } from "@/types";
+import { AuthorSummary, BookSummary, Book, Track, Marker, JamTrack, JamTrackMarker, BookVideo } from "@/types";
 
 type Section = 'library' | 'videos' | 'fretboard' | 'tools' | 'circle';
 
@@ -123,14 +122,15 @@ export default function Home() {
   // Marker bar state from BottomPlayer
   const [markerBarState, setMarkerBarState] = useState<MarkerBarState | null>(null);
 
-  // AlphaTab sync state
-  const [syncEditMode, setSyncEditMode] = useState(false);
-  const [pendingTabTick, setPendingTabTick] = useState<number | null>(null);
-  const [pendingBarIndex, setPendingBarIndex] = useState<number | null>(null);
+  // Audio time state (used for page sync)
   const [currentAudioTime, setCurrentAudioTime] = useState(0);
   const [audioIsPlaying, setAudioIsPlaying] = useState(false);
-  const [tabVersion, setTabVersion] = useState(0);
   const seekFnRef = useRef<((time: number) => void) | null>(null);
+
+  // Page sync state for jam track PDFs
+  const [pageSyncEditMode, setPageSyncEditMode] = useState(false);
+  const [activePdfId, setActivePdfId] = useState<string | null>(null);
+  const [activePdfPage, setActivePdfPage] = useState(1);
 
   // Refs for stable BottomPlayer callbacks (avoids new function references every render)
   const currentJamTrackRef = useRef(currentJamTrack);
@@ -403,9 +403,9 @@ export default function Home() {
     setCurrentTrack(null);
     setCurrentAuthorId(null);
     setCurrentBookId(null);
-    if (jamTrack.pdfPath) {
-      setPdfPath(jamTrack.pdfPath);
-    }
+    setPageSyncEditMode(false);
+    setActivePdfId(null);
+    setActivePdfPage(1);
   };
 
   const handleMarkerAdd = async (
@@ -870,9 +870,10 @@ export default function Home() {
     }
   };
 
-  const handleJamTrackPdfUpload = async (jamTrackId: string, file: File) => {
+  const handleJamTrackPdfUpload = async (jamTrackId: string, file: File, name: string) => {
     const formData = new FormData();
     formData.append("pdf", file);
+    formData.append("name", name);
 
     try {
       const response = await fetch(`/api/jamtracks/${jamTrackId}/pdf`, {
@@ -885,27 +886,29 @@ export default function Home() {
         setJamTracks((prev) =>
           prev.map((jt) => (jt.id === jamTrackId ? updatedJamTrack : jt))
         );
-        if (currentJamTrackId === jamTrackId && updatedJamTrack.pdfPath) {
-          setPdfPath(updatedJamTrack.pdfPath);
-        }
       }
     } catch (error) {
       console.error("Error uploading jam track PDF:", error);
     }
   };
 
-  const handleJamTrackPdfDelete = async (jamTrackId: string) => {
+  const handleJamTrackPdfDelete = async (jamTrackId: string, pdfId: string) => {
     try {
-      const response = await fetch(`/api/jamtracks/${jamTrackId}/pdf`, {
+      const response = await fetch(`/api/jamtracks/${jamTrackId}/pdf?pdfId=${pdfId}`, {
         method: "DELETE",
       });
 
       if (response.ok) {
         setJamTracks((prev) =>
-          prev.map((jt) => (jt.id === jamTrackId ? { ...jt, pdfPath: null } : jt))
+          prev.map((jt) =>
+            jt.id === jamTrackId
+              ? { ...jt, pdfs: jt.pdfs.filter((p) => p.id !== pdfId) }
+              : jt
+          )
         );
-        if (currentJamTrackId === jamTrackId) {
-          setPdfPath(null);
+        if (activePdfId === pdfId) {
+          setActivePdfId(null);
+          setActivePdfPage(1);
         }
       }
     } catch (error) {
@@ -913,149 +916,107 @@ export default function Home() {
     }
   };
 
-  // Jam Track Tab handlers
-  const handleJamTrackTabUpload = async (jamTrackId: string, file: File) => {
-    const formData = new FormData();
-    formData.append("tab", file);
+  // Page Sync Point handlers for jam track PDFs
+  const handleActivePdfChange = useCallback((pdfId: string, page: number) => {
+    setActivePdfId(pdfId);
+    setActivePdfPage(page);
+  }, []);
 
-    try {
-      const response = await fetch(`/api/jamtracks/${jamTrackId}/tab`, {
-        method: "POST",
-        body: formData,
-      });
-
-      if (response.ok) {
-        const updatedJamTrack = await response.json();
-        setJamTracks((prev) =>
-          prev.map((jt) => (jt.id === jamTrackId ? updatedJamTrack : jt))
-        );
-        if (currentJamTrackId === jamTrackId) {
-          setTabVersion((v) => v + 1);
-        }
-      }
-    } catch (error) {
-      console.error("Error uploading jam track tab:", error);
-    }
-  };
-
-  const handleJamTrackTabDelete = async (jamTrackId: string) => {
-    try {
-      const response = await fetch(`/api/jamtracks/${jamTrackId}/tab`, {
-        method: "DELETE",
-      });
-
-      if (response.ok) {
-        setJamTracks((prev) =>
-          prev.map((jt) =>
-            jt.id === jamTrackId ? { ...jt, tabPath: null, tabSyncPoints: [] } : jt
-          )
-        );
-        if (currentJamTrackId === jamTrackId) {
-          setSyncEditMode(false);
-          setPendingTabTick(null);
-          setPendingBarIndex(null);
-        }
-      }
-    } catch (error) {
-      console.error("Error deleting jam track tab:", error);
-    }
-  };
-
-  // Sync Point handlers
-  const handleAddSyncPoint = async () => {
-    if (!currentJamTrack || pendingTabTick === null) return;
+  const handleAddPageSyncPoint = async () => {
+    if (!currentJamTrack || !activePdfId) return;
 
     try {
       const response = await fetch(
-        `/api/jamtracks/${currentJamTrack.id}/syncpoints`,
+        `/api/jamtracks/${currentJamTrack.id}/pdf/${activePdfId}/syncpoints`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            audioTime: currentAudioTime,
-            tabTick: pendingTabTick,
-            barIndex: pendingBarIndex,
+            timeInSeconds: currentAudioTime,
+            pageNumber: activePdfPage,
           }),
         }
       );
 
       if (response.ok) {
-        const newSyncPoint: TabSyncPoint = await response.json();
-        const updatedSyncPoints = [
-          ...currentJamTrack.tabSyncPoints,
-          newSyncPoint,
-        ].sort((a, b) => a.audioTime - b.audioTime);
-
+        const newSyncPoint = await response.json();
         setJamTracks((prev) =>
           prev.map((jt) =>
             jt.id === currentJamTrack.id
-              ? { ...jt, tabSyncPoints: updatedSyncPoints }
-              : jt
-          )
-        );
-        setPendingTabTick(null);
-        setPendingBarIndex(null);
-      }
-    } catch (error) {
-      console.error("Error adding sync point:", error);
-    }
-  };
-
-  const handleDeleteSyncPoint = async (syncPointId: string) => {
-    if (!currentJamTrack) return;
-
-    try {
-      const response = await fetch(
-        `/api/jamtracks/${currentJamTrack.id}/syncpoints?syncPointId=${syncPointId}`,
-        { method: "DELETE" }
-      );
-
-      if (response.ok) {
-        const updatedSyncPoints = currentJamTrack.tabSyncPoints.filter(
-          (sp) => sp.id !== syncPointId
-        );
-        setJamTracks((prev) =>
-          prev.map((jt) =>
-            jt.id === currentJamTrack.id
-              ? { ...jt, tabSyncPoints: updatedSyncPoints }
+              ? {
+                  ...jt,
+                  pdfs: jt.pdfs.map((pdf) =>
+                    pdf.id === activePdfId
+                      ? { ...pdf, pageSyncPoints: [...pdf.pageSyncPoints, newSyncPoint] }
+                      : pdf
+                  ),
+                }
               : jt
           )
         );
       }
     } catch (error) {
-      console.error("Error deleting sync point:", error);
+      console.error("Error adding page sync point:", error);
     }
   };
 
-  const handleClearSyncPoints = async () => {
-    if (!currentJamTrack) return;
+  const handleDeletePageSyncPoint = async (syncPointId: string) => {
+    if (!currentJamTrack || !activePdfId) return;
 
     try {
       const response = await fetch(
-        `/api/jamtracks/${currentJamTrack.id}/syncpoints`,
+        `/api/jamtracks/${currentJamTrack.id}/pdf/${activePdfId}/syncpoints?syncPointId=${syncPointId}`,
         { method: "DELETE" }
       );
 
       if (response.ok) {
         setJamTracks((prev) =>
           prev.map((jt) =>
-            jt.id === currentJamTrack.id ? { ...jt, tabSyncPoints: [] } : jt
+            jt.id === currentJamTrack.id
+              ? {
+                  ...jt,
+                  pdfs: jt.pdfs.map((pdf) =>
+                    pdf.id === activePdfId
+                      ? { ...pdf, pageSyncPoints: pdf.pageSyncPoints.filter((sp) => sp.id !== syncPointId) }
+                      : pdf
+                  ),
+                }
+              : jt
           )
         );
       }
     } catch (error) {
-      console.error("Error clearing sync points:", error);
+      console.error("Error deleting page sync point:", error);
     }
   };
 
-  const handleTabClick = (tabTick: number, barIndex: number) => {
-    setPendingTabTick(tabTick);
-    setPendingBarIndex(barIndex);
-  };
+  const handleClearPageSyncPoints = async () => {
+    if (!currentJamTrack || !activePdfId) return;
 
-  const handleSeekFromTab = (audioTime: number) => {
-    if (seekFnRef.current) {
-      seekFnRef.current(audioTime);
+    try {
+      const response = await fetch(
+        `/api/jamtracks/${currentJamTrack.id}/pdf/${activePdfId}/syncpoints`,
+        { method: "DELETE" }
+      );
+
+      if (response.ok) {
+        setJamTracks((prev) =>
+          prev.map((jt) =>
+            jt.id === currentJamTrack.id
+              ? {
+                  ...jt,
+                  pdfs: jt.pdfs.map((pdf) =>
+                    pdf.id === activePdfId
+                      ? { ...pdf, pageSyncPoints: [] }
+                      : pdf
+                  ),
+                }
+              : jt
+          )
+        );
+      }
+    } catch (error) {
+      console.error("Error clearing page sync points:", error);
     }
   };
 
@@ -1342,11 +1303,8 @@ export default function Home() {
                       onJamTrackUpdate={handleJamTrackUpdate}
                       onJamTrackComplete={handleJamTrackComplete}
                       onJamTrackDelete={handleJamTrackDelete}
-                      onShowPdf={handleShowPdf}
                       onPdfUpload={handleJamTrackPdfUpload}
                       onPdfDelete={handleJamTrackPdfDelete}
-                      onTabUpload={handleJamTrackTabUpload}
-                      onTabDelete={handleJamTrackTabDelete}
                       onUpload={handleJamTrackUpload}
                       isUploading={isUploadingJamTracks}
                     />
@@ -1396,38 +1354,41 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Tab/PDF/Video Panel - Always visible, 50% width */}
+            {/* PDF/Video Panel - Always visible, 50% width */}
             <div className="w-1/2 flex flex-col">
-              {currentJamTrack?.tabPath ? (
-                <>
-                  <SyncPointControls
-                    syncPoints={currentJamTrack.tabSyncPoints}
-                    syncEditMode={syncEditMode}
-                    onToggleSyncEditMode={() => setSyncEditMode(!syncEditMode)}
-                    currentAudioTime={currentAudioTime}
-                    pendingTabTick={pendingTabTick}
-                    pendingBarIndex={pendingBarIndex}
-                    onAddSyncPoint={handleAddSyncPoint}
-                    onDeleteSyncPoint={handleDeleteSyncPoint}
-                    onClearSyncPoints={handleClearSyncPoints}
-                  />
-                  <div className="flex-1 overflow-hidden">
-                    <AlphaTabViewer
-                      tabPath={currentJamTrack.tabPath}
-                      syncPoints={currentJamTrack.tabSyncPoints}
-                      currentAudioTime={currentAudioTime}
-                      onSeek={handleSeekFromTab}
-                      onTabClick={handleTabClick}
-                      syncEditMode={syncEditMode}
-                      version={tabVersion}
-                    />
-                  </div>
-                </>
-              ) : selectedVideo && showVideo ? (
+              {selectedVideo && showVideo ? (
                 /* Video Player - Full Height */
                 <div className="flex-1 overflow-hidden">
                   <VideoPlayer video={selectedVideo} />
                 </div>
+              ) : currentJamTrack && currentJamTrack.pdfs.length > 0 ? (
+                <>
+                  {(() => {
+                    const activePdf = currentJamTrack.pdfs.find(p => p.id === activePdfId) || currentJamTrack.pdfs[0];
+                    return activePdf ? (
+                      <PageSyncEditor
+                        pdfId={activePdf.id}
+                        pdfName={activePdf.name}
+                        syncPoints={activePdf.pageSyncPoints}
+                        syncEditMode={pageSyncEditMode}
+                        onToggleSyncEditMode={() => setPageSyncEditMode(!pageSyncEditMode)}
+                        currentAudioTime={currentAudioTime}
+                        currentVisiblePage={activePdfPage}
+                        onAddSyncPoint={handleAddPageSyncPoint}
+                        onDeleteSyncPoint={handleDeletePageSyncPoint}
+                        onClearSyncPoints={handleClearPageSyncPoints}
+                      />
+                    ) : null;
+                  })()}
+                  <div className="flex-1 overflow-hidden">
+                    <PdfViewer
+                      pdfs={currentJamTrack.pdfs}
+                      currentAudioTime={currentAudioTime}
+                      audioIsPlaying={audioIsPlaying}
+                      onActivePdfChange={handleActivePdfChange}
+                    />
+                  </div>
+                </>
               ) : pdfPath ? (
                 <PdfViewer
                   pdfPath={pdfPath}
@@ -1441,7 +1402,7 @@ export default function Home() {
                     <svg className="w-16 h-16 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                     </svg>
-                    <p className="text-lg">Select a book with a PDF or jam track with a tab</p>
+                    <p className="text-lg">Select a book with a PDF or jam track with sheets</p>
                   </div>
                 </div>
               )}

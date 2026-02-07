@@ -9,7 +9,6 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@coderline/alphatab": "^1.8.1",
     "@types/fluent-ffmpeg": "^2.1.28",
     "fluent-ffmpeg": "^2.1.3",
     "music-metadata": "^11.11.1",

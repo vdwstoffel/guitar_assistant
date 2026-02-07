@@ -8,6 +8,10 @@ export async function GET() {
         markers: {
           orderBy: { timestamp: "asc" },
         },
+        pdfs: {
+          include: { pageSyncPoints: { orderBy: { timeInSeconds: "asc" } } },
+          orderBy: { sortOrder: "asc" },
+        },
       },
       orderBy: { title: "asc" },
     });

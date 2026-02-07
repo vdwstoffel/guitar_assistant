@@ -81,12 +81,20 @@ export interface JamTrackMarker {
   jamTrackId: string;
 }
 
-export interface TabSyncPoint {
+export interface PageSyncPoint {
   id: string;
-  audioTime: number;
-  tabTick: number;
-  barIndex: number | null;
+  timeInSeconds: number;
+  pageNumber: number;
+  jamTrackPdfId: string;
+}
+
+export interface JamTrackPdf {
+  id: string;
+  name: string;
+  filePath: string;
+  sortOrder: number;
   jamTrackId: string;
+  pageSyncPoints: PageSyncPoint[];
 }
 
 export interface JamTrack {
@@ -94,13 +102,11 @@ export interface JamTrack {
   title: string;
   filePath: string;
   duration: number;
-  pdfPath: string | null;
-  tabPath: string | null;
   completed: boolean;
   tempo: number | null;
   timeSignature: string;
   markers: JamTrackMarker[];
-  tabSyncPoints: TabSyncPoint[];
+  pdfs: JamTrackPdf[];
   createdAt: string;
 }
 

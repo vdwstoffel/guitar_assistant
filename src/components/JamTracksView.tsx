@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, memo } from "react";
+import { useState, useRef, useEffect, memo } from "react";
 import { JamTrack } from "@/types";
 
 interface JamTrackEditModalProps {
@@ -99,11 +99,8 @@ interface JamTracksViewProps {
   onJamTrackUpdate?: (jamTrackId: string, title: string, tempo: number | null, timeSignature: string) => Promise<void>;
   onJamTrackComplete?: (jamTrackId: string, completed: boolean) => Promise<void>;
   onJamTrackDelete?: (jamTrackId: string) => Promise<void>;
-  onShowPdf?: (pdfPath: string) => void;
-  onPdfUpload?: (jamTrackId: string, file: File) => Promise<void>;
-  onPdfDelete?: (jamTrackId: string) => Promise<void>;
-  onTabUpload?: (jamTrackId: string, file: File) => Promise<void>;
-  onTabDelete?: (jamTrackId: string) => Promise<void>;
+  onPdfUpload?: (jamTrackId: string, file: File, name: string) => Promise<void>;
+  onPdfDelete?: (jamTrackId: string, pdfId: string) => Promise<void>;
   onUpload?: (files: FileList) => Promise<void>;
   isUploading?: boolean;
 }
@@ -115,19 +112,25 @@ const JamTracksView = memo(function JamTracksView({
   onJamTrackUpdate,
   onJamTrackComplete,
   onJamTrackDelete,
-  onShowPdf,
   onPdfUpload,
   onPdfDelete,
-  onTabUpload,
-  onTabDelete,
   onUpload,
   isUploading,
 }: JamTracksViewProps) {
   const [editingJamTrack, setEditingJamTrack] = useState<JamTrack | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const fileInputRefs = useRef<Map<string, HTMLInputElement>>(new Map());
-  const tabInputRefs = useRef<Map<string, HTMLInputElement>>(new Map());
+  const [pdfUpload, setPdfUpload] = useState<{ jamTrackId: string; file: File } | null>(null);
+  const [pdfName, setPdfName] = useState("");
+  const [isUploadingPdf, setIsUploadingPdf] = useState(false);
   const uploadInputRef = useRef<HTMLInputElement>(null);
+  const pdfNameInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (pdfUpload && pdfNameInputRef.current) {
+      pdfNameInputRef.current.focus();
+      pdfNameInputRef.current.select();
+    }
+  }, [pdfUpload]);
 
   const formatDuration = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -145,6 +148,34 @@ const JamTracksView = memo(function JamTracksView({
     }
   };
 
+  const handlePdfUploadClick = (jamTrackId: string) => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".pdf";
+    input.onchange = (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (file) {
+        setPdfName(file.name.replace(/\.pdf$/i, ""));
+        setPdfUpload({ jamTrackId, file });
+      }
+    };
+    input.click();
+  };
+
+  const handlePdfUploadConfirm = async () => {
+    if (!pdfUpload || !pdfName.trim() || !onPdfUpload) return;
+    setIsUploadingPdf(true);
+    try {
+      await onPdfUpload(pdfUpload.jamTrackId, pdfUpload.file, pdfName.trim());
+      setPdfUpload(null);
+      setPdfName("");
+    } catch (error) {
+      console.error("Failed to upload PDF:", error);
+    } finally {
+      setIsUploadingPdf(false);
+    }
+  };
+
   return (
     <div className="h-full overflow-y-auto bg-gray-900 p-6">
       {/* Edit Modal */}
@@ -154,6 +185,51 @@ const JamTracksView = memo(function JamTracksView({
           onClose={() => setEditingJamTrack(null)}
           onSave={onJamTrackUpdate}
         />
+      )}
+
+      {/* PDF Upload Name Modal */}
+      {pdfUpload && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-sm mx-4 shadow-xl">
+            <h3 className="text-lg font-semibold mb-4 text-white">Add PDF</h3>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Name</label>
+                <input
+                  ref={pdfNameInputRef}
+                  type="text"
+                  value={pdfName}
+                  onChange={(e) => setPdfName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && pdfName.trim()) handlePdfUploadConfirm();
+                    if (e.key === "Escape") { setPdfUpload(null); setPdfName(""); }
+                  }}
+                  placeholder="e.g. Rhythm Guitar"
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:border-purple-500"
+                />
+              </div>
+              <p className="text-xs text-gray-500">
+                File: {pdfUpload.file.name}
+              </p>
+            </div>
+            <div className="flex justify-end gap-3 mt-5">
+              <button
+                onClick={() => { setPdfUpload(null); setPdfName(""); }}
+                disabled={isUploadingPdf}
+                className="px-4 py-2 text-gray-400 hover:text-white transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handlePdfUploadConfirm}
+                disabled={isUploadingPdf || !pdfName.trim()}
+                className="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded font-medium transition-colors text-white"
+              >
+                {isUploadingPdf ? "Uploading..." : "Upload"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Header */}
@@ -251,14 +327,11 @@ const JamTracksView = memo(function JamTracksView({
                   {jamTrack.title}
                 </span>
 
-                {/* Tab indicator */}
-                {jamTrack.tabPath && (
-                  <span className="text-purple-400 text-xs flex-shrink-0">TAB</span>
-                )}
-
-                {/* PDF indicator */}
-                {jamTrack.pdfPath && (
-                  <span className="text-blue-400 text-xs flex-shrink-0">PDF</span>
+                {/* PDF count indicator */}
+                {jamTrack.pdfs.length > 0 && (
+                  <span className="text-blue-400 text-xs flex-shrink-0">
+                    {jamTrack.pdfs.length === 1 ? "PDF" : `${jamTrack.pdfs.length} PDFs`}
+                  </span>
                 )}
 
                 {/* Completion circle */}
@@ -305,87 +378,42 @@ const JamTracksView = memo(function JamTracksView({
 
               {/* Actions row */}
               <div className="flex items-center gap-2 px-4 pb-3 pt-0 flex-wrap">
-                {/* Tab controls */}
-                {jamTrack.tabPath ? (
-                  <>
-                    <span className="flex items-center gap-1 px-2 py-1 bg-purple-600/20 rounded text-xs text-purple-300">
-                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
-                      </svg>
-                      Tab loaded
-                    </span>
-                    {onTabDelete && (
-                      <button
-                        onClick={() => onTabDelete(jamTrack.id)}
-                        className="text-xs text-red-400 hover:text-red-300"
-                      >
-                        Remove Tab
-                      </button>
-                    )}
-                  </>
-                ) : onTabUpload && (
-                  <label className="flex items-center gap-1 px-2 py-1 bg-purple-700 hover:bg-purple-600 rounded text-xs text-white cursor-pointer">
+                {/* PDF list */}
+                {jamTrack.pdfs.map((pdf) => (
+                  <div key={pdf.id} className="flex items-center gap-1 px-2 py-1 bg-blue-600/20 rounded text-xs text-blue-300">
                     <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                     </svg>
-                    Add Tab
-                    <input
-                      type="file"
-                      accept=".gp,.gp3,.gp4,.gp5,.gpx"
-                      className="hidden"
-                      ref={(el) => {
-                        if (el) tabInputRefs.current.set(jamTrack.id, el);
-                      }}
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) onTabUpload(jamTrack.id, file);
-                        e.target.value = '';
-                      }}
-                    />
-                  </label>
-                )}
-
-                {/* PDF controls */}
-                {jamTrack.pdfPath ? (
-                  <>
-                    <button
-                      onClick={() => onShowPdf?.(jamTrack.pdfPath!)}
-                      className="flex items-center gap-1 px-2 py-1 bg-blue-600 hover:bg-blue-700 rounded text-xs text-white"
-                    >
-                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                      </svg>
-                      View PDF
-                    </button>
+                    <span>{pdf.name}</span>
                     {onPdfDelete && (
                       <button
-                        onClick={() => onPdfDelete(jamTrack.id)}
-                        className="text-xs text-red-400 hover:text-red-300"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onPdfDelete(jamTrack.id, pdf.id);
+                        }}
+                        className="text-red-400 hover:text-red-300 ml-1"
+                        title="Remove PDF"
                       >
-                        Remove PDF
+                        &times;
                       </button>
                     )}
-                  </>
-                ) : onPdfUpload && (
-                  <label className="flex items-center gap-1 px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded text-xs text-gray-300 cursor-pointer">
+                  </div>
+                ))}
+
+                {/* Add PDF button */}
+                {onPdfUpload && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handlePdfUploadClick(jamTrack.id);
+                    }}
+                    className="flex items-center gap-1 px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded text-xs text-gray-300 transition-colors"
+                  >
                     <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                     </svg>
                     Add PDF
-                    <input
-                      type="file"
-                      accept=".pdf"
-                      className="hidden"
-                      ref={(el) => {
-                        if (el) fileInputRefs.current.set(jamTrack.id, el);
-                      }}
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) onPdfUpload(jamTrack.id, file);
-                        e.target.value = '';
-                      }}
-                    />
-                  </label>
+                  </button>
                 )}
 
                 {onJamTrackDelete && (

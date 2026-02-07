@@ -42,7 +42,7 @@ The codebase recently migrated naming conventions:
 - `src/app/api/` - API routes for library, books, tracks, markers, videos, streaming
 - `src/components/` - React components (BottomPlayer.tsx is the main audio player at ~715 lines)
 - `src/lib/prisma.ts` - Prisma client singleton
-- `src/types/index.ts` - TypeScript interfaces for Author, Book, Track, Marker, Video
+- `src/types/index.ts` - TypeScript interfaces for Author, Book, Track, Marker, Video, JamTrack, JamTrackPdf, PageSyncPoint
 - `music/` - Local music files organized by author/book
 - `prisma/` - Schema, migrations, and SQLite database
 
@@ -54,8 +54,10 @@ The codebase recently migrated naming conventions:
 ### Jam Tracks
 Standalone play-along tracks (backing tracks, songs) that exist outside the Author → Book hierarchy:
 - Stored in `music/JamTracks/` folder, one subfolder per track
-- Each jam track can have its own PDF (stored as `sheet.pdf` in the track folder)
-- API endpoints: `/api/jamtracks/`, `/api/jamtracks/[id]/`, `/api/jamtracks/[id]/markers/`, `/api/jamtracks/[id]/pdf/`
+- Each jam track supports **multiple named PDFs** (e.g., "Rhythm Guitar", "Lead Guitar") via `JamTrackPdf` model
+- PDFs are displayed in a tabbed viewer with automatic page-flipping synced to audio playback via `PageSyncPoint` records
+- Library scan auto-discovers all PDF files in each jam track folder
+- API endpoints: `/api/jamtracks/`, `/api/jamtracks/[id]/`, `/api/jamtracks/[id]/markers/`, `/api/jamtracks/[id]/pdf/`, `/api/jamtracks/[id]/pdf/[pdfId]/syncpoints/`
 
 ### Important: File Uploads
 **All content must be uploaded through the application UI.** Do not suggest manually copying files into the music folders. The correct workflow is:
@@ -78,9 +80,10 @@ URL query params persist library selection state (author/book).
 - **Track** → has audio file, duration, PDF page reference, completion status, has many Markers
 - **Marker** → timestamp annotation on a Track
 - **Video** → YouTube video with sort order
-- **JamTrack** → standalone play-along track with audio, optional PDF/tab, has JamTrackMarkers and TabSyncPoints
+- **JamTrack** → standalone play-along track with audio, has JamTrackMarkers and multiple JamTrackPdfs
 - **JamTrackMarker** → timestamp annotation on a JamTrack
-- **TabSyncPoint** → maps audio time to alphaTab tick position for cursor synchronization
+- **JamTrackPdf** → named PDF file attached to a JamTrack (e.g., "Rhythm Guitar"), has PageSyncPoints
+- **PageSyncPoint** → maps audio time (seconds) to a PDF page number for automatic page-flipping
 
 All models use UUID primary keys. Cascade deletes are configured on foreign keys.
 

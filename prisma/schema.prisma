@@ -107,13 +107,11 @@ model JamTrack {
   title         String
   filePath      String           @unique
   duration      Float
-  pdfPath       String?
-  tabPath       String?
   completed     Boolean          @default(false)
   tempo         Int?
   timeSignature String           @default("4/4")
   markers       JamTrackMarker[]
-  tabSyncPoints TabSyncPoint[]
+  pdfs          JamTrackPdf[]
   createdAt     DateTime         @default(now())
 }
 
@@ -127,13 +125,24 @@ model JamTrackMarker {
   @@index([jamTrackId])
 }
 
-model TabSyncPoint {
-  id         String   @id @default(uuid())
-  audioTime  Float
-  tabTick    Int
-  barIndex   Int?
-  jamTrackId String
-  jamTrack   JamTrack @relation(fields: [jamTrackId], references: [id], onDelete: Cascade)
+model JamTrackPdf {
+  id             String          @id @default(uuid())
+  name           String
+  filePath       String          @unique
+  sortOrder      Int             @default(0)
+  jamTrackId     String
+  jamTrack       JamTrack        @relation(fields: [jamTrackId], references: [id], onDelete: Cascade)
+  pageSyncPoints PageSyncPoint[]
 
   @@index([jamTrackId])
+}
+
+model PageSyncPoint {
+  id            String      @id @default(uuid())
+  timeInSeconds Float
+  pageNumber    Int
+  jamTrackPdfId String
+  jamTrackPdf   JamTrackPdf @relation(fields: [jamTrackPdfId], references: [id], onDelete: Cascade)
+
+  @@index([jamTrackPdfId])
 }

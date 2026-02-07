@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import dynamic from "next/dynamic";
+import { PageSyncPoint } from "@/types";
 
 // Dynamically import react-pdf to avoid SSR issues
 const Document = dynamic(
@@ -22,23 +23,39 @@ if (typeof window !== "undefined") {
   });
 }
 
-interface PdfViewerProps {
+interface SinglePdfViewerProps {
   pdfPath: string;
   currentPage: number;
   onPageChange: (page: number) => void;
-  version?: number; // Cache-busting version
+  version?: number;
+}
+
+interface MultiPdfViewerProps {
+  pdfs: {
+    id: string;
+    name: string;
+    filePath: string;
+    pageSyncPoints: PageSyncPoint[];
+  }[];
+  currentAudioTime: number;
+  audioIsPlaying: boolean;
+  onActivePdfChange?: (pdfId: string, page: number) => void;
+  syncEditMode?: boolean;
+  version?: number;
 }
 
 // Only render pages within this distance from the visible page
 const PAGE_BUFFER = 2; // Renders current page ± 2 pages (5 total)
 const ESTIMATED_PAGE_HEIGHT = 1100; // Fallback height for unrendered pages
 
-export default function PdfViewer({
+// ─── Internal Single PDF Viewer ───────────────────────────────────────
+
+function SinglePdfViewerInner({
   pdfPath,
   currentPage,
   onPageChange,
   version = 0,
-}: PdfViewerProps) {
+}: SinglePdfViewerProps) {
   const [numPages, setNumPages] = useState<number>(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -366,6 +383,170 @@ export default function PdfViewer({
             })}
         </Document>
       </div>
+    </div>
+  );
+}
+
+// ─── Multi-PDF Viewer with Tabs and Page Sync ─────────────────────────
+
+function MultiPdfViewer({
+  pdfs,
+  currentAudioTime,
+  audioIsPlaying,
+  onActivePdfChange,
+  syncEditMode = false,
+  version = 0,
+}: MultiPdfViewerProps) {
+  const [activeTabIndex, setActiveTabIndex] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [autoPageFlip, setAutoPageFlip] = useState(true);
+  const lastAutoFlipPage = useRef<number>(0);
+  const prevPdfsIdRef = useRef<string>("");
+
+  const activePdf = pdfs[activeTabIndex];
+  const syncPoints = activePdf?.pageSyncPoints || [];
+
+  // Reset tab index when the jam track changes (pdfs array identity changes)
+  const pdfsId = pdfs.map(p => p.id).join(",");
+  useEffect(() => {
+    if (pdfsId !== prevPdfsIdRef.current) {
+      prevPdfsIdRef.current = pdfsId;
+      setActiveTabIndex(0);
+      setCurrentPage(1);
+      lastAutoFlipPage.current = 0;
+    }
+  }, [pdfsId]);
+
+  // Auto page-flip logic
+  useEffect(() => {
+    if (!autoPageFlip || !audioIsPlaying || syncEditMode || syncPoints.length === 0) return;
+
+    const sorted = [...syncPoints].sort((a, b) => a.timeInSeconds - b.timeInSeconds);
+
+    // Find the sync point with largest timeInSeconds <= currentAudioTime
+    let targetPage: number | null = null;
+    for (let i = sorted.length - 1; i >= 0; i--) {
+      if (currentAudioTime >= sorted[i].timeInSeconds) {
+        targetPage = sorted[i].pageNumber;
+        break;
+      }
+    }
+
+    if (targetPage !== null && targetPage !== lastAutoFlipPage.current) {
+      lastAutoFlipPage.current = targetPage;
+      setCurrentPage(targetPage);
+    }
+  }, [currentAudioTime, audioIsPlaying, syncEditMode, syncPoints, autoPageFlip]);
+
+  // Notify parent of active PDF and page changes
+  useEffect(() => {
+    if (onActivePdfChange && activePdf) {
+      onActivePdfChange(activePdf.id, currentPage);
+    }
+  }, [activePdf?.id, currentPage, onActivePdfChange]);
+
+  const handleTabChange = (index: number) => {
+    setActiveTabIndex(index);
+    setCurrentPage(1);
+    lastAutoFlipPage.current = 0;
+  };
+
+  const handlePageChange = useCallback((page: number) => {
+    setCurrentPage(page);
+  }, []);
+
+  if (pdfs.length === 0) {
+    return (
+      <div className="h-full flex items-center justify-center bg-gray-900 text-gray-500">
+        <p>No PDFs available for this jam track</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col h-full bg-gray-900">
+      {/* Tab Bar */}
+      <div className="flex items-center gap-2 px-3 py-2 bg-gray-800 border-b border-gray-700 overflow-x-auto">
+        {pdfs.map((pdf, index) => (
+          <button
+            key={pdf.id}
+            onClick={() => handleTabChange(index)}
+            className={`px-3 py-1.5 text-sm rounded transition-colors whitespace-nowrap ${
+              index === activeTabIndex
+                ? "bg-purple-600 text-white"
+                : "bg-gray-700 text-gray-300 hover:bg-gray-600"
+            }`}
+          >
+            {pdf.name}
+          </button>
+        ))}
+
+        {/* Auto page-flip toggle */}
+        {syncPoints.length > 0 && (
+          <button
+            onClick={() => setAutoPageFlip(!autoPageFlip)}
+            className={`ml-auto flex items-center gap-1 px-2 py-1.5 text-xs rounded transition-colors ${
+              autoPageFlip
+                ? "bg-green-600/30 text-green-400 hover:bg-green-600/40"
+                : "bg-gray-700 text-gray-500 hover:bg-gray-600"
+            }`}
+            title={autoPageFlip ? "Auto page-flip is ON" : "Auto page-flip is OFF"}
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+            </svg>
+            Sync
+          </button>
+        )}
+      </div>
+
+      {/* PDF Viewer */}
+      <div className="flex-1 min-h-0">
+        <SinglePdfViewerInner
+          pdfPath={activePdf.filePath}
+          currentPage={currentPage}
+          onPageChange={handlePageChange}
+          version={version}
+        />
+      </div>
+    </div>
+  );
+}
+
+// ─── Exported PdfViewer (dispatches based on props) ───────────────────
+
+type PdfViewerProps =
+  | (SinglePdfViewerProps & { pdfs?: undefined })
+  | (MultiPdfViewerProps & { pdfPath?: undefined; currentPage?: undefined; onPageChange?: undefined });
+
+export default function PdfViewer(props: PdfViewerProps) {
+  if ("pdfPath" in props && props.pdfPath) {
+    return (
+      <SinglePdfViewerInner
+        pdfPath={props.pdfPath}
+        currentPage={props.currentPage}
+        onPageChange={props.onPageChange}
+        version={props.version}
+      />
+    );
+  }
+
+  if ("pdfs" in props && props.pdfs) {
+    return (
+      <MultiPdfViewer
+        pdfs={props.pdfs}
+        currentAudioTime={props.currentAudioTime}
+        audioIsPlaying={props.audioIsPlaying}
+        onActivePdfChange={props.onActivePdfChange}
+        syncEditMode={props.syncEditMode}
+        version={props.version}
+      />
+    );
+  }
+
+  return (
+    <div className="h-full flex items-center justify-center bg-gray-900 text-gray-500">
+      <p>No PDF to display</p>
     </div>
   );
 }

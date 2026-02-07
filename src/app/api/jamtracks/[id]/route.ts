@@ -27,6 +27,10 @@ export async function GET(
         markers: {
           orderBy: { timestamp: "asc" },
         },
+        pdfs: {
+          include: { pageSyncPoints: { orderBy: { timeInSeconds: "asc" } } },
+          orderBy: { sortOrder: "asc" },
+        },
       },
     });
 
@@ -107,6 +111,10 @@ export async function PATCH(
         markers: {
           orderBy: { timestamp: "asc" },
         },
+        pdfs: {
+          include: { pageSyncPoints: { orderBy: { timeInSeconds: "asc" } } },
+          orderBy: { sortOrder: "asc" },
+        },
       },
     });
 
@@ -129,6 +137,7 @@ export async function DELETE(
 
     const jamTrack = await prisma.jamTrack.findUnique({
       where: { id },
+      include: { pdfs: true },
     });
 
     if (!jamTrack) {
@@ -145,12 +154,13 @@ export async function DELETE(
       console.warn(`Could not delete audio file: ${audioPath}`);
     }
 
-    if (jamTrack.pdfPath) {
-      const pdfPath = path.join(musicPath, jamTrack.pdfPath);
+    // Delete all associated PDF files
+    for (const pdf of jamTrack.pdfs) {
+      const pdfAbsPath = path.join(musicPath, pdf.filePath);
       try {
-        await fs.unlink(pdfPath);
+        await fs.unlink(pdfAbsPath);
       } catch {
-        console.warn(`Could not delete PDF file: ${pdfPath}`);
+        console.warn(`Could not delete PDF file: ${pdfAbsPath}`);
       }
     }
 
@@ -165,7 +175,7 @@ export async function DELETE(
       // Ignore folder cleanup errors
     }
 
-    // Delete from database
+    // Delete from database (cascades to pdfs and their sync points)
     await prisma.jamTrack.delete({
       where: { id },
     });

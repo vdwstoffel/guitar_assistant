@@ -62,7 +62,7 @@ interface ScannedJamTrack {
   title: string;
   duration: number;
   filePath: string;
-  pdfPath: string | null;
+  pdfFiles: { name: string; filePath: string }[];
 }
 
 interface ScannedVideo {
@@ -153,9 +153,9 @@ async function scanJamTracksFolder(): Promise<ScannedJamTrack[]> {
     const trackFolder = path.join(jamTracksPath, entry.name);
     const folderEntries = await fs.readdir(trackFolder, { withFileTypes: true });
 
-    // Find audio file in folder
+    // Find audio file and all PDF files in folder
     let audioFile: string | null = null;
-    let pdfFile: string | null = null;
+    const pdfFiles: { name: string; path: string }[] = [];
 
     for (const fileEntry of folderEntries) {
       if (!fileEntry.isFile()) continue;
@@ -163,8 +163,11 @@ async function scanJamTracksFolder(): Promise<ScannedJamTrack[]> {
       const ext = path.extname(fileEntry.name).toLowerCase();
       if (SUPPORTED_EXTENSIONS.includes(ext) && !audioFile) {
         audioFile = path.join(trackFolder, fileEntry.name);
-      } else if (ext === ".pdf" && !pdfFile) {
-        pdfFile = path.join(trackFolder, fileEntry.name);
+      } else if (ext === ".pdf") {
+        pdfFiles.push({
+          name: fileEntry.name.replace(/\.pdf$/i, ""),
+          path: path.join(trackFolder, fileEntry.name),
+        });
       }
     }
 
@@ -179,7 +182,10 @@ async function scanJamTracksFolder(): Promise<ScannedJamTrack[]> {
         title,
         duration,
         filePath: path.relative(musicPath, audioFile),
-        pdfPath: pdfFile ? path.relative(musicPath, pdfFile) : null,
+        pdfFiles: pdfFiles.map(pdf => ({
+          name: pdf.name,
+          filePath: path.relative(musicPath, pdf.path),
+        })),
       });
     } catch (err) {
       console.error(`Error parsing jam track ${audioFile}:`, err);
@@ -660,26 +666,51 @@ export async function POST() {
     const jamTracks = await scanJamTracksFolder();
     let jamTracksRemoved = 0;
 
-    // Batch upsert all jam tracks in a single transaction
+    // Batch upsert all jam tracks and their PDFs in a single transaction
     await prisma.$transaction(async (tx) => {
-      await Promise.all(
-        jamTracks.map((jamTrack) =>
-          tx.jamTrack.upsert({
-            where: { filePath: jamTrack.filePath },
-            update: {
-              title: jamTrack.title,
-              duration: jamTrack.duration,
-              pdfPath: jamTrack.pdfPath,
-            },
-            create: {
-              title: jamTrack.title,
-              duration: jamTrack.duration,
-              filePath: jamTrack.filePath,
-              pdfPath: jamTrack.pdfPath,
-            },
-          })
-        )
-      );
+      for (const jamTrack of jamTracks) {
+        const upsertedJamTrack = await tx.jamTrack.upsert({
+          where: { filePath: jamTrack.filePath },
+          update: {
+            title: jamTrack.title,
+            duration: jamTrack.duration,
+          },
+          create: {
+            title: jamTrack.title,
+            duration: jamTrack.duration,
+            filePath: jamTrack.filePath,
+          },
+        });
+
+        // Get existing PDFs for this jam track
+        const existingPdfs = await tx.jamTrackPdf.findMany({
+          where: { jamTrackId: upsertedJamTrack.id },
+        });
+        const existingPdfPaths = new Set(existingPdfs.map(p => p.filePath));
+
+        // Create new PDFs found on disk
+        let sortOrder = existingPdfs.length;
+        for (const pdfFile of jamTrack.pdfFiles) {
+          if (!existingPdfPaths.has(pdfFile.filePath)) {
+            await tx.jamTrackPdf.create({
+              data: {
+                name: pdfFile.name,
+                filePath: pdfFile.filePath,
+                sortOrder,
+                jamTrackId: upsertedJamTrack.id,
+              },
+            });
+            sortOrder++;
+          }
+        }
+
+        // Remove PDFs that no longer exist on disk
+        const scannedPdfPaths = new Set(jamTrack.pdfFiles.map(p => p.filePath));
+        const pdfsToDelete = existingPdfs.filter(p => !scannedPdfPaths.has(p.filePath));
+        for (const pdf of pdfsToDelete) {
+          await tx.jamTrackPdf.delete({ where: { id: pdf.id } });
+        }
+      }
     });
 
     // Clean up orphaned jam tracks
