@@ -413,8 +413,10 @@ export default function Home() {
   };
 
   const handleVideoSelect = (video: BookVideo) => {
+    // Preserve video view if already showing a video, otherwise default to PDF
+    const wasShowingVideo = selectedVideo !== null && showVideo;
     setSelectedVideo(video);
-    setShowVideo(false);
+    setShowVideo(wasShowingVideo);
     setCurrentTrack(null);
     setCurrentAuthorId(null);
     setCurrentBookId(null);

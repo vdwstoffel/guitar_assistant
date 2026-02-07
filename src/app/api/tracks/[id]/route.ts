@@ -210,9 +210,14 @@ export async function PUT(
       },
     });
 
-    // Clean up empty books and authors
+    // Clean up empty books (no tracks AND no videos) and authors
     await prisma.book.deleteMany({
-      where: { tracks: { none: {} } },
+      where: {
+        AND: [
+          { tracks: { none: {} } },
+          { videos: { none: {} } },
+        ],
+      },
     });
     await prisma.author.deleteMany({
       where: { books: { none: {} } },
