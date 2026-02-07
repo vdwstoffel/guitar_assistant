@@ -133,8 +133,12 @@ export async function PUT(
         },
       });
     } else if (targetBook.id !== id) {
-      // Target book exists and is different - move tracks to target book
+      // Target book exists and is different - move tracks and videos to target book
       await prisma.track.updateMany({
+        where: { bookId: id },
+        data: { bookId: targetBook.id },
+      });
+      await prisma.bookVideo.updateMany({
         where: { bookId: id },
         data: { bookId: targetBook.id },
       });
@@ -183,9 +187,9 @@ export async function PUT(
       }
     }
 
-    // Clean up empty books and authors
+    // Clean up empty books (no tracks AND no videos) and authors
     await prisma.book.deleteMany({
-      where: { tracks: { none: {} } },
+      where: { tracks: { none: {} }, videos: { none: {} } },
     });
     await prisma.author.deleteMany({
       where: { books: { none: {} } },
