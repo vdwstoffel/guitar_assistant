@@ -103,17 +103,43 @@ export default function PdfViewer({
       // Update visiblePage first to trigger re-render with target page in buffer
       setVisiblePage(currentPage);
 
+      let scrollAttempts = 0;
+      const maxScrollAttempts = 5;
+
       // Then scroll once the page is rendered (may need a small delay)
       const scrollToPage = () => {
         const pageEl = pageRefs.current.get(currentPage);
         if (pageEl && containerRef.current) {
           isScrollingToPage.current = true;
           targetPage.current = currentPage;
-          pageEl.scrollIntoView({ behavior: "auto", block: "start" }); // Use instant scroll to avoid timing issues
-          setTimeout(() => {
-            isScrollingToPage.current = false;
-            targetPage.current = null;
-          }, 300); // Shorter timeout since instant scroll completes immediately
+          pageEl.scrollIntoView({ behavior: "auto", block: "start" });
+          scrollAttempts++;
+
+          // After initial scroll, verify and correct position once page fully renders
+          // This handles layout shifts when placeholder height differs from actual page height
+          const verifyScroll = () => {
+            const el = pageRefs.current.get(currentPage);
+            if (el && containerRef.current) {
+              const containerRect = containerRef.current.getBoundingClientRect();
+              const pageRect = el.getBoundingClientRect();
+              // If page top is not near container top, scroll again
+              const offset = pageRect.top - containerRect.top;
+              if (Math.abs(offset) > 10 && scrollAttempts < maxScrollAttempts) {
+                el.scrollIntoView({ behavior: "auto", block: "start" });
+                scrollAttempts++;
+                setTimeout(verifyScroll, 50);
+              } else {
+                isScrollingToPage.current = false;
+                targetPage.current = null;
+              }
+            } else {
+              isScrollingToPage.current = false;
+              targetPage.current = null;
+            }
+          };
+
+          // Wait for render to complete before verifying
+          setTimeout(verifyScroll, 100);
         } else {
           // If page not yet rendered, try again shortly
           setTimeout(scrollToPage, 100);
@@ -188,17 +214,40 @@ export default function PdfViewer({
     setVisiblePage(clampedPage);
     onPageChange(clampedPage);
 
+    let scrollAttempts = 0;
+    const maxScrollAttempts = 5;
+
     // Then scroll to it once rendered
     const scrollToPage = () => {
       const pageEl = pageRefs.current.get(clampedPage);
-      if (pageEl) {
+      if (pageEl && containerRef.current) {
         isScrollingToPage.current = true;
         targetPage.current = clampedPage;
-        pageEl.scrollIntoView({ behavior: "auto", block: "start" }); // Use instant scroll to avoid timing issues
-        setTimeout(() => {
-          isScrollingToPage.current = false;
-          targetPage.current = null;
-        }, 300); // Shorter timeout since instant scroll completes immediately
+        pageEl.scrollIntoView({ behavior: "auto", block: "start" });
+        scrollAttempts++;
+
+        // Verify and correct position once page fully renders
+        const verifyScroll = () => {
+          const el = pageRefs.current.get(clampedPage);
+          if (el && containerRef.current) {
+            const containerRect = containerRef.current.getBoundingClientRect();
+            const pageRect = el.getBoundingClientRect();
+            const offset = pageRect.top - containerRect.top;
+            if (Math.abs(offset) > 10 && scrollAttempts < maxScrollAttempts) {
+              el.scrollIntoView({ behavior: "auto", block: "start" });
+              scrollAttempts++;
+              setTimeout(verifyScroll, 50);
+            } else {
+              isScrollingToPage.current = false;
+              targetPage.current = null;
+            }
+          } else {
+            isScrollingToPage.current = false;
+            targetPage.current = null;
+          }
+        };
+
+        setTimeout(verifyScroll, 100);
       } else {
         // Retry if not yet rendered
         setTimeout(scrollToPage, 100);

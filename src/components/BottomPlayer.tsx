@@ -376,9 +376,10 @@ function BottomPlayer({
         onMarkerAdd(track.id, `Marker ${markerCount}`, currentTime);
       }
 
-      if (e.code === "KeyR") {
+      if (e.code === "ArrowLeft") {
         e.preventDefault();
         if (wavesurferRef.current) {
+          wavesurferRef.current.seekTo(0);
           wavesurferRef.current.play();
         }
       }

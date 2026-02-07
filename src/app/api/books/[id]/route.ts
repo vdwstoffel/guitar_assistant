@@ -2,11 +2,19 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import * as path from "path";
 import * as fs from "fs";
+import * as fsp from "fs/promises";
 import NodeID3 from "node-id3";
 import { WaveFile } from "wavefile";
 import { File as TagFile } from "node-taglib-sharp";
 
 const MUSIC_DIR = process.env.MUSIC_DIR || "./music";
+
+function sanitizeFilename(name: string): string {
+  return name
+    .replace(/[<>:"/\\|?*]/g, "-")
+    .replace(/\s+/g, " ")
+    .trim();
+}
 
 function writeWavMetadata(
   filePath: string,
@@ -104,6 +112,9 @@ export async function PUT(
       return NextResponse.json({ error: "Book not found" }, { status: 404 });
     }
 
+    const oldAuthorName = existingBook.author.name;
+    const oldBookName = existingBook.name;
+
     // Get or create the target author
     const targetAuthor = await prisma.author.upsert({
       where: { name: authorName.trim() },
@@ -183,6 +194,109 @@ export async function PUT(
           tagFile.dispose();
         } catch (err) {
           console.error(`Failed to update m4a tags for ${track.filePath}:`, err);
+        }
+      }
+    }
+
+    // Relocate files on disk if author or book name changed
+    const musicPath = path.resolve(MUSIC_DIR);
+    const oldDir = path.join(musicPath, sanitizeFilename(oldAuthorName), sanitizeFilename(oldBookName));
+    const newAuthorDir = sanitizeFilename(authorName.trim());
+    const newBookDir = sanitizeFilename(bookName.trim());
+    const newDir = path.join(musicPath, newAuthorDir, newBookDir);
+
+    if (oldDir !== newDir) {
+      // Create new directory structure
+      await fsp.mkdir(newDir, { recursive: true });
+
+      // Move tracks
+      for (const track of tracks) {
+        const oldFullPath = path.join(musicPath, track.filePath);
+        const filename = path.basename(track.filePath);
+        const newRelativePath = path.join(newAuthorDir, newBookDir, filename);
+        const newFullPath = path.join(musicPath, newRelativePath);
+
+        try {
+          await fsp.access(oldFullPath);
+          if (oldFullPath !== newFullPath) {
+            await fsp.rename(oldFullPath, newFullPath);
+            await prisma.track.update({
+              where: { id: track.id },
+              data: { filePath: newRelativePath },
+            });
+          }
+        } catch (err) {
+          console.error(`Failed to move track ${track.filePath}:`, err);
+        }
+      }
+
+      // Move videos
+      const videos = await prisma.bookVideo.findMany({
+        where: { bookId: targetBook.id },
+      });
+
+      if (videos.length > 0) {
+        const newVideosDir = path.join(newDir, "videos");
+        await fsp.mkdir(newVideosDir, { recursive: true });
+
+        for (const video of videos) {
+          const oldFullPath = path.join(musicPath, video.filePath);
+          const filename = path.basename(video.filePath);
+          const newRelativePath = path.join(newAuthorDir, newBookDir, "videos", filename);
+          const newFullPath = path.join(musicPath, newRelativePath);
+
+          try {
+            await fsp.access(oldFullPath);
+            if (oldFullPath !== newFullPath) {
+              await fsp.rename(oldFullPath, newFullPath);
+              await prisma.bookVideo.update({
+                where: { id: video.id },
+                data: { filePath: newRelativePath },
+              });
+            }
+          } catch (err) {
+            console.error(`Failed to move video ${video.filePath}:`, err);
+          }
+        }
+      }
+
+      // Move PDF
+      if (targetBook.pdfPath) {
+        const oldPdfFullPath = path.join(musicPath, targetBook.pdfPath);
+        const pdfFilename = path.basename(targetBook.pdfPath);
+        const newPdfRelativePath = path.join(newAuthorDir, newBookDir, pdfFilename);
+        const newPdfFullPath = path.join(musicPath, newPdfRelativePath);
+
+        try {
+          await fsp.access(oldPdfFullPath);
+          if (oldPdfFullPath !== newPdfFullPath) {
+            await fsp.rename(oldPdfFullPath, newPdfFullPath);
+            await prisma.book.update({
+              where: { id: targetBook.id },
+              data: { pdfPath: newPdfRelativePath },
+            });
+          }
+        } catch (err) {
+          console.error(`Failed to move PDF ${targetBook.pdfPath}:`, err);
+        }
+      }
+
+      // Clean up empty old directories (start from deepest: videos/, then book, then author)
+      const dirsToClean = [
+        path.join(oldDir, "videos"),
+        oldDir,
+        path.dirname(oldDir),
+      ];
+      for (const dir of dirsToClean) {
+        try {
+          if (dir.startsWith(musicPath) && dir !== musicPath) {
+            const files = await fsp.readdir(dir);
+            if (files.length === 0) {
+              await fsp.rmdir(dir);
+            }
+          }
+        } catch {
+          // Ignore cleanup errors (dir may not exist)
         }
       }
     }
