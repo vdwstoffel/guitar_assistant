@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useEffect, useCallback } from "react";
+import { useRef, useState, useEffect, useCallback, memo } from "react";
 import { Track, Marker, JamTrack, JamTrackMarker } from "@/types";
 import WaveSurfer from "wavesurfer.js";
 import RegionsPlugin from "wavesurfer.js/dist/plugins/regions.js";
@@ -43,7 +43,7 @@ interface BottomPlayerProps {
   onSeekReady?: (seekFn: (time: number) => void) => void;
 }
 
-export default function BottomPlayer({
+function BottomPlayer({
   track,
   onMarkerAdd,
   onMarkerUpdate,
@@ -859,3 +859,5 @@ export default function BottomPlayer({
     </div>
   );
 }
+
+export default memo(BottomPlayer);

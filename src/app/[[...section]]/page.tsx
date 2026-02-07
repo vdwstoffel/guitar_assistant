@@ -131,6 +131,10 @@ export default function Home() {
   const [tabVersion, setTabVersion] = useState(0);
   const seekFnRef = useRef<((time: number) => void) | null>(null);
 
+  // Refs for stable BottomPlayer callbacks (avoids new function references every render)
+  const currentJamTrackRef = useRef(currentJamTrack);
+  currentJamTrackRef.current = currentJamTrack;
+
   // Get active section from URL path
   const activeSection = getSectionFromPath(params.section as string[] | undefined);
 
@@ -1145,6 +1149,78 @@ export default function Home() {
     }
   };
 
+  // Refs for handler functions so useCallback wrappers stay stable
+  const handleMarkerAddRef = useRef(handleMarkerAdd);
+  handleMarkerAddRef.current = handleMarkerAdd;
+  const handleJamTrackMarkerAddRef = useRef(handleJamTrackMarkerAdd);
+  handleJamTrackMarkerAddRef.current = handleJamTrackMarkerAdd;
+  const handleMarkerUpdateRef = useRef(handleMarkerUpdate);
+  handleMarkerUpdateRef.current = handleMarkerUpdate;
+  const handleJamTrackMarkerUpdateRef = useRef(handleJamTrackMarkerUpdate);
+  handleJamTrackMarkerUpdateRef.current = handleJamTrackMarkerUpdate;
+  const handleMarkerRenameRef = useRef(handleMarkerRename);
+  handleMarkerRenameRef.current = handleMarkerRename;
+  const handleJamTrackMarkerRenameRef = useRef(handleJamTrackMarkerRename);
+  handleJamTrackMarkerRenameRef.current = handleJamTrackMarkerRename;
+  const handleMarkerDeleteRef = useRef(handleMarkerDelete);
+  handleMarkerDeleteRef.current = handleMarkerDelete;
+  const handleJamTrackMarkerDeleteRef = useRef(handleJamTrackMarkerDelete);
+  handleJamTrackMarkerDeleteRef.current = handleJamTrackMarkerDelete;
+  const handleMarkersClearRef = useRef(handleMarkersClear);
+  handleMarkersClearRef.current = handleMarkersClear;
+  const handleJamTrackMarkersClearRef = useRef(handleJamTrackMarkersClear);
+  handleJamTrackMarkersClearRef.current = handleJamTrackMarkersClear;
+
+  // Stable callbacks for BottomPlayer (never change reference, read from refs)
+  const stableOnMarkerAdd = useCallback((trackId: string, name: string, timestamp: number) => {
+    if (currentJamTrackRef.current) {
+      handleJamTrackMarkerAddRef.current(trackId, name, timestamp);
+    } else {
+      handleMarkerAddRef.current(trackId, name, timestamp);
+    }
+  }, []);
+
+  const stableOnMarkerUpdate = useCallback((markerId: string, timestamp: number) => {
+    if (currentJamTrackRef.current) {
+      handleJamTrackMarkerUpdateRef.current(currentJamTrackRef.current.id, markerId, timestamp);
+    } else {
+      handleMarkerUpdateRef.current(markerId, timestamp);
+    }
+  }, []);
+
+  const stableOnMarkerRename = useCallback((markerId: string, name: string) => {
+    if (currentJamTrackRef.current) {
+      handleJamTrackMarkerRenameRef.current(currentJamTrackRef.current.id, markerId, name);
+    } else {
+      handleMarkerRenameRef.current(markerId, name);
+    }
+  }, []);
+
+  const stableOnMarkerDelete = useCallback((markerId: string) => {
+    if (currentJamTrackRef.current) {
+      handleJamTrackMarkerDeleteRef.current(currentJamTrackRef.current.id, markerId);
+    } else {
+      handleMarkerDeleteRef.current(markerId);
+    }
+  }, []);
+
+  const stableOnMarkersClear = useCallback((trackId: string) => {
+    if (currentJamTrackRef.current) {
+      handleJamTrackMarkersClearRef.current(trackId);
+    } else {
+      handleMarkersClearRef.current(trackId);
+    }
+  }, []);
+
+  const stableOnTimeUpdate = useCallback((time: number, playing: boolean) => {
+    setCurrentAudioTime(time);
+    setAudioIsPlaying(playing);
+  }, []);
+
+  const stableOnSeekReady = useCallback((seekFn: (time: number) => void) => {
+    seekFnRef.current = seekFn;
+  }, []);
+
   // Auto-navigate to track's PDF page when track changes
   useEffect(() => {
     if (currentTrack?.pdfPage) {
@@ -1283,50 +1359,15 @@ export default function Home() {
               <div className="h-[30vh] min-h-55 max-h-80 shrink-0">
                 <BottomPlayer
                   track={currentTrack || currentJamTrack}
-                  onMarkerAdd={(trackId, name, timestamp) => {
-                    if (currentJamTrack) {
-                      handleJamTrackMarkerAdd(trackId, name, timestamp);
-                    } else {
-                      handleMarkerAdd(trackId, name, timestamp);
-                    }
-                  }}
-                  onMarkerUpdate={(markerId, timestamp) => {
-                    if (currentJamTrack) {
-                      handleJamTrackMarkerUpdate(currentJamTrack.id, markerId, timestamp);
-                    } else {
-                      handleMarkerUpdate(markerId, timestamp);
-                    }
-                  }}
-                  onMarkerRename={(markerId, name) => {
-                    if (currentJamTrack) {
-                      handleJamTrackMarkerRename(currentJamTrack.id, markerId, name);
-                    } else {
-                      handleMarkerRename(markerId, name);
-                    }
-                  }}
-                  onMarkerDelete={(markerId) => {
-                    if (currentJamTrack) {
-                      handleJamTrackMarkerDelete(currentJamTrack.id, markerId);
-                    } else {
-                      handleMarkerDelete(markerId);
-                    }
-                  }}
-                  onMarkersClear={(trackId) => {
-                    if (currentJamTrack) {
-                      handleJamTrackMarkersClear(trackId);
-                    } else {
-                      handleMarkersClear(trackId);
-                    }
-                  }}
+                  onMarkerAdd={stableOnMarkerAdd}
+                  onMarkerUpdate={stableOnMarkerUpdate}
+                  onMarkerRename={stableOnMarkerRename}
+                  onMarkerDelete={stableOnMarkerDelete}
+                  onMarkersClear={stableOnMarkersClear}
                   externalMarkersBar={true}
                   onMarkerBarStateChange={setMarkerBarState}
-                  onTimeUpdate={(time, playing) => {
-                    setCurrentAudioTime(time);
-                    setAudioIsPlaying(playing);
-                  }}
-                  onSeekReady={(seekFn) => {
-                    seekFnRef.current = seekFn;
-                  }}
+                  onTimeUpdate={stableOnTimeUpdate}
+                  onSeekReady={stableOnSeekReady}
                 />
               </div>
             </div>
