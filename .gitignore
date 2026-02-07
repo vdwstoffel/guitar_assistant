@@ -49,7 +49,9 @@ next-env.d.ts
 # SQLite database and migrations (local development)
 /prisma/*.db
 /prisma/*.db-journal
+/prisma/*.db.backup
 /prisma/migrations/
 /prisma/prisma/
 
 /tasks
+/prisma/*db.backup
