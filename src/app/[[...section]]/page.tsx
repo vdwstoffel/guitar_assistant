@@ -66,6 +66,7 @@ export default function Home() {
   const [isScanning, setIsScanning] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isUploadingJamTracks, setIsUploadingJamTracks] = useState(false);
+  const [isImportingFromYouTube, setIsImportingFromYouTube] = useState(false);
   const [isInProgressSelected, setIsInProgressSelected] = useState(false);
   const [isJamTracksSelected, setIsJamTracksSelected] = useState(false);
   const [isVideoUploadModalOpen, setIsVideoUploadModalOpen] = useState(false);
@@ -372,6 +373,31 @@ export default function Home() {
       console.error("Error uploading jam tracks:", error);
     } finally {
       setIsUploadingJamTracks(false);
+    }
+  };
+
+  const handleYouTubeImport = async (url: string, title?: string) => {
+    setIsImportingFromYouTube(true);
+    try {
+      const response = await fetch("/api/jamtracks/youtube", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url, title }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        const error = new Error(data.error || "Failed to import from YouTube");
+        (error as Error & { needsTitle?: boolean }).needsTitle = data.needsTitle === true;
+        throw error;
+      }
+
+      await fetchLibrary();
+    } catch (error) {
+      console.error("Error importing from YouTube:", error);
+      throw error;
+    } finally {
+      setIsImportingFromYouTube(false);
     }
   };
 
@@ -1307,6 +1333,8 @@ export default function Home() {
                       onPdfDelete={handleJamTrackPdfDelete}
                       onUpload={handleJamTrackUpload}
                       isUploading={isUploadingJamTracks}
+                      onYouTubeImport={handleYouTubeImport}
+                      isImportingFromYouTube={isImportingFromYouTube}
                     />
                   ) : isInProgressSelected ? (
                     <InProgressGrid

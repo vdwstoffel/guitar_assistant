@@ -24,19 +24,18 @@
 - Author -> Books -> Tracks -> Markers (cascade deletes)
 - Book also has: chapters, videos (BookVideo), pdfPath, inProgress, coverPath(not yet)
 - Track: filePath(unique), completed, tempo, timeSignature, pdfPage, chapterId
-- JamTrack: standalone, has markers, tabSyncPoints, pdfPath, tabPath
+- JamTrack: standalone, has markers, pdfs (JamTrackPdf -> PageSyncPoint)
 - Video model: YouTube videos (separate from BookVideo which are local files)
 
 ## Jam Tracks Architecture (Current State)
 - **Storage**: `music/JamTracks/<track-name>/` - each track gets its own subfolder
 - **Audio**: One audio file per folder (mp3/flac/wav/ogg/m4a/aac)
-- **PDF**: Single `sheet.pdf` in folder, stored as `JamTrack.pdfPath`
-- **Tab**: Guitar Pro files (.gp/.gp3/.gp4/.gp5/.gpx) stored as `JamTrack.tabPath`
-- **Sync**: `TabSyncPoint` model maps audioTime -> tabTick for cursor sync
-- **AlphaTab**: `@coderline/alphatab` (^1.8.1), fonts in `public/fonts/alphatab/`
-- **API routes**: jamtracks/, [id]/, [id]/markers/, [id]/pdf/, [id]/tab/, [id]/syncpoints/, tab/[...path]
-- **Library API**: Returns jamTracks with markers + tabSyncPoints includes
-- **Scan**: `scanJamTracksFolder()` detects first audio + first PDF in each subfolder
+- **PDFs**: Multiple per track via `JamTrackPdf` model, `PageSyncPoint` for auto page-flip
+- **Upload flow**: UI button -> FormData POST to `/api/jamtracks/upload` -> save file, parse metadata, create folder, upsert DB record -> `fetchLibrary()` refresh
+- **Upload API** (`src/app/api/jamtracks/upload/route.ts`): sanitizeName(), saves to `JamTracks/<sanitized-title>/<filename>`, upserts JamTrack via filePath unique
+- **API routes**: jamtracks/, [id]/, [id]/markers/, [id]/pdf/, [id]/pdf/[pdfId]/syncpoints/, upload/
+- **Library API**: Returns jamTracks with markers + pdfs (incl pageSyncPoints) includes
+- **Scan**: `scanJamTracksFolder()` detects audio files + PDFs in each subfolder
 
 ## Audio Time Propagation Pattern
 - `BottomPlayer` has `onTimeUpdate` callback prop -> calls `stableOnTimeUpdate` in page.tsx
@@ -64,13 +63,14 @@
 
 ## Docker
 - Alpine-based Node 20, includes openssl, ghostscript, ffmpeg
-- Volumes: music/ and prisma/ directories persisted
+- Volumes: `.:/app`, `/app/node_modules`, `./music:/app/music`
+- yt-dlp available via `apk add yt-dlp-core` (needs python3) or standalone binary download
+- Entrypoint: `docker-entrypoint.sh` runs prisma generate + db push + npm run dev
 
 ## Feature Planning Notes
-- Existing plans in `tasks/todo.md` - numbered 1-11 (no #5 or #9)
-- Features #1-4, #6-8, #10 are Low/Medium complexity
-- Feature #11 (Jam Track Rework) is High complexity, 9-phase plan
-- #11 now includes Page Sync (PageSyncPoint model -> JamTrackPdf, auto page-flip, PageSyncEditor)
+- Existing plans in `tasks/todo.md` - numbered 1, 4, 6, 7, 8, 10, 12 (gaps at #2,3,5,9,11)
+- Feature #11 (Jam Track Rework) completed Feb 2026
+- Feature #12 (YouTube Import) added 2026-02-07, Medium complexity
 - Always note database backup requirement for schema changes
 - List exact files + line counts when planning deletions
 - When integrating sub-features into existing plans, update all sections: Summary, User Value, Tech Reqs, Components, DB, API, UI/UX, Implementation Steps + Testing

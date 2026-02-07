@@ -1,94 +1,106 @@
 # Guitar Assistant
 
-A web application for managing and practicing guitar exercises, method books, and tracks with audio playback, PDF viewing, markers, and a built-in metronome.
+A web application for managing and practicing guitar exercises, method books, and play-along tracks. Features audio playback with waveform visualization, synchronized PDF sheet music viewing, markers, a metronome, and music theory tools.
 
 ## Features
 
-- **Library Management** - Organize your guitar books and exercises by author, with automatic metadata scanning from audio files
-- **Jam Tracks** - Separate section for standalone play-along tracks (backing tracks, songs) with their own sheet music PDFs
-- **Audio Player** - Full-featured player with waveform visualization (WaveSurfer.js), playback speed control, and loop regions
-- **PDF Viewer** - View sheet music/tablature PDFs alongside audio playback, with automatic page linking to tracks
-- **Markers** - Add timestamped markers to tracks for quick navigation to specific sections
-- **Metronome** - Built-in practice metronome with tempo and time signature controls
+### Library Management
+- **Author / Book / Track hierarchy** - Organize exercises by author and book, with chapters for structure
+- **Automatic metadata scanning** - Audio file metadata is parsed to populate titles, durations, and organization
+- **File upload** - Upload audio files, PDFs, and videos through the application UI
+- **Progress tracking** - Mark tracks and videos as completed; filter books by "In Progress" status
+- **Book covers** - Album art extracted from audio metadata
+
+### Jam Tracks
+Standalone play-along tracks (backing tracks, songs) that live outside the book hierarchy:
+- **YouTube import** - Paste a YouTube URL to download and import audio directly as a jam track
+- **Multi-PDF support** - Attach multiple named PDFs per track (e.g., "Rhythm Guitar", "Lead Guitar") displayed in a tabbed viewer
+- **Automatic page-flipping** - Page sync points map audio timestamps to PDF pages for hands-free page turns during playback
+- **Markers** - Timestamp annotations for quick navigation to sections
+
+### Audio Player
+- **Waveform visualization** - Powered by WaveSurfer.js
+- **Playback speed control** - Slow down or speed up for practice
+- **Markers bar** - Visual marker timeline for quick navigation
+
+### PDF Viewer
+- Sheet music / tablature displayed alongside audio playback
+- Automatic page linking per track
+- Single-PDF mode for books, multi-PDF tabbed mode for jam tracks
+
+### Practice Tools
+- **Metronome** - Adjustable BPM (20-300), time signature support (4/4, 3/4, 2/4, 6/8), visual beat indicator, volume control
 - **Fretboard Visualizer** - Interactive guitar fretboard reference
-- **Video Playlists** - Manage YouTube video playlists for lessons and tutorials
-- **Progress Tracking** - Mark tracks as completed and filter books by "in progress" status
-- **Track Tempo** - Store tempo information per track for practice reference
+- **Circle of Fifths** - Major/minor keys, key signatures, diatonic chords, scale notes
+- **PDF Concatenation** - Append pages to existing book PDFs incrementally
+
+### Video Playlists
+- Manage YouTube video playlists for lessons and tutorials
+- Upload book-specific videos, optionally linked to chapters or PDF pages
 
 ## Getting Started
 
-### Prerequisites
-
-- Node.js 18+
-- npm
-
-### Installation
+### Docker (Recommended)
 
 ```bash
-# Clone the repository
-git clone <repository-url>
-cd guitar_assistant
-
-# Install dependencies
-npm install
-
-# Initialize the database
-npx prisma generate
-npx prisma db push
-
-# Start the development server
-npm run dev
+docker-compose up -d
 ```
+
+This starts the full application with all dependencies (Ghostscript for PDF processing, ffmpeg for audio/video, yt-dlp for YouTube imports).
 
 Open [http://localhost:3000](http://localhost:3000) in your browser.
 
+### Local Development
+
+Prerequisites: Node.js 20+, npm
+
+```bash
+npm install
+npx prisma generate
+npx prisma db push
+npm run dev
+```
+
+Note: Some features (PDF conversion, YouTube import) require system dependencies only available in the Docker image.
+
 ### Adding Content
 
-**Important:** All content should be uploaded through the application UI. Do not manually copy files into the music folders - use the upload functionality instead.
+**All content should be uploaded through the application UI** rather than manually copying files.
 
 #### Books & Exercises
-
 1. Click "Upload Files" in the sidebar
-2. Select your audio files (MP3, FLAC, WAV, OGG, M4A, AAC)
-3. Click "Scan Library" to process the files
-4. The application organizes files into `music/Author/Book/` based on audio metadata
-5. Add PDFs to books via the "Add PDF" button in the track list view
+2. Select audio files (MP3, FLAC, WAV, OGG, M4A, AAC)
+3. Click "Scan Library" to process and organize files by metadata
+4. Optionally add PDFs and videos to books
 
 #### Jam Tracks
-
-For standalone play-along tracks (backing tracks, songs you want to jam with):
-
-1. Click "Upload Files" and select your audio file
-2. Click "Scan Library"
-3. Navigate to "Jam Tracks" in the sidebar
-4. Each jam track can have its own PDF sheet music uploaded via "Add PDF"
-
-Jam tracks are stored separately from the book/author hierarchy and are perfect for:
-- Backing tracks from YouTube or other sources
-- Songs you want to practice playing along with
-- Any audio that doesn't belong to a specific method book
+1. Navigate to "Jam Tracks" in the sidebar
+2. Click "Upload Files" to add local audio, or "YouTube" to import from a URL
+3. Add PDF sheet music via the "Add PDF" button on each track
+4. Set up page sync points for automatic page-flipping during playback
 
 ## Docker Deployment
 
-Docker deployment includes Ghostscript for PDF processing.
-
 ```bash
-docker-compose up
-```
+# Using docker-compose
+docker-compose up -d
 
-Or build manually:
-
-```bash
+# Or build manually
 docker build -t guitar-assistant .
 docker run -p 3000:3000 -v ./music:/app/music -v ./prisma:/app/prisma guitar-assistant
 ```
+
+The Docker image includes:
+- Ghostscript for PDF conversion/processing
+- ffmpeg for audio/video processing
+- yt-dlp + Python 3 for YouTube audio downloads
 
 ## Environment Variables
 
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `DATABASE_URL` | SQLite database path | `file:./prisma/guitar_assistant.db` |
-| `MUSIC_DIR` | Music directory path (Docker) | `./music` |
+| `MUSIC_DIR` | Music directory path | `./music` |
 
 ## Tech Stack
 
@@ -98,6 +110,7 @@ docker run -p 3000:3000 -v ./music:/app/music -v ./prisma:/app/prisma guitar-ass
 - **Audio**: WaveSurfer.js for waveform visualization
 - **PDF**: react-pdf for document viewing
 - **Metadata**: music-metadata for audio file parsing
+- **YouTube**: yt-dlp for audio download and conversion
 
 ## Available Scripts
 

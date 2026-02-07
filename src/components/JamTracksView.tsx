@@ -103,6 +103,8 @@ interface JamTracksViewProps {
   onPdfDelete?: (jamTrackId: string, pdfId: string) => Promise<void>;
   onUpload?: (files: FileList) => Promise<void>;
   isUploading?: boolean;
+  onYouTubeImport?: (url: string, title?: string) => Promise<void>;
+  isImportingFromYouTube?: boolean;
 }
 
 const JamTracksView = memo(function JamTracksView({
@@ -116,13 +118,21 @@ const JamTracksView = memo(function JamTracksView({
   onPdfDelete,
   onUpload,
   isUploading,
+  onYouTubeImport,
+  isImportingFromYouTube,
 }: JamTracksViewProps) {
   const [editingJamTrack, setEditingJamTrack] = useState<JamTrack | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [pdfUpload, setPdfUpload] = useState<{ jamTrackId: string; file: File } | null>(null);
   const [pdfName, setPdfName] = useState("");
   const [isUploadingPdf, setIsUploadingPdf] = useState(false);
+  const [showYouTubeModal, setShowYouTubeModal] = useState(false);
+  const [youtubeUrl, setYoutubeUrl] = useState("");
+  const [youtubeError, setYoutubeError] = useState("");
+  const [youtubeNeedsTitle, setYoutubeNeedsTitle] = useState(false);
+  const [youtubeTitle, setYoutubeTitle] = useState("");
   const uploadInputRef = useRef<HTMLInputElement>(null);
+  const youtubeInputRef = useRef<HTMLInputElement>(null);
   const pdfNameInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -131,6 +141,43 @@ const JamTracksView = memo(function JamTracksView({
       pdfNameInputRef.current.select();
     }
   }, [pdfUpload]);
+
+  useEffect(() => {
+    if (showYouTubeModal && youtubeInputRef.current) {
+      youtubeInputRef.current.focus();
+    }
+  }, [showYouTubeModal]);
+
+  const isValidYouTubeUrl = (url: string) =>
+    /^https?:\/\/(www\.)?(youtube\.com\/(watch\?.*v=|shorts\/)|youtu\.be\/|music\.youtube\.com\/watch\?.*v=)/.test(url);
+
+  const handleYouTubeSubmit = async () => {
+    if (!onYouTubeImport || !youtubeUrl.trim()) return;
+    if (!isValidYouTubeUrl(youtubeUrl.trim())) {
+      setYoutubeError("Please enter a valid YouTube URL");
+      return;
+    }
+    if (youtubeNeedsTitle && !youtubeTitle.trim()) {
+      setYoutubeError("Please enter a title");
+      return;
+    }
+    setYoutubeError("");
+    try {
+      await onYouTubeImport(youtubeUrl.trim(), youtubeNeedsTitle ? youtubeTitle.trim() : undefined);
+      setShowYouTubeModal(false);
+      setYoutubeUrl("");
+      setYoutubeTitle("");
+      setYoutubeNeedsTitle(false);
+    } catch (err: unknown) {
+      const error = err as Error & { needsTitle?: boolean };
+      if (error.needsTitle) {
+        setYoutubeNeedsTitle(true);
+        setYoutubeError("Could not fetch video title automatically. Please enter a name.");
+      } else {
+        setYoutubeError(error.message || "Failed to import from YouTube");
+      }
+    }
+  };
 
   const formatDuration = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -232,6 +279,79 @@ const JamTracksView = memo(function JamTracksView({
         </div>
       )}
 
+      {/* YouTube Import Modal */}
+      {showYouTubeModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md mx-4 shadow-xl">
+            <h3 className="text-lg font-semibold mb-4 text-white">Import from YouTube</h3>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">YouTube URL</label>
+                <input
+                  ref={youtubeInputRef}
+                  type="text"
+                  value={youtubeUrl}
+                  onChange={(e) => { setYoutubeUrl(e.target.value); setYoutubeError(""); }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && youtubeUrl.trim() && !isImportingFromYouTube) handleYouTubeSubmit();
+                    if (e.key === "Escape") { setShowYouTubeModal(false); setYoutubeUrl(""); setYoutubeError(""); setYoutubeTitle(""); setYoutubeNeedsTitle(false); }
+                  }}
+                  placeholder="https://www.youtube.com/watch?v=..."
+                  disabled={isImportingFromYouTube}
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:border-purple-500 disabled:opacity-50"
+                />
+              </div>
+              {youtubeNeedsTitle && (
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Track Title</label>
+                  <input
+                    type="text"
+                    value={youtubeTitle}
+                    onChange={(e) => { setYoutubeTitle(e.target.value); setYoutubeError(""); }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && youtubeTitle.trim() && !isImportingFromYouTube) handleYouTubeSubmit();
+                      if (e.key === "Escape") { setShowYouTubeModal(false); setYoutubeUrl(""); setYoutubeError(""); setYoutubeTitle(""); setYoutubeNeedsTitle(false); }
+                    }}
+                    placeholder="Enter a name for this track"
+                    disabled={isImportingFromYouTube}
+                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:border-purple-500 disabled:opacity-50"
+                    autoFocus
+                  />
+                </div>
+              )}
+              {youtubeError && (
+                <p className="text-sm text-red-400">{youtubeError}</p>
+              )}
+              {isImportingFromYouTube && (
+                <p className="text-sm text-gray-400">Importing... this may take a moment</p>
+              )}
+            </div>
+            <div className="flex justify-end gap-3 mt-5">
+              <button
+                onClick={() => { setShowYouTubeModal(false); setYoutubeUrl(""); setYoutubeError(""); setYoutubeTitle(""); setYoutubeNeedsTitle(false); }}
+                disabled={isImportingFromYouTube}
+                className="px-4 py-2 text-gray-400 hover:text-white transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleYouTubeSubmit}
+                disabled={isImportingFromYouTube || !youtubeUrl.trim()}
+                className="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded font-medium transition-colors text-white flex items-center gap-2"
+              >
+                {isImportingFromYouTube && (
+                  <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                )}
+                {isImportingFromYouTube ? "Importing..." : "Import"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="mb-6">
         <div className="flex items-center justify-between">
@@ -241,40 +361,54 @@ const JamTracksView = memo(function JamTracksView({
             </svg>
             Jam Tracks
           </h1>
-          {onUpload && (
-            <>
+          <div className="flex items-center gap-2">
+            {onYouTubeImport && (
               <button
-                onClick={() => uploadInputRef.current?.click()}
-                disabled={isUploading}
-                className="flex items-center gap-2 px-3 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded text-sm font-medium text-white transition-colors"
+                onClick={() => setShowYouTubeModal(true)}
+                disabled={isImportingFromYouTube}
+                className="flex items-center gap-2 px-3 py-2 border border-purple-600 hover:bg-purple-600/20 disabled:border-gray-600 disabled:cursor-not-allowed rounded text-sm font-medium text-purple-300 transition-colors"
               >
-                {isUploading ? (
-                  <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
-                ) : (
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-                  </svg>
-                )}
-                {isUploading ? "Uploading..." : "Upload Tracks"}
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+                </svg>
+                YouTube
               </button>
-              <input
-                ref={uploadInputRef}
-                type="file"
-                multiple
-                accept=".mp3,.flac,.wav,.ogg,.m4a,.aac"
-                onChange={async (e) => {
-                  if (e.target.files && e.target.files.length > 0) {
-                    await onUpload(e.target.files);
-                    e.target.value = "";
-                  }
-                }}
-                className="hidden"
-              />
-            </>
-          )}
+            )}
+            {onUpload && (
+              <>
+                <button
+                  onClick={() => uploadInputRef.current?.click()}
+                  disabled={isUploading}
+                  className="flex items-center gap-2 px-3 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded text-sm font-medium text-white transition-colors"
+                >
+                  {isUploading ? (
+                    <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                  ) : (
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                    </svg>
+                  )}
+                  {isUploading ? "Uploading..." : "Upload Files"}
+                </button>
+                <input
+                  ref={uploadInputRef}
+                  type="file"
+                  multiple
+                  accept=".mp3,.flac,.wav,.ogg,.m4a,.aac"
+                  onChange={async (e) => {
+                    if (e.target.files && e.target.files.length > 0) {
+                      await onUpload(e.target.files);
+                      e.target.value = "";
+                    }
+                  }}
+                  className="hidden"
+                />
+              </>
+            )}
+          </div>
         </div>
         <p className="text-gray-400 mt-1">
           {jamTracks.length} track{jamTracks.length !== 1 ? "s" : ""} - Play along with your favorite songs
