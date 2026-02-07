@@ -257,6 +257,10 @@ export default function Home() {
     setSelectedAuthorId(author.id);
     setSelectedBookId(null);
     setSelectedBookDetail(null);
+    setCurrentTrack(null);
+    setCurrentAuthorId(null);
+    setCurrentBookId(null);
+    setCurrentJamTrackId(null);
     updateLibraryUrl(author.id, null);
   };
 
@@ -266,6 +270,10 @@ export default function Home() {
     setSelectedAuthorId(null);
     setSelectedBookId(null);
     setSelectedBookDetail(null);
+    setCurrentTrack(null);
+    setCurrentAuthorId(null);
+    setCurrentBookId(null);
+    setCurrentJamTrackId(null);
     updateLibraryUrl(null, null);
   };
 
@@ -275,6 +283,9 @@ export default function Home() {
     setSelectedAuthorId(null);
     setSelectedBookId(null);
     setSelectedBookDetail(null);
+    setCurrentTrack(null);
+    setCurrentAuthorId(null);
+    setCurrentBookId(null);
     updateLibraryUrl(null, null);
   };
 
@@ -293,6 +304,9 @@ export default function Home() {
   const handleBookSelect = (book: BookSummary) => {
     setSelectedBookId(book.id);
     setSelectedBookDetail(null);
+    setCurrentTrack(null);
+    setCurrentAuthorId(null);
+    setCurrentBookId(null);
     setCurrentJamTrackId(null);
     if (book.pdfPath) {
       setPdfPath(book.pdfPath);
@@ -1295,6 +1309,9 @@ export default function Home() {
                       onBack={() => {
                         setSelectedBookId(null);
                         setSelectedBookDetail(null);
+                        setCurrentTrack(null);
+                        setCurrentAuthorId(null);
+                        setCurrentBookId(null);
                         if (isInProgressSelected) {
                           updateLibraryUrl(null, null);
                         } else {
@@ -1356,8 +1373,14 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* Bottom Player - Fixed height for waveform visibility */}
-              <div className="h-[30vh] min-h-55 max-h-80 shrink-0">
+              {/* Bottom Player - Collapses when no track selected */}
+              <div
+                className={`shrink-0 overflow-hidden transition-all duration-300 ease-in-out ${
+                  currentTrack || currentJamTrack
+                    ? "h-[30vh] min-h-55 max-h-80"
+                    : "h-0 min-h-0 max-h-0"
+                }`}
+              >
                 <BottomPlayer
                   track={currentTrack || currentJamTrack}
                   onMarkerAdd={stableOnMarkerAdd}
