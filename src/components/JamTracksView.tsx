@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, memo } from "react";
 import { JamTrack } from "@/types";
 
 interface JamTrackEditModalProps {
@@ -108,7 +108,7 @@ interface JamTracksViewProps {
   isUploading?: boolean;
 }
 
-export default function JamTracksView({
+const JamTracksView = memo(function JamTracksView({
   jamTracks,
   currentJamTrack,
   onJamTrackSelect,
@@ -404,4 +404,6 @@ export default function JamTracksView({
       )}
     </div>
   );
-}
+});
+
+export default JamTracksView;

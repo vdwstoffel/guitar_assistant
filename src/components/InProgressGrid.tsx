@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, memo } from "react";
 import { AuthorSummary, BookSummary } from "@/types";
 
 interface InProgressBookCardProps {
@@ -58,7 +58,7 @@ interface InProgressGridProps {
   onBookSelect: (book: BookSummary, author: AuthorSummary) => void;
 }
 
-export default function InProgressGrid({ books, onBookSelect }: InProgressGridProps) {
+const InProgressGrid = memo(function InProgressGrid({ books, onBookSelect }: InProgressGridProps) {
   return (
     <div className="h-full overflow-y-auto bg-gray-900 p-6">
       {/* Header */}
@@ -96,4 +96,6 @@ export default function InProgressGrid({ books, onBookSelect }: InProgressGridPr
       )}
     </div>
   );
-}
+});
+
+export default InProgressGrid;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useRef, useCallback, memo } from "react";
 import { Marker, JamTrackMarker } from "@/types";
 import { createTapTempo } from "@/lib/tapTempo";
 
@@ -32,7 +32,7 @@ interface MarkersBarProps {
   onTempoChange?: (tempo: number | null, timeSignature: string) => void;
 }
 
-export default function MarkersBar({
+const MarkersBar = memo(function MarkersBar({
   markers,
   visible,
   leadIn,
@@ -295,4 +295,6 @@ export default function MarkersBar({
       )}
     </div>
   );
-}
+});
+
+export default MarkersBar;

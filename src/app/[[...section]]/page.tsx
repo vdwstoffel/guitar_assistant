@@ -1392,7 +1392,6 @@ export default function Home() {
                       tabPath={currentJamTrack.tabPath}
                       syncPoints={currentJamTrack.tabSyncPoints}
                       currentAudioTime={currentAudioTime}
-                      isPlaying={audioIsPlaying}
                       onSeek={handleSeekFromTab}
                       onTabClick={handleTabClick}
                       syncEditMode={syncEditMode}

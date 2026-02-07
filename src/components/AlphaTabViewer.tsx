@@ -8,7 +8,6 @@ interface AlphaTabViewerProps {
   tabPath: string;
   syncPoints: TabSyncPoint[];
   currentAudioTime: number;
-  isPlaying: boolean;
   onSeek: (audioTime: number) => void;
   onTabClick?: (tabTick: number, barIndex: number) => void;
   syncEditMode: boolean;
@@ -19,7 +18,6 @@ export default function AlphaTabViewer({
   tabPath,
   syncPoints,
   currentAudioTime,
-  isPlaying,
   onSeek,
   onTabClick,
   syncEditMode,
@@ -117,26 +115,6 @@ export default function AlphaTabViewer({
 
         typedApi.scoreLoaded.on(() => {
           setStatus("Score loaded, rendering...");
-          // Debug: log the first few master bar positions
-          const apiAny = api as Record<string, unknown>;
-          const score = apiAny.score as {
-            masterBars?: Array<{
-              start: number;
-              index: number;
-              isAnacrusis?: boolean;
-              timeSignatureNumerator?: number;
-              timeSignatureDenominator?: number;
-            }>
-          } | undefined;
-          if (score?.masterBars) {
-            console.log("[Score] First 10 master bars:", score.masterBars.slice(0, 10).map((mb, i) => ({
-              index: i,
-              mbIndex: mb.index,
-              start: mb.start,
-              isAnacrusis: mb.isAnacrusis,
-              timeSignature: `${mb.timeSignatureNumerator}/${mb.timeSignatureDenominator}`
-            })));
-          }
         });
 
         typedApi.renderStarted.on(() => {
@@ -145,17 +123,10 @@ export default function AlphaTabViewer({
 
         typedApi.renderFinished.on(() => {
           setStatus("");
-          // Mark as ready after render completes
           setIsReady(true);
-          // Debug: log API state with external media mode
-          const apiAny = api as Record<string, unknown>;
-          console.log("[AlphaTab] Render finished. Player mode:", (apiAny as { actualPlayerMode?: number }).actualPlayerMode);
-          console.log("[AlphaTab] isReadyForPlayback:", (apiAny as { isReadyForPlayback?: boolean }).isReadyForPlayback);
-          console.log("[AlphaTab] playerState:", (apiAny as { playerState?: number }).playerState);
         });
 
         typedApi.playerReady.on(() => {
-          console.log("[AlphaTab] Player ready event fired!");
           setIsReady(true);
         });
 
@@ -181,24 +152,11 @@ export default function AlphaTabViewer({
           // Also try the getter directly
           const absolutePlaybackStart = beatAny.absolutePlaybackStart as number | undefined;
 
-          // Get bar index from the bar itself
-          const barIndex = (barAny?.index as number) ?? 0;
-          // Also get the masterBar index (global bar number)
+          // Get the masterBar index (global bar number)
           const masterBarIndex = (masterBarAny?.index as number) ?? 0;
 
           // Use the computed absolute tick, or fall back to the getter
           const tick = absoluteTick || absolutePlaybackStart || 0;
-
-          // Debug: log what we're capturing
-          console.log("[Click] Captured beat:", {
-            masterBarStart,
-            playbackStart,
-            absoluteTick,
-            absolutePlaybackStart,
-            barIndex,
-            masterBarIndex,
-            finalTick: tick
-          });
 
           setSelectedTick(tick);
           // Use masterBarIndex for display (this is the global bar number)
@@ -263,28 +221,11 @@ export default function AlphaTabViewer({
     try {
       const api = apiRef.current as {
         tickPosition: number;
-        timePosition: number;
-        isReadyForPlayback: boolean;
-        playerState: number;
-        score: unknown;
-        renderer: { boundsLookup: unknown };
       };
       const targetTick = Math.round(tick);
 
-      // Debug: log API state
-      console.log("[AlphaTab Sync] Setting tick:", {
-        targetTick,
-        currentTickPosition: api.tickPosition,
-        isReadyForPlayback: api.isReadyForPlayback,
-        playerState: api.playerState,
-        hasScore: !!api.score,
-      });
-
       // Set alphaTab's tick position - this moves the cursor
       api.tickPosition = targetTick;
-
-      // Verify it was set
-      console.log("[AlphaTab Sync] After set, tickPosition:", api.tickPosition);
 
       // Scroll to keep cursor visible - trigger early so user can see upcoming bars
       setTimeout(() => {

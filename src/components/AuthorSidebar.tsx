@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useRef, memo } from "react";
 import { AuthorSummary } from "@/types";
 
 interface AuthorSidebarProps {
@@ -20,7 +20,7 @@ interface AuthorSidebarProps {
   onJamTracksSelect: () => void;
 }
 
-export default function AuthorSidebar({
+const AuthorSidebar = memo(function AuthorSidebar({
   authors,
   selectedAuthor,
   onAuthorSelect,
@@ -191,4 +191,6 @@ export default function AuthorSidebar({
       </div>
     </div>
   );
-}
+});
+
+export default AuthorSidebar;

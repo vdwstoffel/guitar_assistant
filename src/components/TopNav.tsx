@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, memo } from 'react';
 
 type Section = 'library' | 'videos' | 'fretboard' | 'tools';
 type TimeSignature = '4/4' | '3/4' | '2/4' | '6/8';
@@ -11,7 +11,7 @@ interface TopNavProps {
   onSectionChange: (section: Section) => void;
 }
 
-export default function TopNav({ activeSection, onSectionChange }: TopNavProps) {
+const TopNav = memo(function TopNav({ activeSection, onSectionChange }: TopNavProps) {
   const [showMetronome, setShowMetronome] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [bpm, setBpm] = useState(120);
@@ -287,4 +287,6 @@ export default function TopNav({ activeSection, onSectionChange }: TopNavProps) 
       )}
     </div>
   );
-}
+});
+
+export default TopNav;

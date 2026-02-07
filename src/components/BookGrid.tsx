@@ -58,7 +58,7 @@ interface BookGridProps {
   onBookSelect: (book: BookSummary) => void;
 }
 
-export default function BookGrid({ author, onBookSelect }: BookGridProps) {
+const BookGrid = memo(function BookGrid({ author, onBookSelect }: BookGridProps) {
   return (
     <div className="h-full overflow-y-auto bg-gray-900 p-6">
       {/* Author Header */}
@@ -82,4 +82,6 @@ export default function BookGrid({ author, onBookSelect }: BookGridProps) {
       </div>
     </div>
   );
-}
+});
+
+export default BookGrid;
