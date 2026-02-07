@@ -11,6 +11,7 @@ import BottomPlayer, { MarkerBarState } from "@/components/BottomPlayer";
 import MarkersBar from "@/components/MarkersBar";
 import TopNav from "@/components/TopNav";
 import Fretboard from "@/components/Fretboard";
+import CircleOfFifths from "@/components/CircleOfFifths";
 import PdfViewer from "@/components/PdfViewer";
 import Videos from "@/components/Videos";
 import Tools from "@/components/Tools";
@@ -20,12 +21,12 @@ import VideoUploadModal from "@/components/VideoUploadModal";
 import VideoPlayer from "@/components/VideoPlayer";
 import { AuthorSummary, BookSummary, Book, Track, Marker, JamTrack, JamTrackMarker, TabSyncPoint, BookVideo } from "@/types";
 
-type Section = 'library' | 'videos' | 'fretboard' | 'tools';
+type Section = 'library' | 'videos' | 'fretboard' | 'tools' | 'circle';
 
 const getSectionFromPath = (section: string[] | undefined): Section => {
   if (!section || section.length === 0) return 'library';
   const first = section[0];
-  if (first === 'videos' || first === 'fretboard' || first === 'tools') {
+  if (first === 'videos' || first === 'fretboard' || first === 'tools' || first === 'circle') {
     return first;
   }
   return 'library';
@@ -1483,6 +1484,8 @@ export default function Home() {
         <Videos />
       ) : activeSection === 'tools' ? (
         <Tools />
+      ) : activeSection === 'circle' ? (
+        <CircleOfFifths />
       ) : (
         <Fretboard />
       )}

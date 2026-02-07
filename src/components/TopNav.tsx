@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useState, useEffect, useRef, useCallback, memo } from 'react';
 
-type Section = 'library' | 'videos' | 'fretboard' | 'tools';
+type Section = 'library' | 'videos' | 'fretboard' | 'tools' | 'circle';
 type TimeSignature = '4/4' | '3/4' | '2/4' | '6/8';
 
 interface TopNavProps {
@@ -31,6 +31,7 @@ const TopNav = memo(function TopNav({ activeSection, onSectionChange }: TopNavPr
     { id: 'library', label: 'Library', href: '/' },
     { id: 'videos', label: 'Videos', href: '/videos' },
     { id: 'fretboard', label: 'Fretboard', href: '/fretboard' },
+    { id: 'circle', label: 'Circle of 5ths', href: '/circle' },
     { id: 'tools', label: 'Tools', href: '/tools' },
   ];
 
