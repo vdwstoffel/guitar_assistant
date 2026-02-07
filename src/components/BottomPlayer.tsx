@@ -547,7 +547,7 @@ function BottomPlayer({
           setEditingMarkerId,
           editingMarkerName,
           setEditingMarkerName,
-          currentTime,
+          currentTime: currentTimeRef.current,
           jumpToMarker,
           addMarker,
           formatTime,
@@ -566,7 +566,8 @@ function BottomPlayer({
         clearTimeout(stateCallbackTimeoutRef.current);
       }
     };
-  }, [showMarkers, newMarkerName, leadIn, editingMarkerId, editingMarkerName, currentTime, jumpToMarker, addMarker, formatTime, isCountingIn, currentCountInBeat, totalCountInBeats, track?.tempo, track?.timeSignature, volume]);
+  // Note: currentTime is accessed via currentTimeRef.current to avoid effect firing on every time update (~20/sec)
+  }, [showMarkers, newMarkerName, leadIn, editingMarkerId, editingMarkerName, jumpToMarker, addMarker, formatTime, isCountingIn, currentCountInBeat, totalCountInBeats, track?.tempo, track?.timeSignature, volume]);
 
   if (!track) {
     return (

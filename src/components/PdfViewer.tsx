@@ -15,9 +15,10 @@ const Page = dynamic(
 );
 
 // Configure PDF.js worker on client side only
+// Worker is served locally from public/ to work offline and in Docker environments
 if (typeof window !== "undefined") {
   import("react-pdf").then((pdfjs) => {
-    pdfjs.pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.pdfjs.version}/build/pdf.worker.min.mjs`;
+    pdfjs.pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
   });
 }
 
