@@ -52,4 +52,4 @@ next-env.d.ts
 /prisma/migrations/
 /prisma/prisma/
 
-/reports
+/tasks

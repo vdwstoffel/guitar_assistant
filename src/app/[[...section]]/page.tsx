@@ -73,16 +73,34 @@ export default function Home() {
   const [showVideo, setShowVideo] = useState(false);
 
   // Helper: update a track inside selectedBookDetail (both uncategorized and chapter tracks)
+  // Short-circuits to avoid cloning chapters/tracks that don't contain the target track
   const updateTrackInBookDetail = useCallback((trackId: string, updater: (track: Track) => Track) => {
     setSelectedBookDetail(prev => {
       if (!prev) return prev;
-      return {
-        ...prev,
-        tracks: prev.tracks.map(t => t.id === trackId ? updater(t) : t),
-        chapters: prev.chapters?.map(ch => ({
+
+      // Only map uncategorized tracks if the target is among them
+      const hasUncategorized = prev.tracks.some(t => t.id === trackId);
+      const newTracks = hasUncategorized
+        ? prev.tracks.map(t => t.id === trackId ? updater(t) : t)
+        : prev.tracks;
+
+      // Only clone chapters that contain the target track
+      let chaptersChanged = false;
+      const newChapters = prev.chapters?.map(ch => {
+        if (!ch.tracks.some(t => t.id === trackId)) return ch;
+        chaptersChanged = true;
+        return {
           ...ch,
           tracks: ch.tracks.map(t => t.id === trackId ? updater(t) : t),
-        })),
+        };
+      });
+
+      if (!hasUncategorized && !chaptersChanged) return prev;
+
+      return {
+        ...prev,
+        tracks: newTracks,
+        chapters: newChapters,
       };
     });
   }, []);
@@ -553,14 +571,17 @@ export default function Home() {
       throw new Error("Failed to update book in-progress status");
     }
 
-    // Update lightweight authors data
+    // Update lightweight authors data - only clone the author that contains the target book
     setAuthors((prevAuthors) =>
-      prevAuthors.map((author) => ({
-        ...author,
-        books: author.books.map((book) =>
-          book.id === bookId ? { ...book, inProgress } : book
-        ),
-      }))
+      prevAuthors.map((author) => {
+        if (!author.books.some(b => b.id === bookId)) return author;
+        return {
+          ...author,
+          books: author.books.map((book) =>
+            book.id === bookId ? { ...book, inProgress } : book
+          ),
+        };
+      })
     );
     // Update book detail if it's the currently selected book
     setSelectedBookDetail(prev =>
