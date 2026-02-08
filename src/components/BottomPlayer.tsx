@@ -89,6 +89,9 @@ function BottomPlayer({
   const [totalCountInBeats, setTotalCountInBeats] = useState(0);
   const [stopMarker, setStopMarker] = useState<number | null>(null); // Timestamp where playback should stop
   const lastSeekPositionRef = useRef<number | null>(null); // Track where we seeked to avoid false stop triggers
+  const [isRepeatEnabled, setIsRepeatEnabled] = useState(false);
+  const isRepeatEnabledRef = useRef(false);
+  const restartPlaybackRef = useRef<() => void>(() => {});
 
   const handleZoom = (newZoom: number) => {
     const clampedZoom = Math.max(1, Math.min(200, newZoom));
@@ -242,7 +245,13 @@ function BottomPlayer({
 
     ws.on("play", () => setIsPlaying(true));
     ws.on("pause", () => setIsPlaying(false));
-    ws.on("finish", () => setIsPlaying(false));
+    ws.on("finish", () => {
+      if (isRepeatEnabledRef.current) {
+        restartPlaybackRef.current();
+      } else {
+        setIsPlaying(false);
+      }
+    });
 
     ws.load(`/api/audio/${encodeURIComponent(track.filePath)}`);
 
@@ -254,6 +263,8 @@ function BottomPlayer({
       prevMarkerIdsRef.current = new Set();
       isInitialLoadRef.current = true;
       setStopMarker(null); // Clear stop marker when track changes
+      setIsRepeatEnabled(false); // Reset repeat when track changes
+      isRepeatEnabledRef.current = false;
       initWaveSurfer();
     }
 
@@ -407,8 +418,12 @@ function BottomPlayer({
 
     // Only stop if we're approaching the stop marker from before (not already past it)
     if (currentTime >= stopMarker - 0.05 && currentTime < stopMarker + 1) {
-      wavesurferRef.current.pause();
-      wavesurferRef.current.seekTo(stopMarker / duration);
+      if (isRepeatEnabledRef.current) {
+        restartPlaybackRef.current();
+      } else {
+        wavesurferRef.current.pause();
+        wavesurferRef.current.seekTo(stopMarker / duration);
+      }
     }
   }, [isPlaying, currentTime, duration, stopMarker]);
 
@@ -464,6 +479,48 @@ function BottomPlayer({
     wavesurferRef.current.seekTo(0);
     wavesurferRef.current.play();
   };
+
+  const restartPlayback = useCallback(async () => {
+    if (!wavesurferRef.current || !duration || isCountingIn) return;
+
+    wavesurferRef.current.seekTo(0);
+    lastSeekPositionRef.current = 0;
+
+    if (track?.tempo && track.tempo > 0) {
+      const timeSignature = track.timeSignature || "4/4";
+      const beats = parseInt(timeSignature.split("/")[0]) || 4;
+
+      setIsCountingIn(true);
+      setCurrentCountInBeat(0);
+      setTotalCountInBeats(beats);
+
+      await playCountIn({
+        bpm: track.tempo,
+        timeSignature,
+        volume,
+        onBeat: (beat, total) => {
+          setCurrentCountInBeat(beat);
+          setTotalCountInBeats(total);
+        },
+      });
+
+      setIsCountingIn(false);
+      setCurrentCountInBeat(0);
+    }
+
+    wavesurferRef.current?.play();
+  }, [duration, isCountingIn, track?.tempo, track?.timeSignature, volume]);
+
+  // Keep refs in sync for use in WaveSurfer event callbacks
+  restartPlaybackRef.current = restartPlayback;
+
+  const toggleRepeat = useCallback(() => {
+    setIsRepeatEnabled(prev => {
+      const next = !prev;
+      isRepeatEnabledRef.current = next;
+      return next;
+    });
+  }, []);
 
   const jumpToMarker = useCallback(async (timestamp: number) => {
     if (!wavesurferRef.current || !duration) return;
@@ -594,6 +651,25 @@ function BottomPlayer({
               <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
                 <rect x="4" y="5" width="3" height="14" />
                 <path d="M9 12l10-7v14z" />
+              </svg>
+            </button>
+
+            {/* Repeat Button */}
+            <button
+              onClick={toggleRepeat}
+              disabled={isLoading}
+              className={`w-8 h-8 flex items-center justify-center rounded-full transition-colors shrink-0 ${
+                isRepeatEnabled
+                  ? "bg-green-600 hover:bg-green-700 text-white"
+                  : "bg-gray-700 hover:bg-gray-600 text-gray-400"
+              }`}
+              title={isRepeatEnabled ? "Repeat on" : "Repeat off"}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M17 1l4 4-4 4" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 11V9a4 4 0 014-4h14" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M7 23l-4-4 4-4" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21 13v2a4 4 0 01-4 4H3" />
               </svg>
             </button>
 
