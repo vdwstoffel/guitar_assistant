@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 
 interface CreateChapterBody {
   name: string;
+  trackIds?: string[];
 }
 
 export async function POST(
@@ -12,7 +13,7 @@ export async function POST(
   try {
     const { id: bookId } = await params;
     const body: CreateChapterBody = await request.json();
-    const { name } = body;
+    const { name, trackIds } = body;
 
     if (!name?.trim()) {
       return NextResponse.json(
@@ -38,26 +39,43 @@ export async function POST(
 
     const sortOrder = lastChapter ? lastChapter.sortOrder + 1 : 0;
 
-    // Create the chapter
-    const chapter = await prisma.chapter.create({
-      data: {
-        name: name.trim(),
-        bookId,
-        sortOrder,
-      },
-      include: {
-        tracks: {
-          orderBy: { sortOrder: "asc" },
-          include: {
-            markers: {
-              orderBy: { timestamp: "asc" },
+    // Create the chapter and assign tracks in a transaction
+    const chapter = await prisma.$transaction(async (tx) => {
+      const created = await tx.chapter.create({
+        data: {
+          name: name.trim(),
+          bookId,
+          sortOrder,
+        },
+      });
+
+      // Assign tracks to the new chapter if trackIds provided
+      if (trackIds && trackIds.length > 0) {
+        await tx.track.updateMany({
+          where: {
+            id: { in: trackIds },
+            bookId,
+          },
+          data: { chapterId: created.id },
+        });
+      }
+
+      return tx.chapter.findUnique({
+        where: { id: created.id },
+        include: {
+          tracks: {
+            orderBy: { sortOrder: "asc" },
+            include: {
+              markers: {
+                orderBy: { timestamp: "asc" },
+              },
             },
           },
+          videos: {
+            orderBy: { sortOrder: "asc" },
+          },
         },
-        videos: {
-          orderBy: { sortOrder: "asc" },
-        },
-      },
+      });
     });
 
     return NextResponse.json(chapter, { status: 201 });

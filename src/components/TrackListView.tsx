@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, memo, useEffect } from "react";
+import { useState, useMemo, memo, useEffect } from "react";
 import { AuthorSummary, Book, Track, BookVideo, Chapter } from "@/types";
 import ChapterSection from "./ChapterSection";
 
@@ -618,6 +618,8 @@ export default function TrackListView({
   const [editingChapter, setEditingChapter] = useState<Chapter | null>(null);
   const [newChapterName, setNewChapterName] = useState("");
   const [isCreatingChapter, setIsCreatingChapter] = useState(false);
+  const [chapterFromTrack, setChapterFromTrack] = useState<string>("");
+  const [chapterToTrack, setChapterToTrack] = useState<string>("");
 
   // Load expanded state from localStorage
   useEffect(() => {
@@ -639,6 +641,29 @@ export default function TrackListView({
     );
   }, [expandedChapters, book.id]);
 
+  // Compute all tracks in the book (uncategorized + all chapters)
+  const allBookTracks = useMemo(() => {
+    const tracks = [...(book.tracks || [])];
+    for (const chapter of book.chapters || []) {
+      tracks.push(...chapter.tracks);
+    }
+    return tracks;
+  }, [book.tracks, book.chapters]);
+
+  // Compute tracks matching the from/to range for chapter creation
+  const matchingTrackIds = useMemo(() => {
+    const from = chapterFromTrack ? parseInt(chapterFromTrack, 10) : null;
+    const to = chapterToTrack ? parseInt(chapterToTrack, 10) : null;
+    if (from === null && to === null) return [];
+    if (from !== null && isNaN(from)) return [];
+    if (to !== null && isNaN(to)) return [];
+    const low = from ?? to!;
+    const high = to ?? from!;
+    return allBookTracks
+      .filter((t) => t.trackNumber >= low && t.trackNumber <= high)
+      .map((t) => t.id);
+  }, [allBookTracks, chapterFromTrack, chapterToTrack]);
+
   const formatDuration = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
@@ -658,15 +683,24 @@ export default function TrackListView({
     if (!newChapterName.trim()) return;
     setIsCreatingChapter(true);
     try {
+      const payload: { name: string; trackIds?: string[] } = {
+        name: newChapterName.trim(),
+      };
+      if (matchingTrackIds.length > 0) {
+        payload.trackIds = matchingTrackIds;
+      }
+
       const res = await fetch(`/api/books/${book.id}/chapters`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newChapterName.trim() }),
+        body: JSON.stringify(payload),
       });
 
       if (!res.ok) throw new Error("Failed to create chapter");
 
       setNewChapterName("");
+      setChapterFromTrack("");
+      setChapterToTrack("");
       setShowAddChapter(false);
       await onLibraryRefresh?.();
     } catch (error) {
@@ -778,11 +812,40 @@ export default function TrackListView({
                 onKeyDown={(e) => e.key === "Enter" && handleCreateChapter()}
               />
             </div>
+            <div className="mt-4">
+              <label className="block text-sm text-gray-400 mb-1">Include Tracks (optional)</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  value={chapterFromTrack}
+                  onChange={(e) => setChapterFromTrack(e.target.value)}
+                  className="w-24 px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:border-purple-500"
+                  placeholder="From #"
+                  min={1}
+                />
+                <span className="text-gray-400">to</span>
+                <input
+                  type="number"
+                  value={chapterToTrack}
+                  onChange={(e) => setChapterToTrack(e.target.value)}
+                  className="w-24 px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:border-purple-500"
+                  placeholder="To #"
+                  min={1}
+                />
+              </div>
+              {matchingTrackIds.length > 0 && (
+                <p className="text-sm text-purple-400 mt-1">
+                  {matchingTrackIds.length} track{matchingTrackIds.length !== 1 ? "s" : ""} will be added
+                </p>
+              )}
+            </div>
             <div className="flex justify-end gap-3 mt-6">
               <button
                 onClick={() => {
                   setShowAddChapter(false);
                   setNewChapterName("");
+                  setChapterFromTrack("");
+                  setChapterToTrack("");
                 }}
                 disabled={isCreatingChapter}
                 className="px-4 py-2 text-gray-400 hover:text-white transition-colors"
