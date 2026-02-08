@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useState, useEffect, useRef, useCallback, memo } from 'react';
 
-type Section = 'library' | 'videos' | 'fretboard' | 'tools' | 'circle';
+type Section = 'library' | 'videos' | 'fretboard' | 'intervals' | 'chords' | 'tools' | 'circle';
 type TimeSignature = '4/4' | '3/4' | '2/4' | '6/8';
 
 interface TopNavProps {
@@ -31,10 +31,12 @@ const TopNav = memo(function TopNav({ activeSection, onSectionChange }: TopNavPr
 
   const theoryItems: { id: Section; label: string; href: string }[] = [
     { id: 'fretboard', label: 'Fretboard', href: '/fretboard' },
+    { id: 'intervals', label: 'Intervals', href: '/intervals' },
+    { id: 'chords', label: 'Chords', href: '/chords' },
     { id: 'circle', label: 'Circle of 5ths', href: '/circle' },
   ];
 
-  const isTheoryActive = activeSection === 'fretboard' || activeSection === 'circle';
+  const isTheoryActive = activeSection === 'fretboard' || activeSection === 'intervals' || activeSection === 'chords' || activeSection === 'circle';
 
   // Close theory dropdown on click outside
   useEffect(() => {

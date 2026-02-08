@@ -12,6 +12,9 @@ import MarkersBar from "@/components/MarkersBar";
 import TopNav from "@/components/TopNav";
 import Fretboard from "@/components/Fretboard";
 import CircleOfFifths from "@/components/CircleOfFifths";
+import IntervalExplorer from "@/components/IntervalExplorer";
+import ChordBuilder from "@/components/ChordBuilder";
+
 import PdfViewer from "@/components/PdfViewer";
 import Videos from "@/components/Videos";
 import Tools from "@/components/Tools";
@@ -20,12 +23,12 @@ import VideoUploadModal from "@/components/VideoUploadModal";
 import VideoPlayer from "@/components/VideoPlayer";
 import { AuthorSummary, BookSummary, Book, Track, Marker, JamTrack, JamTrackMarker, BookVideo } from "@/types";
 
-type Section = 'library' | 'videos' | 'fretboard' | 'tools' | 'circle';
+type Section = 'library' | 'videos' | 'fretboard' | 'intervals' | 'chords' | 'tools' | 'circle';
 
 const getSectionFromPath = (section: string[] | undefined): Section => {
   if (!section || section.length === 0) return 'library';
   const first = section[0];
-  if (first === 'videos' || first === 'fretboard' || first === 'tools' || first === 'circle') {
+  if (first === 'videos' || first === 'fretboard' || first === 'intervals' || first === 'chords' || first === 'tools' || first === 'circle') {
     return first;
   }
   return 'library';
@@ -1475,6 +1478,10 @@ export default function Home() {
         <Tools />
       ) : activeSection === 'circle' ? (
         <CircleOfFifths />
+      ) : activeSection === 'intervals' ? (
+        <IntervalExplorer />
+      ) : activeSection === 'chords' ? (
+        <ChordBuilder />
       ) : (
         <Fretboard />
       )}

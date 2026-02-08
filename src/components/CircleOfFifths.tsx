@@ -1,8 +1,22 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo, useCallback } from 'react';
+import {
+  useProgressionPlayer,
+  useCustomProgression,
+  ProgressionPlayback,
+  CustomProgressionBuilder,
+  NashvilleToggle,
+  ROMAN_TO_NASHVILLE_MAJOR,
+  ROMAN_TO_NASHVILLE_MINOR,
+} from './CircleEnhancements';
+import type { NotationMode } from './CircleEnhancements';
 
-// Circle of fifths order - clockwise from C at 12 o'clock
+// Circle of fifths order - clockwise from C at 12 o'clock.
+// NOTE: These key arrays use enharmonic/flat spellings (Gb, Db, Ebm, etc.)
+// which differ from the sharps-only NOTES constant in @/lib/musicTheory.
+// The Circle of Fifths intentionally preserves music-theory-correct spellings
+// so that key signatures display properly (e.g. "Bb major" not "A# major").
 const MAJOR_KEYS = ['C', 'G', 'D', 'A', 'E', 'B', 'Gb', 'Db', 'Ab', 'Eb', 'Bb', 'F'];
 const MINOR_KEYS = ['Am', 'Em', 'Bm', 'F#m', 'C#m', 'G#m', 'Ebm', 'Bbm', 'Fm', 'Cm', 'Gm', 'Dm'];
 
@@ -181,9 +195,19 @@ function getLabelPos(index: number, radius: number): { x: number; y: number } {
   return { x: CX + radius * Math.cos(angle), y: CY + radius * Math.sin(angle) };
 }
 
+/** Progression tab modes. */
+type ProgressionTab = 'presets' | 'custom';
+
 export default function CircleOfFifths() {
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [hoveredKey, setHoveredKey] = useState<string | null>(null);
+  const [notationMode, setNotationMode] = useState<NotationMode>('roman');
+  const [progressionTab, setProgressionTab] = useState<ProgressionTab>('presets');
+  /** Tracks which preset progression (by label) is currently being played, or null. */
+  const [activePresetLabel, setActivePresetLabel] = useState<string | null>(null);
+
+  const player = useProgressionPlayer();
+  const customProg = useCustomProgression();
 
   const isMajorKey = (key: string) => MAJOR_KEYS.includes(key);
 
@@ -230,11 +254,65 @@ export default function CircleOfFifths() {
     return 'hsl(220, 10%, 70%)';
   };
 
+  const selectedInfo = selectedKey ? KEY_DATA[selectedKey] : null;
+
+  // Build Nashville lookup map for the selected key
+  const nashvilleMap = useMemo(() => {
+    if (!selectedKey) return ROMAN_TO_NASHVILLE_MAJOR;
+    return isMajorKey(selectedKey) ? ROMAN_TO_NASHVILLE_MAJOR : ROMAN_TO_NASHVILLE_MINOR;
+  }, [selectedKey]);
+
+  /** Diatonic chord display data (chord name, roman, nashville) for the selected key. */
+  const diatonicChordData = useMemo(() => {
+    if (!selectedInfo) return [];
+    return selectedInfo.diatonicChords.map((chordName, i) => ({
+      chordName,
+      romanNumeral: selectedInfo.chordQualities[i],
+      nashvilleNumber: nashvilleMap[selectedInfo.chordQualities[i]] ?? String(i + 1),
+    }));
+  }, [selectedInfo, nashvilleMap]);
+
+  /** Stop playback when key changes. */
   const handleKeyClick = (key: string) => {
-    setSelectedKey(prev => prev === key ? null : key);
+    setSelectedKey(prev => {
+      const newKey = prev === key ? null : key;
+      // Stop any playing progression when switching keys
+      if (newKey !== prev) {
+        player.stopPlayback();
+        setActivePresetLabel(null);
+      }
+      return newKey;
+    });
   };
 
-  const selectedInfo = selectedKey ? KEY_DATA[selectedKey] : null;
+  /** Toggle preset progression playback. */
+  const handlePresetToggle = useCallback((label: string, chordNames: string[]) => {
+    if (activePresetLabel === label && player.isPlaying) {
+      // Stop current
+      player.stopPlayback();
+      setActivePresetLabel(null);
+    } else {
+      // Stop any current playback, then start this one
+      player.stopPlayback();
+      setActivePresetLabel(label);
+      // Small delay so the stop registers before re-starting
+      setTimeout(() => {
+        player.togglePlayback(chordNames);
+      }, 10);
+    }
+  }, [activePresetLabel, player]);
+
+  /** Toggle custom progression playback. */
+  const handleCustomToggle = useCallback(() => {
+    if (!selectedInfo) return;
+    const chordNames = customProg.chords.map(c => selectedInfo.diatonicChords[c.diatonicIndex]);
+    if (chordNames.length === 0) return;
+    setActivePresetLabel(null); // Clear any preset
+    player.togglePlayback(chordNames);
+  }, [customProg.chords, selectedInfo, player]);
+
+  /** Whether custom progression is currently playing. */
+  const isCustomPlaying = player.isPlaying && activePresetLabel === null;
 
   // Calculate rotation so selected key is always at the top (12 o'clock)
   const getRotationDeg = (): number => {
@@ -428,23 +506,90 @@ export default function CircleOfFifths() {
 
         {/* Progressions card on the right */}
         {selectedKey && selectedInfo && (
-          <div className="shrink-0">
-            <div className="bg-gray-800 rounded-lg border border-gray-700 p-5 w-72">
-              <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4">Progressions</h3>
-              <div className="space-y-3">
-                {COMMON_PROGRESSIONS.map((prog) => {
-                  const chords = prog.indices.map(i => selectedInfo.diatonicChords[i]);
-                  return (
-                    <div key={prog.label} className="border-b border-gray-700 last:border-0 pb-2.5 last:pb-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-gray-400 text-sm font-medium">{prog.label}</span>
-                        <span className="text-gray-600 text-xs">{prog.name}</span>
-                      </div>
-                      <span className="text-white text-base font-medium">{chords.join(' - ')}</span>
-                    </div>
-                  );
-                })}
+          <div className="shrink-0 flex flex-col gap-3 max-h-full overflow-y-auto">
+            <div className="bg-gray-800 rounded-lg border border-gray-700 p-5 w-80">
+              {/* Header with notation toggle */}
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Progressions</h3>
+                <NashvilleToggle mode={notationMode} onModeChange={setNotationMode} />
               </div>
+
+              {/* BPM control */}
+              <div className="flex items-center gap-2 mb-4 pb-3 border-b border-gray-700">
+                <span className="text-gray-500 text-xs uppercase tracking-wider">Tempo</span>
+                <input
+                  type="range"
+                  min="60"
+                  max="180"
+                  value={player.bpm}
+                  onChange={(e) => player.setBpm(parseInt(e.target.value))}
+                  className="flex-1 h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                />
+                <span className="text-gray-400 text-xs font-mono w-12 text-right">{player.bpm} bpm</span>
+              </div>
+
+              {/* Tab switcher: Presets / Custom */}
+              <div className="flex gap-1 mb-3 bg-gray-900/50 rounded-md p-0.5">
+                <button
+                  onClick={() => setProgressionTab('presets')}
+                  className={`flex-1 px-3 py-1.5 rounded text-xs font-medium transition-colors ${
+                    progressionTab === 'presets'
+                      ? 'bg-gray-700 text-white'
+                      : 'text-gray-500 hover:text-gray-300'
+                  }`}
+                >
+                  Presets
+                </button>
+                <button
+                  onClick={() => setProgressionTab('custom')}
+                  className={`flex-1 px-3 py-1.5 rounded text-xs font-medium transition-colors ${
+                    progressionTab === 'custom'
+                      ? 'bg-gray-700 text-white'
+                      : 'text-gray-500 hover:text-gray-300'
+                  }`}
+                >
+                  Custom
+                </button>
+              </div>
+
+              {/* Tab content */}
+              {progressionTab === 'presets' ? (
+                <div className="space-y-3">
+                  {COMMON_PROGRESSIONS.map((prog) => {
+                    const chords = prog.indices.map(i => ({
+                      chordName: selectedInfo.diatonicChords[i],
+                      romanNumeral: selectedInfo.chordQualities[i],
+                      nashvilleNumber: nashvilleMap[selectedInfo.chordQualities[i]] ?? String(i + 1),
+                    }));
+                    const chordNames = chords.map(c => c.chordName);
+                    const isThisPlaying = player.isPlaying && activePresetLabel === prog.label;
+                    return (
+                      <ProgressionPlayback
+                        key={prog.label}
+                        label={prog.label}
+                        formula={prog.name}
+                        chords={chords}
+                        isPlaying={isThisPlaying}
+                        activeChordIndex={isThisPlaying ? player.activeChordIndex : null}
+                        notationMode={notationMode}
+                        onTogglePlayback={() => handlePresetToggle(prog.label, chordNames)}
+                      />
+                    );
+                  })}
+                </div>
+              ) : (
+                <CustomProgressionBuilder
+                  diatonicChords={diatonicChordData}
+                  progression={customProg.chords}
+                  notationMode={notationMode}
+                  isPlaying={isCustomPlaying}
+                  activeChordIndex={isCustomPlaying ? player.activeChordIndex : null}
+                  onAddChord={customProg.addChord}
+                  onRemoveChord={customProg.removeChord}
+                  onClear={customProg.clearAll}
+                  onTogglePlayback={handleCustomToggle}
+                />
+              )}
             </div>
           </div>
         )}
