@@ -230,27 +230,6 @@ export default function Home() {
     fetchLibrary(true); // Restore from URL on initial load
   }, []);
 
-  // Keyboard shortcut: 'r' to restart current track from beginning
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Only in library section
-      if (activeSection !== 'library') return;
-
-      // Ignore if typing in an input field
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-
-      // Left arrow to restart from beginning
-      if (e.key === 'ArrowLeft' && !e.ctrlKey && !e.metaKey && !e.altKey) {
-        if ((currentTrack || currentJamTrack) && seekFnRef.current) {
-          e.preventDefault();
-          seekFnRef.current(0);
-        }
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [activeSection, currentTrack, currentJamTrack]);
 
   const handleAuthorSelect = (author: AuthorSummary) => {
     setIsInProgressSelected(false);

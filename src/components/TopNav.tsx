@@ -13,6 +13,7 @@ interface TopNavProps {
 
 const TopNav = memo(function TopNav({ activeSection, onSectionChange }: TopNavProps) {
   const [showMetronome, setShowMetronome] = useState(false);
+  const [showTheory, setShowTheory] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [bpm, setBpm] = useState(120);
   const [timeSignature, setTimeSignature] = useState<TimeSignature>('4/4');
@@ -26,14 +27,27 @@ const TopNav = memo(function TopNav({ activeSection, onSectionChange }: TopNavPr
   const volumeRef = useRef(100);
   const bpmRef = useRef(bpm);
   const timeSignatureRef = useRef(timeSignature);
+  const theoryDropdownRef = useRef<HTMLDivElement>(null);
 
-  const sections: { id: Section; label: string; href: string }[] = [
-    { id: 'library', label: 'Library', href: '/' },
-    { id: 'videos', label: 'Videos', href: '/videos' },
+  const theoryItems: { id: Section; label: string; href: string }[] = [
     { id: 'fretboard', label: 'Fretboard', href: '/fretboard' },
     { id: 'circle', label: 'Circle of 5ths', href: '/circle' },
-    { id: 'tools', label: 'Tools', href: '/tools' },
   ];
+
+  const isTheoryActive = activeSection === 'fretboard' || activeSection === 'circle';
+
+  // Close theory dropdown on click outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (theoryDropdownRef.current && !theoryDropdownRef.current.contains(e.target as Node)) {
+        setShowTheory(false);
+      }
+    };
+    if (showTheory) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [showTheory]);
 
   const getBeatsPerMeasure = (sig: TimeSignature): number => {
     switch (sig) {
@@ -155,20 +169,78 @@ const TopNav = memo(function TopNav({ activeSection, onSectionChange }: TopNavPr
 
           {/* Centered nav items */}
           <div className="flex-1 flex gap-1 justify-center">
-            {sections.map((section) => (
-              <Link
-                key={section.id}
-                href={section.href}
-                onClick={() => onSectionChange(section.id)}
-                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                  activeSection === section.id
+            <Link
+              href="/"
+              onClick={() => onSectionChange('library')}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                activeSection === 'library'
+                  ? 'bg-gray-700 text-white'
+                  : 'text-gray-400 hover:text-white hover:bg-gray-700/50'
+              }`}
+            >
+              Library
+            </Link>
+            <Link
+              href="/videos"
+              onClick={() => onSectionChange('videos')}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                activeSection === 'videos'
+                  ? 'bg-gray-700 text-white'
+                  : 'text-gray-400 hover:text-white hover:bg-gray-700/50'
+              }`}
+            >
+              Videos
+            </Link>
+
+            {/* Theory dropdown */}
+            <div className="relative" ref={theoryDropdownRef}>
+              <button
+                onClick={() => setShowTheory(!showTheory)}
+                className={`flex items-center gap-1 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                  isTheoryActive
                     ? 'bg-gray-700 text-white'
                     : 'text-gray-400 hover:text-white hover:bg-gray-700/50'
                 }`}
               >
-                {section.label}
-              </Link>
-            ))}
+                Theory
+                <svg className={`w-3 h-3 transition-transform ${showTheory ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              {showTheory && (
+                <div className="absolute top-full left-0 mt-1 bg-gray-800 border border-gray-700 rounded-md shadow-lg py-1 min-w-40 z-50">
+                  {theoryItems.map((item) => (
+                    <Link
+                      key={item.id}
+                      href={item.href}
+                      onClick={() => {
+                        onSectionChange(item.id);
+                        setShowTheory(false);
+                      }}
+                      className={`block px-4 py-2 text-sm transition-colors ${
+                        activeSection === item.id
+                          ? 'bg-gray-700 text-white'
+                          : 'text-gray-400 hover:text-white hover:bg-gray-700/50'
+                      }`}
+                    >
+                      {item.label}
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <Link
+              href="/tools"
+              onClick={() => onSectionChange('tools')}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                activeSection === 'tools'
+                  ? 'bg-gray-700 text-white'
+                  : 'text-gray-400 hover:text-white hover:bg-gray-700/50'
+              }`}
+            >
+              Tools
+            </Link>
           </div>
 
           {/* Spacer to balance the metronome button */}

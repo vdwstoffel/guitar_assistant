@@ -9,19 +9,69 @@ const NUM_FRETS = 15;
 const INLAY_POSITIONS = [3, 5, 7, 9, 12, 15];
 const DOUBLE_INLAY_FRETS = [12];
 
-// Scale patterns (intervals from root in semitones)
-const SCALES = {
-  'None': [],
-  'Major': [0, 2, 4, 5, 7, 9, 11],
-  'Minor': [0, 2, 3, 5, 7, 8, 10],
-  'Minor Pentatonic': [0, 3, 5, 7, 10],
-  'Major Pentatonic': [0, 2, 4, 7, 9],
-  'Blues': [0, 3, 5, 6, 7, 10],
-  'Dorian': [0, 2, 3, 5, 7, 9, 10],
-  'Phrygian': [0, 1, 3, 5, 7, 8, 10],
-  'Lydian': [0, 2, 4, 6, 7, 9, 11],
-  'Mixolydian': [0, 2, 4, 5, 7, 9, 10],
-  'Harmonic Minor': [0, 2, 3, 5, 7, 8, 11],
+// Scale patterns (intervals from root in semitones) with descriptions and genres
+interface ScaleInfo {
+  intervals: number[];
+  description: string;
+  genres: string[];
+}
+
+const SCALES: Record<string, ScaleInfo> = {
+  'None': {
+    intervals: [],
+    description: '',
+    genres: [],
+  },
+  'Major': {
+    intervals: [0, 2, 4, 5, 7, 9, 11],
+    description: 'The foundation of Western music. Bright, happy, and resolved sound. Also known as the Ionian mode.',
+    genres: ['Pop', 'Country', 'Classical', 'Rock', 'Folk'],
+  },
+  'Minor': {
+    intervals: [0, 2, 3, 5, 7, 8, 10],
+    description: 'The natural minor scale. Dark, melancholic, and emotional. Also known as the Aeolian mode.',
+    genres: ['Rock', 'Metal', 'Classical', 'Pop', 'R&B'],
+  },
+  'Minor Pentatonic': {
+    intervals: [0, 3, 5, 7, 10],
+    description: 'The most essential guitar scale. Five notes, no wrong notes. The go-to scale for soloing and improvisation.',
+    genres: ['Blues', 'Rock', 'Classic Rock', 'Hard Rock', 'Metal'],
+  },
+  'Major Pentatonic': {
+    intervals: [0, 2, 4, 7, 9],
+    description: 'Bright and open five-note scale. Sweet, uplifting sound without any tension. Great for country licks and melodic solos.',
+    genres: ['Country', 'Pop', 'Folk', 'Rock', 'Gospel'],
+  },
+  'Blues': {
+    intervals: [0, 3, 5, 6, 7, 10],
+    description: 'Minor pentatonic with an added flat 5th (the "blue note"). Gritty, soulful, and expressive.',
+    genres: ['Blues', 'Rock', 'Jazz', 'Funk', 'R&B'],
+  },
+  'Dorian': {
+    intervals: [0, 2, 3, 5, 7, 9, 10],
+    description: 'Minor scale with a raised 6th. Jazzy and sophisticated with a slightly brighter feel than natural minor.',
+    genres: ['Jazz', 'Funk', 'Blues', 'Latin', 'Rock'],
+  },
+  'Phrygian': {
+    intervals: [0, 1, 3, 5, 7, 8, 10],
+    description: 'Minor scale with a flat 2nd. Exotic, Spanish-flavored sound. Dark and mysterious.',
+    genres: ['Flamenco', 'Metal', 'Prog Rock', 'Latin', 'Film Scores'],
+  },
+  'Lydian': {
+    intervals: [0, 2, 4, 6, 7, 9, 11],
+    description: 'Major scale with a raised 4th. Dreamy, floating, and ethereal. Creates a sense of wonder.',
+    genres: ['Jazz', 'Prog Rock', 'Film Scores', 'Ambient', 'Fusion'],
+  },
+  'Mixolydian': {
+    intervals: [0, 2, 4, 5, 7, 9, 10],
+    description: 'Major scale with a flat 7th. Bluesy-major sound, strong and confident. The dominant scale.',
+    genres: ['Blues', 'Rock', 'Country', 'Funk', 'Jam Band'],
+  },
+  'Harmonic Minor': {
+    intervals: [0, 2, 3, 5, 7, 8, 11],
+    description: 'Natural minor with a raised 7th. Classical and dramatic with an exotic, Middle Eastern flavor.',
+    genres: ['Classical', 'Metal', 'Neoclassical', 'Flamenco', 'Jazz'],
+  },
 };
 
 type ScaleType = keyof typeof SCALES;
@@ -52,7 +102,7 @@ export default function Fretboard() {
     const noteIndex = getNoteIndex(noteName);
     const intervalFromRoot = (noteIndex - rootIndex + 12) % 12;
 
-    return SCALES[selectedScale].includes(intervalFromRoot);
+    return SCALES[selectedScale].intervals.includes(intervalFromRoot);
   }
 
   // Check if a note is the root note of the scale
@@ -142,9 +192,24 @@ export default function Fretboard() {
             </div>
 
             {selectedScale !== 'None' && (
-              <p className="text-amber-300 text-sm">
-                Showing: {selectedKey} {selectedScale}
-              </p>
+              <div className="max-w-lg text-center space-y-2">
+                <p className="text-amber-300 text-sm font-medium">
+                  {selectedKey} {selectedScale}
+                </p>
+                <p className="text-amber-200/60 text-sm leading-relaxed">
+                  {SCALES[selectedScale].description}
+                </p>
+                <div className="flex flex-wrap justify-center gap-2">
+                  {SCALES[selectedScale].genres.map((genre) => (
+                    <span
+                      key={genre}
+                      className="px-2 py-0.5 rounded-full text-xs bg-amber-800/40 text-amber-300/80 border border-amber-700/30"
+                    >
+                      {genre}
+                    </span>
+                  ))}
+                </div>
+              </div>
             )}
           </div>
         </div>
