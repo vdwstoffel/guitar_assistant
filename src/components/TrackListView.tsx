@@ -611,6 +611,7 @@ export default function TrackListView({
   const [editingTrack, setEditingTrack] = useState<Track | null>(null);
   const [editingVideo, setEditingVideo] = useState<BookVideo | null>(null);
   const [isConverting, setIsConverting] = useState(false);
+  const [mediaTab, setMediaTab] = useState<"audio" | "video">("audio");
 
   // Chapter management state
   const [expandedChapters, setExpandedChapters] = useState<Set<string>>(new Set());
@@ -641,6 +642,15 @@ export default function TrackListView({
     );
   }, [expandedChapters, book.id]);
 
+  // Determine if the book has both audio tracks and videos (to show tabs)
+  const allBookVideos = useMemo(() => {
+    const videos = [...(book.videos || [])];
+    for (const chapter of book.chapters || []) {
+      videos.push(...chapter.videos);
+    }
+    return videos;
+  }, [book.videos, book.chapters]);
+
   // Compute all tracks in the book (uncategorized + all chapters)
   const allBookTracks = useMemo(() => {
     const tracks = [...(book.tracks || [])];
@@ -649,6 +659,9 @@ export default function TrackListView({
     }
     return tracks;
   }, [book.tracks, book.chapters]);
+
+  const hasMediaTabs = allBookTracks.length > 0 && allBookVideos.length > 0;
+  const mediaFilter = hasMediaTabs ? mediaTab : undefined;
 
   // Compute tracks matching the from/to range for chapter creation
   const matchingTrackIds = useMemo(() => {
@@ -970,30 +983,61 @@ export default function TrackListView({
             )}
           </div>
 
-          {/* Video toggle button - only show when video is selected */}
-          {selectedVideo && (
-            <div className="flex items-center gap-2 mt-2">
-              <button
-                onClick={onToggleVideo}
-                className="flex items-center gap-1 px-2 py-1 bg-purple-600 hover:bg-purple-700 rounded text-xs text-white"
-              >
-                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
-                  />
-                </svg>
-                {showVideo ? 'Show PDF' : 'Show Video'}
-              </button>
-            </div>
-          )}
         </div>
       </div>
 
-      {/* Add Chapter Button */}
-      <div className="mb-4">
+      {/* Audio/Video Tab Bar */}
+      {hasMediaTabs && (
+        <div className="flex gap-1 mb-4 bg-gray-800 rounded-lg p-1">
+          <button
+            onClick={() => setMediaTab("audio")}
+            className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+              mediaTab === "audio"
+                ? "bg-green-600 text-white"
+                : "text-gray-400 hover:text-white hover:bg-gray-700"
+            }`}
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+            </svg>
+            Audio
+          </button>
+          <button
+            onClick={() => setMediaTab("video")}
+            className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+              mediaTab === "video"
+                ? "bg-blue-600 text-white"
+                : "text-gray-400 hover:text-white hover:bg-gray-700"
+            }`}
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+            </svg>
+            Video
+          </button>
+        </div>
+      )}
+
+      {/* Action Buttons */}
+      <div className="flex gap-2 mb-4">
+        {hasMediaTabs && mediaTab === "video" && onVideoUpload && (
+          <label className="flex items-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-700 rounded text-white transition-colors cursor-pointer">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            Upload Video
+            <input
+              type="file"
+              accept=".mp4,.mov,.webm,.m4v"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) onVideoUpload(book.id, file);
+                e.target.value = '';
+              }}
+            />
+          </label>
+        )}
         <button
           onClick={() => setShowAddChapter(true)}
           className="flex items-center gap-2 px-3 py-2 bg-purple-600 hover:bg-purple-700 rounded text-white transition-colors"
@@ -1021,6 +1065,7 @@ export default function TrackListView({
                 bookHasPdf={!!book.pdfPath}
                 currentPdfPage={currentPdfPage}
                 isExpanded={expandedChapters.has(chapter.id)}
+                mediaFilter={mediaFilter}
                 onToggleExpanded={() => toggleChapterExpanded(chapter.id)}
                 onTrackSelect={onTrackSelect}
                 onVideoSelect={onVideoSelect}
@@ -1043,8 +1088,8 @@ export default function TrackListView({
 
       {/* Uncategorized Tracks and Videos */}
       {(() => {
-        const uncategorizedTracks = book.tracks; // Already filtered by API (only uncategorized)
-        const uncategorizedVideos = book.videos || []; // Already filtered by API
+        const uncategorizedTracks = mediaFilter === "video" ? [] : book.tracks;
+        const uncategorizedVideos = mediaFilter === "audio" ? [] : (book.videos || []);
         const hasUncategorized = uncategorizedTracks.length > 0 || uncategorizedVideos.length > 0;
 
         if (!hasUncategorized) return null;

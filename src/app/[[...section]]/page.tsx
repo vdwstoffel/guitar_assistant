@@ -413,10 +413,8 @@ export default function Home() {
   };
 
   const handleVideoSelect = (video: BookVideo) => {
-    // Preserve video view if already showing a video, otherwise default to PDF
-    const wasShowingVideo = selectedVideo !== null && showVideo;
     setSelectedVideo(video);
-    setShowVideo(wasShowingVideo);
+    setShowVideo(true);
     setCurrentTrack(null);
     setCurrentAuthorId(null);
     setCurrentBookId(null);
@@ -788,26 +786,24 @@ export default function Home() {
   };
 
   const handleBulkVideoUpload = async (files: File[], authorName: string, bookName: string) => {
-    const formData = new FormData();
-    formData.append("authorName", authorName);
-    formData.append("bookName", bookName);
-
-    for (const file of files) {
-      formData.append("videos", file);
-    }
-
     try {
-      const response = await fetch("/api/videos/upload", {
-        method: "POST",
-        body: formData,
-      });
+      for (const file of files) {
+        const formData = new FormData();
+        formData.append("authorName", authorName);
+        formData.append("bookName", bookName);
+        formData.append("videos", file);
 
-      if (response.ok) {
-        await fetchLibrary();
-      } else {
-        const data = await response.json();
-        throw new Error(data.error || "Failed to upload videos");
+        const response = await fetch("/api/videos/upload", {
+          method: "POST",
+          body: formData,
+        });
+
+        if (!response.ok) {
+          const data = await response.json();
+          throw new Error(data.error || `Failed to upload ${file.name}`);
+        }
       }
+      await fetchLibrary();
     } catch (error) {
       console.error("Error uploading videos:", error);
       throw error;

@@ -12,6 +12,7 @@ interface ChapterSectionProps {
   bookHasPdf: boolean;
   currentPdfPage?: number;
   isExpanded: boolean;
+  mediaFilter?: "audio" | "video";
   onToggleExpanded: () => void;
   onTrackSelect: (track: Track, author: AuthorSummary, book: Book) => void;
   onVideoSelect: (video: BookVideo) => void;
@@ -45,6 +46,7 @@ export default function ChapterSection({
   onVideoAssignPdfPage,
   onChapterEdit,
   onChapterDelete,
+  mediaFilter,
 }: ChapterSectionProps) {
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -54,10 +56,10 @@ export default function ChapterSection({
     return `${mins}:${secs.toString().padStart(2, "0")}`;
   };
 
-  const sortedTracks = chapter.tracks
+  const sortedTracks = mediaFilter === "video" ? [] : chapter.tracks
     .sort((a, b) => (a.trackNumber || 0) - (b.trackNumber || 0));
 
-  const sortedVideos = chapter.videos
+  const sortedVideos = mediaFilter === "audio" ? [] : chapter.videos
     .sort((a, b) => (a.trackNumber || a.sortOrder || 0) - (b.trackNumber || b.sortOrder || 0));
 
   const totalItems = sortedTracks.length + sortedVideos.length;
@@ -84,6 +86,8 @@ export default function ChapterSection({
       setIsDeleting(false);
     }
   };
+
+  if (totalItems === 0) return null;
 
   return (
     <div className="mb-4">

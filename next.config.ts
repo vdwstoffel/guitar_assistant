@@ -8,6 +8,11 @@ const nextConfig: NextConfig = {
     'node-taglib-sharp',
     'wavefile',
   ],
+  experimental: {
+    serverActions: {
+      bodySizeLimit: '500mb',
+    },
+  },
 };
 
 export default nextConfig;
