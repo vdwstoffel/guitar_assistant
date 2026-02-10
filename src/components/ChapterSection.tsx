@@ -1,7 +1,59 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, memo } from "react";
 import { Chapter, Track, BookVideo, AuthorSummary, Book } from "@/types";
+
+const InProgressIndicator = memo(function InProgressIndicator({
+  trackId,
+  completed,
+  onClear
+}: {
+  trackId: string;
+  completed: boolean;
+  onClear?: () => void;
+}) {
+  const [speed, setSpeed] = useState<number | null>(null);
+
+  useEffect(() => {
+    const stored = localStorage.getItem(`playbackSpeed_${trackId}`);
+    setSpeed(stored ? parseInt(stored) : null);
+
+    // Listen for playback speed changes
+    const handleSpeedChange = (event: Event) => {
+      const customEvent = event as CustomEvent<{ trackId: string; speed: number }>;
+      if (customEvent.detail.trackId === trackId) {
+        setSpeed(customEvent.detail.speed);
+      }
+    };
+
+    window.addEventListener('playbackSpeedChange', handleSpeedChange);
+    return () => {
+      window.removeEventListener('playbackSpeedChange', handleSpeedChange);
+    };
+  }, [trackId]);
+
+  const handleClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    localStorage.removeItem(`playbackSpeed_${trackId}`);
+    setSpeed(null);
+    onClear?.();
+  };
+
+  // Don't show if completed or no practice speed
+  if (completed || !speed) return null;
+
+  return (
+    <button
+      onClick={handleClick}
+      className="relative flex items-center justify-center min-w-[2.5rem] h-5 px-1.5 rounded-full border border-amber-500/50 bg-amber-900/30 flex-shrink-0 transition-colors hover:bg-amber-500/20"
+      title={`Practicing at ${speed}% - Click to clear practice progress`}
+    >
+      <span className="text-[10px] font-medium text-amber-400 whitespace-nowrap">
+        {speed}%
+      </span>
+    </button>
+  );
+});
 
 interface ChapterSectionProps {
   chapter: Chapter;
@@ -24,6 +76,9 @@ interface ChapterSectionProps {
   onVideoAssignPdfPage?: (bookId: string, video: BookVideo, page: number) => Promise<void>;
   onChapterEdit?: (chapter: Chapter) => void;
   onChapterDelete?: (chapterId: string) => Promise<void>;
+  onShowPdf?: (pdfPath: string, page?: number) => void;
+  onToggleVideo?: () => void;
+  showVideo?: boolean;
 }
 
 export default function ChapterSection({
@@ -46,6 +101,9 @@ export default function ChapterSection({
   onVideoAssignPdfPage,
   onChapterEdit,
   onChapterDelete,
+  onShowPdf,
+  onToggleVideo,
+  showVideo,
   mediaFilter,
 }: ChapterSectionProps) {
   const [isDeleting, setIsDeleting] = useState(false);
@@ -207,6 +265,12 @@ export default function ChapterSection({
               {/* Track Title */}
               <span className="flex-1 truncate">{track.title}</span>
 
+              {/* In Progress indicator */}
+              <InProgressIndicator
+                trackId={track.id}
+                completed={track.completed}
+              />
+
               {/* Completion circle */}
               <button
                 onClick={(e) => {
@@ -342,6 +406,47 @@ export default function ChapterSection({
               <span className="flex-1 truncate">
                 {video.title || video.filename.replace(/\.[^/.]+$/, "")}
               </span>
+
+              {/* Quick action icons */}
+              <div className="flex items-center gap-1">
+                {/* Book icon - jump to PDF page */}
+                {bookHasPdf && video.pdfPage && onShowPdf && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      // If video is showing, toggle to PDF view
+                      if (showVideo && onToggleVideo) {
+                        onToggleVideo();
+                      }
+                      onShowPdf(book.pdfPath!, video.pdfPage!);
+                    }}
+                    className="p-1 text-gray-400 hover:text-blue-400 transition-colors"
+                    title={`Jump to PDF page ${video.pdfPage}`}
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                    </svg>
+                  </button>
+                )}
+
+                {/* Camera icon - play video */}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    // If PDF is showing, toggle to video view
+                    if (!showVideo && onToggleVideo) {
+                      onToggleVideo();
+                    }
+                    onVideoSelect(video);
+                  }}
+                  className="p-1 text-gray-400 hover:text-blue-400 transition-colors"
+                  title="Play video"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  </svg>
+                </button>
+              </div>
 
               {/* Completion circle */}
               <button

@@ -157,6 +157,10 @@ function BottomPlayer({
     setPlaybackSpeed(clampedSpeed);
     if (track) {
       localStorage.setItem(`playbackSpeed_${track.id}`, clampedSpeed.toString());
+      // Dispatch custom event to notify InProgressIndicator components
+      window.dispatchEvent(new CustomEvent('playbackSpeedChange', {
+        detail: { trackId: track.id, speed: clampedSpeed }
+      }));
     }
     if (wavesurferRef.current) {
       wavesurferRef.current.setPlaybackRate(clampedSpeed / 100, true);

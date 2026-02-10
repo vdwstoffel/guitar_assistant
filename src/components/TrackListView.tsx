@@ -39,6 +39,58 @@ const BookCover = memo(function BookCover({ book }: { book: Book }) {
   );
 });
 
+const InProgressIndicator = memo(function InProgressIndicator({
+  trackId,
+  completed,
+  onClear
+}: {
+  trackId: string;
+  completed: boolean;
+  onClear?: () => void;
+}) {
+  const [speed, setSpeed] = useState<number | null>(null);
+
+  useEffect(() => {
+    const stored = localStorage.getItem(`playbackSpeed_${trackId}`);
+    setSpeed(stored ? parseInt(stored) : null);
+
+    // Listen for playback speed changes
+    const handleSpeedChange = (event: Event) => {
+      const customEvent = event as CustomEvent<{ trackId: string; speed: number }>;
+      if (customEvent.detail.trackId === trackId) {
+        setSpeed(customEvent.detail.speed);
+      }
+    };
+
+    window.addEventListener('playbackSpeedChange', handleSpeedChange);
+    return () => {
+      window.removeEventListener('playbackSpeedChange', handleSpeedChange);
+    };
+  }, [trackId]);
+
+  const handleClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    localStorage.removeItem(`playbackSpeed_${trackId}`);
+    setSpeed(null);
+    onClear?.();
+  };
+
+  // Don't show if completed or no practice speed
+  if (completed || !speed) return null;
+
+  return (
+    <button
+      onClick={handleClick}
+      className="relative flex items-center justify-center min-w-[2.5rem] h-5 px-1.5 rounded-full border border-amber-500/50 bg-amber-900/30 flex-shrink-0 transition-colors hover:bg-amber-500/20"
+      title={`Practicing at ${speed}% - Click to clear practice progress`}
+    >
+      <span className="text-[10px] font-medium text-amber-400 whitespace-nowrap">
+        {speed}%
+      </span>
+    </button>
+  );
+});
+
 interface TrackEditModalProps {
   track: Track;
   authorName: string;
@@ -677,6 +729,20 @@ export default function TrackListView({
       .map((t) => t.id);
   }, [allBookTracks, chapterFromTrack, chapterToTrack]);
 
+  // Compute videos matching the from/to range for chapter creation
+  const matchingVideoIds = useMemo(() => {
+    const from = chapterFromTrack ? parseInt(chapterFromTrack, 10) : null;
+    const to = chapterToTrack ? parseInt(chapterToTrack, 10) : null;
+    if (from === null && to === null) return [];
+    if (from !== null && isNaN(from)) return [];
+    if (to !== null && isNaN(to)) return [];
+    const low = from ?? to!;
+    const high = to ?? from!;
+    return allBookVideos
+      .filter((v) => v.trackNumber && v.trackNumber >= low && v.trackNumber <= high)
+      .map((v) => v.id);
+  }, [allBookVideos, chapterFromTrack, chapterToTrack]);
+
   const formatDuration = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
@@ -696,11 +762,14 @@ export default function TrackListView({
     if (!newChapterName.trim()) return;
     setIsCreatingChapter(true);
     try {
-      const payload: { name: string; trackIds?: string[] } = {
+      const payload: { name: string; trackIds?: string[]; videoIds?: string[] } = {
         name: newChapterName.trim(),
       };
       if (matchingTrackIds.length > 0) {
         payload.trackIds = matchingTrackIds;
+      }
+      if (matchingVideoIds.length > 0) {
+        payload.videoIds = matchingVideoIds;
       }
 
       const res = await fetch(`/api/books/${book.id}/chapters`, {
@@ -846,9 +915,12 @@ export default function TrackListView({
                   min={1}
                 />
               </div>
-              {matchingTrackIds.length > 0 && (
+              {(matchingTrackIds.length > 0 || matchingVideoIds.length > 0) && (
                 <p className="text-sm text-purple-400 mt-1">
-                  {matchingTrackIds.length} track{matchingTrackIds.length !== 1 ? "s" : ""} will be added
+                  {matchingTrackIds.length > 0 && `${matchingTrackIds.length} track${matchingTrackIds.length !== 1 ? "s" : ""}`}
+                  {matchingTrackIds.length > 0 && matchingVideoIds.length > 0 && " and "}
+                  {matchingVideoIds.length > 0 && `${matchingVideoIds.length} video${matchingVideoIds.length !== 1 ? "s" : ""}`}
+                  {" will be added"}
                 </p>
               )}
             </div>
@@ -931,13 +1003,25 @@ export default function TrackListView({
             {book.pdfPath ? (
               <>
                 <button
-                  onClick={() => onShowPdf?.(book.pdfPath!)}
+                  onClick={() => {
+                    if (selectedVideo) {
+                      // Toggle between video and PDF when a video is selected
+                      onToggleVideo();
+                    } else {
+                      // Just show PDF when no video is selected
+                      onShowPdf?.(book.pdfPath!);
+                    }
+                  }}
                   className="flex items-center gap-1 px-2 py-1 bg-blue-600 hover:bg-blue-700 rounded text-xs text-white"
                 >
                   <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    {showVideo ? (
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    ) : (
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    )}
                   </svg>
-                  View PDF
+                  {showVideo ? "View PDF" : (selectedVideo ? "View Video" : "View PDF")}
                 </button>
                 {onPdfConvert && (
                   <button
@@ -1081,6 +1165,9 @@ export default function TrackListView({
                 }}
                 onChapterEdit={setEditingChapter}
                 onChapterDelete={handleDeleteChapter}
+                onShowPdf={onShowPdf}
+                onToggleVideo={onToggleVideo}
+                showVideo={showVideo}
               />
             ))}
         </div>
@@ -1136,6 +1223,12 @@ export default function TrackListView({
               <span className="flex-1 truncate">
                 {track.title}
               </span>
+
+              {/* In Progress indicator */}
+              <InProgressIndicator
+                trackId={track.id}
+                completed={track.completed}
+              />
 
               {/* Completion circle */}
               <button
@@ -1272,6 +1365,47 @@ export default function TrackListView({
                     <span className="flex-1 truncate">
                       {video.title || video.filename.replace(/\.[^/.]+$/, '')}
                     </span>
+
+                    {/* Quick action icons */}
+                    <div className="flex items-center gap-1">
+                      {/* Book icon - jump to PDF page */}
+                      {book.pdfPath && video.pdfPage && onShowPdf && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            // If video is showing, toggle to PDF view
+                            if (showVideo && onToggleVideo) {
+                              onToggleVideo();
+                            }
+                            onShowPdf(book.pdfPath!, video.pdfPage!);
+                          }}
+                          className="p-1 text-gray-400 hover:text-blue-400 transition-colors"
+                          title={`Jump to PDF page ${video.pdfPage}`}
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                          </svg>
+                        </button>
+                      )}
+
+                      {/* Camera icon - play video */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          // If PDF is showing, toggle to video view
+                          if (!showVideo && onToggleVideo) {
+                            onToggleVideo();
+                          }
+                          onVideoSelect(video);
+                        }}
+                        className="p-1 text-gray-400 hover:text-blue-400 transition-colors"
+                        title="Play video"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
+                      </button>
+                    </div>
 
                     {/* Completion circle */}
                     <button

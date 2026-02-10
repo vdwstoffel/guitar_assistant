@@ -16,13 +16,13 @@ export default function Metronome() {
   const [bpm, setBpm] = useState(120);
   const [timeSignature, setTimeSignature] = useState<TimeSignature>('4/4');
   const [currentBeat, setCurrentBeat] = useState(0);
-  const [volume, setVolume] = useState(100);
+  const [volume, setVolume] = useState(50);
 
   const audioContextRef = useRef<AudioContext | null>(null);
   const nextNoteTimeRef = useRef(0);
   const timerIdRef = useRef<number | null>(null);
   const currentBeatRef = useRef(0);
-  const volumeRef = useRef(100);
+  const volumeRef = useRef(50);
   const bpmRef = useRef(bpm);
   const timeSignatureRef = useRef(timeSignature);
 

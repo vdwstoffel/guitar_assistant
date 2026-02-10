@@ -1,7 +1,7 @@
 "use client";
 
 import { BookVideo } from "@/types";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 interface VideoPlayerProps {
   video: BookVideo | null;
@@ -9,6 +9,14 @@ interface VideoPlayerProps {
 
 export default function VideoPlayer({ video }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const [volume, setVolume] = useState(() => {
+    // Initialize from sessionStorage, default to 1.0
+    if (typeof window !== 'undefined') {
+      const saved = sessionStorage.getItem('videoPlayerVolume');
+      return saved ? parseFloat(saved) : 1.0;
+    }
+    return 1.0;
+  });
 
   useEffect(() => {
     // Reset video when changing videos
@@ -16,6 +24,22 @@ export default function VideoPlayer({ video }: VideoPlayerProps) {
       videoRef.current.load();
     }
   }, [video]);
+
+  // Restore volume after video loads
+  const handleLoadedMetadata = () => {
+    if (videoRef.current) {
+      videoRef.current.volume = volume;
+    }
+  };
+
+  // Save volume when user changes it
+  const handleVolumeChange = () => {
+    if (videoRef.current) {
+      const newVolume = videoRef.current.volume;
+      setVolume(newVolume);
+      sessionStorage.setItem('videoPlayerVolume', newVolume.toString());
+    }
+  };
 
   if (!video) {
     return (
@@ -50,6 +74,8 @@ export default function VideoPlayer({ video }: VideoPlayerProps) {
           className="max-w-full max-h-full"
           controls
           controlsList="nodownload"
+          onVolumeChange={handleVolumeChange}
+          onLoadedMetadata={handleLoadedMetadata}
         >
           <source src={videoUrl} />
           Your browser does not support the video tag.

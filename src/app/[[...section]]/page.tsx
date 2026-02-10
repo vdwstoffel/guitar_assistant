@@ -389,6 +389,7 @@ export default function Home() {
     setCurrentBookId(selectedBookId);
     setCurrentJamTrackId(null);
     setSelectedVideo(null);
+    setShowVideo(false);
     if (selectedBookDetail?.pdfPath) {
       setPdfPath(selectedBookDetail.pdfPath);
     }
@@ -396,12 +397,16 @@ export default function Home() {
 
   const handleVideoSelect = (video: BookVideo) => {
     setSelectedVideo(video);
-    setShowVideo(true);
+    // Only show video if no video was previously selected, otherwise maintain current view mode
+    if (!selectedVideo) {
+      setShowVideo(true);
+    }
     setCurrentTrack(null);
     setCurrentAuthorId(null);
     setCurrentBookId(null);
     setCurrentJamTrackId(null);
     if (video.pdfPage && selectedBookDetail?.pdfPath) {
+      setPdfPath(selectedBookDetail.pdfPath);
       setPdfPage(video.pdfPage);
     }
   };

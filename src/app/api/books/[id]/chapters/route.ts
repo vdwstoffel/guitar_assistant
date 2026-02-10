@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 interface CreateChapterBody {
   name: string;
   trackIds?: string[];
+  videoIds?: string[];
 }
 
 export async function POST(
@@ -13,7 +14,7 @@ export async function POST(
   try {
     const { id: bookId } = await params;
     const body: CreateChapterBody = await request.json();
-    const { name, trackIds } = body;
+    const { name, trackIds, videoIds } = body;
 
     if (!name?.trim()) {
       return NextResponse.json(
@@ -54,6 +55,17 @@ export async function POST(
         await tx.track.updateMany({
           where: {
             id: { in: trackIds },
+            bookId,
+          },
+          data: { chapterId: created.id },
+        });
+      }
+
+      // Assign videos to the new chapter if videoIds provided
+      if (videoIds && videoIds.length > 0) {
+        await tx.bookVideo.updateMany({
+          where: {
+            id: { in: videoIds },
             bookId,
           },
           data: { chapterId: created.id },
