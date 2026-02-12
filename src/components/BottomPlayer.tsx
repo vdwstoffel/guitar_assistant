@@ -92,6 +92,7 @@ function BottomPlayer({
   const [isRepeatEnabled, setIsRepeatEnabled] = useState(false);
   const isRepeatEnabledRef = useRef(false);
   const restartPlaybackRef = useRef<() => void>(() => {});
+  const [showSplitChannels, setShowSplitChannels] = useState(false);
 
   const handleZoom = (newZoom: number) => {
     const clampedZoom = Math.max(1, Math.min(200, newZoom));
@@ -193,11 +194,17 @@ function BottomPlayer({
       progressColor: "#22c55e",
       cursorColor: "#ffffff",
       cursorWidth: 2,
-      height: 140,
+      height: showSplitChannels ? 120 : 140,
       normalize: true,
       minPxPerSec: 1,
       autoScroll: true,
       autoCenter: true,
+      ...(showSplitChannels && {
+        splitChannels: [
+          { waveColor: '#4b5563', progressColor: '#22c55e' },
+          { waveColor: '#3b4563', progressColor: '#1eb04e' }
+        ]
+      }),
       plugins: [regions],
     });
 
@@ -260,7 +267,7 @@ function BottomPlayer({
     ws.load(`/api/audio/${encodeURIComponent(track.filePath)}`);
 
     wavesurferRef.current = ws;
-  }, [track]);
+  }, [track, showSplitChannels]);
 
   useEffect(() => {
     if (track) {
@@ -293,6 +300,36 @@ function BottomPlayer({
       }
     };
   }, [track?.id]);
+
+  // Handle split channels toggle - reinitialize waveform while preserving playback state
+  useEffect(() => {
+    // Skip on initial load or if no track/wavesurfer exists yet
+    if (!track || !wavesurferRef.current || isInitialLoadRef.current) return;
+
+    const wasPlaying = isPlaying;
+    const currentPosition = currentTimeRef.current;
+    const currentDuration = duration;
+
+    // Reinitialize with new split channels setting
+    initWaveSurfer();
+
+    // Restore playback position after waveform is ready
+    if (currentDuration > 0) {
+      const checkReady = () => {
+        if (wavesurferRef.current && wavesurferRef.current.getDuration() > 0) {
+          const ws = wavesurferRef.current;
+          ws.seekTo(currentPosition / ws.getDuration());
+          if (wasPlaying) {
+            ws.play();
+          }
+        }
+      };
+
+      // Use a small delay to ensure waveform is fully initialized
+      const timeoutId = setTimeout(checkReady, 100);
+      return () => clearTimeout(timeoutId);
+    }
+  }, [showSplitChannels]);
 
   // Wheel zoom event listener - re-run when track changes or loading completes
   useEffect(() => {
@@ -777,6 +814,20 @@ function BottomPlayer({
               />
             </div>
 
+            {/* Split Channels Toggle */}
+            <button
+              onClick={() => setShowSplitChannels(!showSplitChannels)}
+              className={`flex items-center gap-1 px-2 py-1 rounded ${
+                showSplitChannels ? "bg-blue-600 text-white" : "bg-gray-700 hover:bg-gray-600 text-gray-300"
+              }`}
+              title={showSplitChannels ? "Show merged channels" : "Show split channels (L/R)"}
+            >
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+              {showSplitChannels ? "Split" : "Mono"}
+            </button>
+
             {/* Markers Toggle */}
             <button
               onClick={() => setShowMarkers(!showMarkers)}
@@ -793,7 +844,7 @@ function BottomPlayer({
           </div>
 
           {/* Waveform - Full Width */}
-          <div className="flex-1 relative pt-6">
+          <div className={`relative pt-6 ${showSplitChannels ? 'h-[300px]' : 'h-[200px]'}`}>
             {/* Marker labels - positioned above waveform */}
             {track.markers.length > 0 && duration > 0 && !isLoading && containerWidth > 0 && (
               <div className="absolute top-0 left-0 right-0 h-6 overflow-visible pointer-events-none z-10">
