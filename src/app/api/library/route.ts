@@ -11,9 +11,21 @@ export async function GET() {
             include: {
               _count: { select: { tracks: true } },
               tracks: {
-                take: 1,
                 orderBy: { trackNumber: "asc" },
-                select: { filePath: true },
+                select: { filePath: true, completed: true },
+              },
+              videos: {
+                select: { completed: true },
+              },
+              chapters: {
+                include: {
+                  tracks: {
+                    select: { completed: true },
+                  },
+                  videos: {
+                    select: { completed: true },
+                  },
+                },
               },
             },
           },
@@ -38,15 +50,36 @@ export async function GET() {
     const authors = authorsRaw.map((author) => ({
       id: author.id,
       name: author.name,
-      books: author.books.map((book) => ({
-        id: book.id,
-        name: book.name,
-        authorId: book.authorId,
-        pdfPath: book.pdfPath,
-        inProgress: book.inProgress,
-        trackCount: book._count.tracks,
-        coverTrackPath: book.tracks[0]?.filePath ?? null,
-      })),
+      books: author.books.map((book) => {
+        // Collect all tracks (from book and chapters)
+        const allTracks = [
+          ...book.tracks,
+          ...book.chapters.flatMap(ch => ch.tracks),
+        ];
+        // Collect all videos (from book and chapters)
+        const allVideos = [
+          ...book.videos,
+          ...book.chapters.flatMap(ch => ch.videos),
+        ];
+
+        // Calculate completion
+        const completedTracks = allTracks.filter(t => t.completed).length;
+        const completedVideos = allVideos.filter(v => v.completed).length;
+        const completedCount = completedTracks + completedVideos;
+        const totalCount = allTracks.length + allVideos.length;
+
+        return {
+          id: book.id,
+          name: book.name,
+          authorId: book.authorId,
+          pdfPath: book.pdfPath,
+          inProgress: book.inProgress,
+          trackCount: book._count.tracks,
+          coverTrackPath: book.tracks[0]?.filePath ?? null,
+          completedCount,
+          totalCount,
+        };
+      }),
     }));
 
     return NextResponse.json({ authors, jamTracks });

@@ -119,6 +119,8 @@ export interface BookSummary {
   inProgress: boolean;
   trackCount: number;
   coverTrackPath: string | null;
+  completedCount?: number; // Number of completed tracks/videos
+  totalCount?: number; // Total tracks + videos
 }
 
 export interface AuthorSummary {

@@ -127,9 +127,9 @@ const MarkersBar = memo(function MarkersBar({
   if (!visible) return null;
 
   return (
-    <div className="w-full border-t border-gray-700 bg-gray-800 text-white pt-2 pb-2 px-4">
+    <div className="w-full border-t border-gray-700 bg-gray-800 text-white pt-2 pb-2 px-2 sm:px-4">
       {/* Controls Row - Centered */}
-      <div className="flex items-center justify-center gap-4 flex-wrap">
+      <div className="flex items-center justify-center gap-2 sm:gap-4 flex-wrap">
         {/* Count-in / Lead-in Controls */}
         {trackTempo && trackTempo > 0 ? (
           <div className="flex items-center gap-2">

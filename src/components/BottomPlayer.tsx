@@ -679,14 +679,16 @@ function BottomPlayer({
   return (
     <div className="h-full flex flex-col bg-gray-800 border-t border-gray-700 text-white">
       {/* Main Player Section */}
-      <div className="flex-1 flex flex-col px-4 py-2">
-          {/* Controls Row - Centered */}
-          <div className="flex items-center justify-center gap-6 text-xs mb-2">
+      <div className="flex-1 flex flex-col px-2 sm:px-4 py-2">
+          {/* Controls - Multi-row responsive layout */}
+          <div className="flex flex-col gap-2 mb-2">
+            {/* Row 1: Primary playback controls */}
+            <div className="flex items-center justify-center gap-3 sm:gap-6 text-xs">
             {/* Restart Button */}
             <button
               onClick={restartFromBeginning}
               disabled={isLoading}
-              className="w-8 h-8 flex items-center justify-center bg-gray-700 hover:bg-gray-600 disabled:bg-gray-600 rounded-full transition-colors flex-shrink-0"
+              className="w-11 h-11 sm:w-10 sm:h-10 md:w-8 md:h-8 flex items-center justify-center bg-gray-700 hover:bg-gray-600 disabled:bg-gray-600 rounded-full transition-colors flex-shrink-0"
               title="Restart from beginning"
             >
               <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
@@ -699,7 +701,7 @@ function BottomPlayer({
             <button
               onClick={toggleRepeat}
               disabled={isLoading}
-              className={`w-8 h-8 flex items-center justify-center rounded-full transition-colors shrink-0 ${
+              className={`w-11 h-11 sm:w-10 sm:h-10 md:w-8 md:h-8 flex items-center justify-center rounded-full transition-colors shrink-0 ${
                 isRepeatEnabled
                   ? "bg-green-600 hover:bg-green-700 text-white"
                   : "bg-gray-700 hover:bg-gray-600 text-gray-400"
@@ -718,7 +720,7 @@ function BottomPlayer({
             <button
               onClick={togglePlay}
               disabled={isLoading}
-              className="w-10 h-10 flex items-center justify-center bg-green-600 hover:bg-green-700 disabled:bg-gray-600 rounded-full transition-colors flex-shrink-0"
+              className="w-12 h-12 sm:w-14 sm:h-14 flex items-center justify-center bg-green-600 hover:bg-green-700 disabled:bg-gray-600 rounded-full transition-colors flex-shrink-0"
             >
               {isLoading ? (
                 <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
@@ -741,10 +743,13 @@ function BottomPlayer({
             <span className="text-xs text-gray-400 tabular-nums w-20 text-center">
               {formatTime(currentTime)} / {formatTime(duration)}
             </span>
+          </div>
 
+          {/* Row 2: Secondary controls - Wrap on mobile */}
+          <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-4 text-xs">
             {/* Speed */}
-            <div className="flex items-center gap-2">
-              <span className="text-gray-500">Speed:</span>
+            <div className="flex items-center gap-1 sm:gap-2">
+              <span className="text-gray-500 text-xs">Speed:</span>
               <input
                 type="number"
                 min={10}
@@ -768,13 +773,13 @@ function BottomPlayer({
                     (e.target as HTMLInputElement).blur();
                   }
                 }}
-                className="w-16 px-2 py-0.5 bg-gray-700 border border-gray-600 rounded text-center focus:outline-none focus:border-green-500"
+                className="w-12 sm:w-16 px-2 py-0.5 bg-gray-700 border border-gray-600 rounded text-center text-xs focus:outline-none focus:border-green-500"
               />
-              <span className="text-gray-500">%</span>
+              <span className="text-gray-500 text-xs">%</span>
             </div>
 
-            {/* Zoom */}
-            <div className="flex items-center gap-2">
+            {/* Zoom - Hide on mobile */}
+            <div className="hidden md:flex items-center gap-2">
               <span className="text-gray-500">Zoom:</span>
               <input
                 type="range"
@@ -788,10 +793,10 @@ function BottomPlayer({
             </div>
 
             {/* Volume */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 sm:gap-2">
               <button
                 onClick={() => handleVolume(volume === 0 ? 100 : 0)}
-                className="text-gray-400 hover:text-white"
+                className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-white"
               >
                 {volume === 0 ? (
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -810,14 +815,14 @@ function BottomPlayer({
                 max={100}
                 value={volume}
                 onChange={(e) => handleVolume(parseInt(e.target.value))}
-                className="w-20 h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-green-500"
+                className="w-16 sm:w-20 h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-green-500"
               />
             </div>
 
             {/* Split Channels Toggle */}
             <button
               onClick={() => setShowSplitChannels(!showSplitChannels)}
-              className={`flex items-center gap-1 px-2 py-1 rounded ${
+              className={`flex items-center gap-1 px-3 py-1.5 rounded text-xs ${
                 showSplitChannels ? "bg-blue-600 text-white" : "bg-gray-700 hover:bg-gray-600 text-gray-300"
               }`}
               title={showSplitChannels ? "Show merged channels" : "Show split channels (L/R)"}
@@ -831,7 +836,7 @@ function BottomPlayer({
             {/* Markers Toggle */}
             <button
               onClick={() => setShowMarkers(!showMarkers)}
-              className={`flex items-center gap-1 px-2 py-1 rounded ${
+              className={`flex items-center gap-1 px-3 py-1.5 rounded text-xs ${
                 showMarkers ? "bg-yellow-600 text-white" : "bg-gray-700 hover:bg-gray-600 text-gray-300"
               }`}
             >
@@ -840,11 +845,11 @@ function BottomPlayer({
               </svg>
               Markers ({track.markers.length})
             </button>
-
           </div>
+        </div>
 
-          {/* Waveform - Full Width */}
-          <div className={`relative pt-6 ${showSplitChannels ? 'h-[300px]' : 'h-[200px]'}`}>
+          {/* Waveform - Responsive height */}
+          <div className={`relative pt-6 ${showSplitChannels ? 'h-[250px] sm:h-[300px]' : 'h-[140px] sm:h-[200px]'}`}>
             {/* Marker labels - positioned above waveform */}
             {track.markers.length > 0 && duration > 0 && !isLoading && containerWidth > 0 && (
               <div className="absolute top-0 left-0 right-0 h-6 overflow-visible pointer-events-none z-10">

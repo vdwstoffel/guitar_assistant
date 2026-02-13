@@ -12,8 +12,8 @@ const BookCover = memo(function BookCover({ book }: { book: Book }) {
 
   if (!artUrl || hasError) {
     return (
-      <div className="w-32 h-32 flex-shrink-0 bg-gray-700 rounded-lg flex items-center justify-center">
-        <svg className="w-12 h-12 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <div className="w-24 h-24 sm:w-32 sm:h-32 shrink-0 bg-gray-700 rounded-lg flex items-center justify-center">
+        <svg className="w-10 h-10 sm:w-12 sm:h-12 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
         </svg>
       </div>
@@ -21,7 +21,7 @@ const BookCover = memo(function BookCover({ book }: { book: Book }) {
   }
 
   return (
-    <div className="relative w-32 h-32 flex-shrink-0">
+    <div className="relative w-24 h-24 sm:w-32 sm:h-32 shrink-0">
       {!isLoaded && (
         <div className="absolute inset-0 bg-gray-700 rounded-lg flex items-center justify-center">
           <div className="w-6 h-6 border-3 border-gray-600 border-t-gray-400 rounded-full animate-spin"></div>
@@ -127,8 +127,8 @@ function BookEditModal({ book, authorName, onClose, onSave }: BookEditModalProps
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md mx-4 shadow-xl">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-gray-800 rounded-lg p-4 sm:p-6 w-full max-w-md max-h-[90vh] overflow-y-auto shadow-xl">
         <h3 className="text-lg font-semibold mb-4 text-white">Edit Book Info</h3>
         <p className="text-sm text-gray-400 mb-4">
           This will update all {book.trackCount} track{book.trackCount !== 1 ? "s" : ""} in this book.
@@ -199,8 +199,8 @@ function TrackEditModal({ track, authorName, bookName, bookHasPdf, chapters, onC
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md mx-4 shadow-xl">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-gray-800 rounded-lg p-4 sm:p-6 w-full max-w-md max-h-[90vh] overflow-y-auto shadow-xl">
         <h3 className="text-lg font-semibold mb-4 text-white">Edit Track Info</h3>
         <div className="space-y-4">
           <div>
@@ -403,8 +403,8 @@ function VideoEditModal({ video, bookHasPdf, chapters, onClose, onSave, onDelete
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md mx-4 shadow-xl">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-gray-800 rounded-lg p-4 sm:p-6 w-full max-w-md max-h-[90vh] overflow-y-auto shadow-xl">
         <h3 className="text-lg font-semibold mb-4 text-white">Edit Video Info</h3>
         <div className="space-y-4">
           <div>
@@ -571,8 +571,8 @@ function ChapterEditModal({ chapter, onClose, onSave }: ChapterEditModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md mx-4 shadow-xl">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-gray-800 rounded-lg p-4 sm:p-6 w-full max-w-md max-h-[90vh] overflow-y-auto shadow-xl">
         <h3 className="text-lg font-semibold mb-4 text-white">Edit Chapter Name</h3>
         <div>
           <label className="block text-sm text-gray-400 mb-1">Chapter Name</label>
@@ -711,6 +711,30 @@ export default function TrackListView({
     }
     return tracks;
   }, [book.tracks, book.chapters]);
+
+  // Calculate book completion progress
+  const bookProgress = useMemo(() => {
+    const completedTracks = allBookTracks.filter(t => t.completed).length;
+    const completedVideos = allBookVideos.filter(v => v.completed).length;
+    const totalTracks = allBookTracks.length;
+    const totalVideos = allBookVideos.length;
+    const totalItems = totalTracks + totalVideos;
+    const completedItems = completedTracks + completedVideos;
+
+    const percentage = totalItems > 0
+      ? Math.round((completedItems / totalItems) * 100)
+      : 0;
+
+    return {
+      completedTracks,
+      totalTracks,
+      completedVideos,
+      totalVideos,
+      totalItems,
+      completedItems,
+      percentage
+    };
+  }, [allBookTracks, allBookVideos]);
 
   const hasMediaTabs = allBookTracks.length > 0 && allBookVideos.length > 0;
   const mediaFilter = hasMediaTabs ? mediaTab : undefined;
@@ -960,12 +984,12 @@ export default function TrackListView({
         Back to books
       </button>
 
-      {/* Book Header */}
-      <div className="flex gap-4 mb-6">
+      {/* Book Header - Stack on mobile, side-by-side on sm+ */}
+      <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 mb-6">
         <BookCover book={book} />
-        <div className="flex flex-col justify-center">
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold text-white">{book.name}</h1>
+        <div className="flex flex-col justify-center text-center sm:text-left flex-1">
+          <div className="flex items-center justify-center sm:justify-start gap-2">
+            <h1 className="text-xl sm:text-2xl font-bold text-white">{book.name}</h1>
             {onBookInProgress && (
               <button
                 onClick={() => onBookInProgress(book.id, !book.inProgress)}
@@ -993,13 +1017,43 @@ export default function TrackListView({
               </button>
             )}
           </div>
-          <p className="text-gray-400">{author.name}</p>
-          <p className="text-gray-500 text-sm mt-1">
+          <p className="text-sm sm:text-base text-gray-400">{author.name}</p>
+          <p className="text-gray-500 text-xs sm:text-sm mt-1">
             {book.trackCount} track{book.trackCount !== 1 ? "s" : ""}
           </p>
 
+          {/* Book Progress - Show if there are any tracks or videos */}
+          {bookProgress.totalItems > 0 && (
+            <div className="mt-2 space-y-1">
+              {/* Progress Bar */}
+              <div className="w-full bg-gray-700 rounded-full h-2 overflow-hidden">
+                <div
+                  className="h-full bg-green-500 rounded-full transition-all duration-300"
+                  style={{ width: `${bookProgress.percentage}%` }}
+                />
+              </div>
+
+              {/* Progress Text */}
+              <div className="flex items-center justify-between text-xs sm:text-sm text-gray-400">
+                <span>
+                  {bookProgress.completedItems} of {bookProgress.totalItems} completed
+                </span>
+                <span className="font-medium text-green-400">
+                  {bookProgress.percentage}%
+                </span>
+              </div>
+
+              {/* Detailed breakdown if both tracks and videos exist */}
+              {bookProgress.totalTracks > 0 && bookProgress.totalVideos > 0 && (
+                <div className="text-xs text-gray-500">
+                  {bookProgress.completedTracks}/{bookProgress.totalTracks} tracks · {bookProgress.completedVideos}/{bookProgress.totalVideos} videos
+                </div>
+              )}
+            </div>
+          )}
+
           {/* PDF controls */}
-          <div className="flex items-center gap-2 mt-2">
+          <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 mt-2">
             {book.pdfPath ? (
               <>
                 <button
@@ -1195,14 +1249,14 @@ export default function TrackListView({
                     onKeyDown={(e) => e.key === "Enter" && onTrackSelect(track, author, book)}
                     role="button"
                     tabIndex={0}
-                    className={`flex items-center gap-3 px-3 py-2 rounded transition-colors group cursor-pointer ${
+                    className={`flex items-center gap-2 sm:gap-3 px-2 sm:px-3 py-2 rounded transition-colors group cursor-pointer ${
                       currentTrack?.id === track.id
                         ? "bg-green-900/50 text-green-400"
                         : "hover:bg-gray-800 text-gray-300"
                     }`}
                   >
               {/* Track Number / Play Icon */}
-              <span className="w-6 text-center text-sm flex-shrink-0">
+              <span className="w-6 text-center text-xs sm:text-sm flex-shrink-0">
                 {currentTrack?.id === track.id ? (
                   <svg className="w-4 h-4 mx-auto" fill="currentColor" viewBox="0 0 24 24">
                     <path d="M8 5v14l11-7z" />
@@ -1220,7 +1274,7 @@ export default function TrackListView({
               </span>
 
               {/* Track Title */}
-              <span className="flex-1 truncate">
+              <span className="flex-1 truncate text-sm sm:text-base">
                 {track.title}
               </span>
 
@@ -1230,24 +1284,28 @@ export default function TrackListView({
                 completed={track.completed}
               />
 
-              {/* Completion circle */}
+              {/* Completion circle - Larger touch target on mobile */}
               <button
                 onClick={(e) => {
                   e.stopPropagation();
                   onTrackComplete?.(track.id, !track.completed);
                 }}
-                className={`w-5 h-5 rounded-full border-2 flex-shrink-0 transition-colors ${
+                className={`w-11 h-11 xl:w-6 xl:h-6 rounded-full flex items-center justify-center flex-shrink-0 transition-colors ${
                   track.completed
-                    ? "bg-green-500 border-green-500"
-                    : "border-gray-500 hover:border-green-400"
+                    ? "bg-green-500"
+                    : "bg-gray-700 hover:bg-gray-600"
                 }`}
                 title={track.completed ? "Mark as not completed" : "Mark as completed"}
               >
-                {track.completed && (
-                  <svg className="w-full h-full text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                  </svg>
-                )}
+                <div className={`w-5 h-5 xl:w-full xl:h-full rounded-full border-2 ${
+                  track.completed ? "bg-green-500 border-green-500" : "border-gray-500"
+                }`}>
+                  {track.completed && (
+                    <svg className="w-full h-full text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                    </svg>
+                  )}
+                </div>
               </button>
 
               {/* Duration and PDF page */}
@@ -1262,7 +1320,7 @@ export default function TrackListView({
                         e.stopPropagation();
                         onAssignPdfPage(track.id, currentPdfPage);
                       }}
-                      className="p-0.5 text-gray-500 hover:text-blue-400 opacity-0 group-hover:opacity-100 transition-opacity w-8 flex justify-end"
+                      className="p-0.5 text-gray-500 hover:text-blue-400 xl:opacity-0 xl:group-hover:opacity-100 transition-opacity w-8 flex justify-end"
                       title={`Assign current PDF page (${currentPdfPage})`}
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1296,7 +1354,7 @@ export default function TrackListView({
                       console.error('Failed to assign chapter:', error);
                     }
                   }}
-                  className="px-2 py-1 bg-gray-700 border border-gray-600 rounded text-xs text-white focus:outline-none focus:border-purple-500 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+                  className="px-2 py-1 bg-gray-700 border border-gray-600 rounded text-xs text-white focus:outline-none focus:border-purple-500 xl:opacity-0 xl:group-hover:opacity-100 transition-opacity flex-shrink-0"
                   onClick={(e) => e.stopPropagation()}
                   title="Move to chapter"
                 >
@@ -1309,17 +1367,17 @@ export default function TrackListView({
                 </select>
               )}
 
-              {/* Edit button */}
+              {/* Edit button - Always visible on mobile, hover on desktop */}
               {onTrackUpdate && (
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
                     setEditingTrack(track);
                   }}
-                  className="p-1 text-gray-500 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+                  className="p-2 xl:p-1 text-gray-500 hover:text-white xl:opacity-0 xl:group-hover:opacity-100 transition-opacity flex-shrink-0"
                   title="Edit track info"
                 >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-5 h-5 xl:w-4 xl:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                   </svg>
                 </button>

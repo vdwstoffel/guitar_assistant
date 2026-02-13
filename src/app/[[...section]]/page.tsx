@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import AuthorSidebar from "@/components/AuthorSidebar";
+import MobileSidebar from "@/components/MobileSidebar";
 import BookGrid from "@/components/BookGrid";
 import InProgressGrid from "@/components/InProgressGrid";
 import TrackListView from "@/components/TrackListView";
@@ -135,6 +136,10 @@ export default function Home() {
   const [pageSyncEditMode, setPageSyncEditMode] = useState(false);
   const [activePdfId, setActivePdfId] = useState<string | null>(null);
   const [activePdfPage, setActivePdfPage] = useState(1);
+
+  // Mobile responsive state
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  const [mobileView, setMobileView] = useState<'library' | 'player' | 'pdf'>('library');
 
   // Refs for stable BottomPlayer callbacks (avoids new function references every render)
   const currentJamTrackRef = useRef(currentJamTrack);
@@ -1232,18 +1237,54 @@ export default function Home() {
   return (
     <div className="h-screen flex flex-col bg-gray-900">
       {/* Top Navigation */}
-      <TopNav activeSection={activeSection} onSectionChange={handleSectionChange} />
+      <TopNav
+        activeSection={activeSection}
+        onSectionChange={handleSectionChange}
+        onToggleMobileSidebar={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)}
+      />
+
+      {/* Mobile Sidebar Drawer */}
+      <MobileSidebar
+        isOpen={isMobileSidebarOpen}
+        onClose={() => setIsMobileSidebarOpen(false)}
+        authors={authors}
+        selectedAuthor={selectedAuthor}
+        onAuthorSelect={(author) => {
+          handleAuthorSelect(author);
+          setIsMobileSidebarOpen(false);
+        }}
+        onScan={handleScan}
+        onUpload={handleUpload}
+        onVideoUploadClick={() => {
+          setIsVideoUploadModalOpen(true);
+          setIsMobileSidebarOpen(false);
+        }}
+        isScanning={isScanning}
+        isUploading={isUploading}
+        inProgressCount={inProgressCount}
+        isInProgressSelected={isInProgressSelected}
+        onInProgressSelect={() => {
+          handleInProgressSelect();
+          setIsMobileSidebarOpen(false);
+        }}
+        jamTracksCount={jamTracks.length}
+        isJamTracksSelected={isJamTracksSelected}
+        onJamTracksSelect={() => {
+          handleJamTracksSelect();
+          setIsMobileSidebarOpen(false);
+        }}
+      />
 
       {/* Section Content */}
       {activeSection === 'library' ? (
         <>
-          <div className="flex flex-1 min-h-0">
-            {/* Left side: Sidebar + Content + Player - 50% width */}
-            <div className="w-1/2 flex flex-col min-w-0 border-r border-gray-700">
+          <div className="flex flex-col xl:flex-row flex-1 min-h-0">
+            {/* Left side: Sidebar + Content + Player - Full width on mobile, 50% on xl+ */}
+            <div className="w-full xl:w-1/2 flex flex-col min-w-0 xl:border-r border-gray-700">
               {/* Main Content Area */}
               <div className="flex flex-1 min-h-0">
-                {/* Author Sidebar */}
-                <div className="w-56 border-r border-gray-700 shrink-0">
+                {/* Author Sidebar - Hidden on mobile, shown in drawer */}
+                <div className="hidden xl:block xl:w-56 border-r border-gray-700 shrink-0">
                   <AuthorSidebar
                     authors={authors}
                     selectedAuthor={selectedAuthor}
@@ -1367,8 +1408,8 @@ export default function Home() {
               </div>
             </div>
 
-            {/* PDF/Video Panel - Always visible, 50% width */}
-            <div className="w-1/2 flex flex-col">
+            {/* PDF/Video Panel - Hidden on mobile, visible on xl+ */}
+            <div className="hidden xl:flex xl:w-1/2 flex-col">
               {selectedVideo && showVideo ? (
                 /* Video Player - Full Height */
                 <div className="flex-1 overflow-hidden">
@@ -1476,6 +1517,48 @@ export default function Home() {
               onTempoChange={handleTempoChange}
             />
           )}
+
+          {/* Mobile Bottom Navigation - Only visible on mobile */}
+          <div className="xl:hidden fixed bottom-0 left-0 right-0 bg-gray-800 border-t border-gray-700 z-30 safe-area-inset-bottom">
+            <div className="flex">
+              <button
+                className={`flex-1 flex flex-col items-center justify-center py-3 gap-1 ${
+                  mobileView === 'library' ? 'text-blue-400' : 'text-gray-400'
+                }`}
+                onClick={() => setMobileView('library')}
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7h18M3 12h18M3 17h18" />
+                </svg>
+                <span className="text-xs">Library</span>
+              </button>
+              <button
+                className={`flex-1 flex flex-col items-center justify-center py-3 gap-1 ${
+                  mobileView === 'player' ? 'text-blue-400' : 'text-gray-400'
+                } ${!currentTrack && !currentJamTrack ? 'opacity-50' : ''}`}
+                onClick={() => currentTrack || currentJamTrack ? setMobileView('player') : null}
+                disabled={!currentTrack && !currentJamTrack}
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span className="text-xs">Player</span>
+              </button>
+              <button
+                className={`flex-1 flex flex-col items-center justify-center py-3 gap-1 ${
+                  mobileView === 'pdf' ? 'text-blue-400' : 'text-gray-400'
+                } ${!pdfPath && (!currentJamTrack || currentJamTrack.pdfs.length === 0) ? 'opacity-50' : ''}`}
+                onClick={() => (pdfPath || (currentJamTrack && currentJamTrack.pdfs.length > 0)) ? setMobileView('pdf') : null}
+                disabled={!pdfPath && (!currentJamTrack || currentJamTrack.pdfs.length === 0)}
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <span className="text-xs">PDF</span>
+              </button>
+            </div>
+          </div>
         </>
       ) : activeSection === 'videos' ? (
         <Videos />

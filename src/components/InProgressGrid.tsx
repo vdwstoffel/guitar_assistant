@@ -14,6 +14,11 @@ function InProgressBookCard({ book, author, onClick }: InProgressBookCardProps) 
 
   const artUrl = book.coverTrackPath ? `/api/albumart/${encodeURIComponent(book.coverTrackPath)}` : null;
 
+  // Calculate progress percentage
+  const progressPercentage = book.totalCount && book.totalCount > 0
+    ? Math.round((book.completedCount || 0) / book.totalCount * 100)
+    : 0;
+
   return (
     <button
       onClick={onClick}
@@ -49,6 +54,25 @@ function InProgressBookCard({ book, author, onClick }: InProgressBookCardProps) 
       <p className="text-gray-500 text-xs mt-1">
         {book.trackCount} track{book.trackCount !== 1 ? "s" : ""}
       </p>
+
+      {/* Progress Bar - Show if book has content */}
+      {book.totalCount && book.totalCount > 0 && (
+        <div className="w-full mt-2 space-y-0.5">
+          {/* Progress bar */}
+          <div className="w-full bg-gray-700 rounded-full h-1 overflow-hidden">
+            <div
+              className="h-full bg-green-500 rounded-full transition-all duration-300"
+              style={{ width: `${progressPercentage}%` }}
+            />
+          </div>
+          {/* Progress text - only show if any completion */}
+          {progressPercentage > 0 && (
+            <p className="text-xs text-gray-500 text-center">
+              {progressPercentage}% complete
+            </p>
+          )}
+        </div>
+      )}
     </button>
   );
 }
@@ -83,7 +107,7 @@ const InProgressGrid = memo(function InProgressGrid({ books, onBookSelect }: InP
           <p className="mt-2 text-sm">Open a book and click the clock icon to add it here</p>
         </div>
       ) : (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
           {books.map(({ book, author }) => (
             <InProgressBookCard
               key={book.id}

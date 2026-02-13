@@ -9,9 +9,10 @@ type TimeSignature = '4/4' | '3/4' | '2/4' | '6/8';
 interface TopNavProps {
   activeSection: Section;
   onSectionChange: (section: Section) => void;
+  onToggleMobileSidebar?: () => void;
 }
 
-const TopNav = memo(function TopNav({ activeSection, onSectionChange }: TopNavProps) {
+const TopNav = memo(function TopNav({ activeSection, onSectionChange, onToggleMobileSidebar }: TopNavProps) {
   const [showMetronome, setShowMetronome] = useState(false);
   const [showTheory, setShowTheory] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -149,12 +150,25 @@ const TopNav = memo(function TopNav({ activeSection, onSectionChange }: TopNavPr
 
   return (
     <div className="flex-shrink-0">
-      <nav className="bg-gray-800 border-b border-gray-700 px-4 py-2">
-        <div className="flex items-center">
-          {/* Metronome button on the left */}
+      <nav className="bg-gray-800 border-b border-gray-700 px-3 sm:px-4 py-2">
+        <div className="flex items-center gap-2">
+          {/* Hamburger menu - Mobile only */}
+          {onToggleMobileSidebar && (
+            <button
+              onClick={onToggleMobileSidebar}
+              className="xl:hidden w-10 h-10 flex items-center justify-center text-gray-400 hover:text-white hover:bg-gray-700/50 rounded-md"
+              title="Toggle sidebar"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            </button>
+          )}
+
+          {/* Metronome button */}
           <button
             onClick={() => setShowMetronome(!showMetronome)}
-            className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+            className={`flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 rounded-md text-sm font-medium transition-colors ${
               showMetronome || isPlaying
                 ? 'bg-blue-600 text-white'
                 : 'text-gray-400 hover:text-white hover:bg-gray-700/50'
@@ -163,48 +177,57 @@ const TopNav = memo(function TopNav({ activeSection, onSectionChange }: TopNavPr
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            <span>Metronome</span>
+            <span className="hidden sm:inline">Metronome</span>
             {isPlaying && (
               <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
             )}
           </button>
 
           {/* Centered nav items */}
-          <div className="flex-1 flex gap-1 justify-center">
+          <div className="flex-1 flex gap-1 sm:gap-2 justify-center">
             <Link
               href="/"
               onClick={() => onSectionChange('library')}
-              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+              className={`px-2 sm:px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-1 ${
                 activeSection === 'library'
                   ? 'bg-gray-700 text-white'
                   : 'text-gray-400 hover:text-white hover:bg-gray-700/50'
               }`}
             >
-              Library
+              <svg className="w-4 h-4 sm:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7h18M3 12h18M3 17h18" />
+              </svg>
+              <span className="hidden sm:inline">Library</span>
+              <span className="sm:hidden">Lib</span>
             </Link>
             <Link
               href="/videos"
               onClick={() => onSectionChange('videos')}
-              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+              className={`px-2 sm:px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-1 ${
                 activeSection === 'videos'
                   ? 'bg-gray-700 text-white'
                   : 'text-gray-400 hover:text-white hover:bg-gray-700/50'
               }`}
             >
-              Videos
+              <svg className="w-4 h-4 sm:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+              </svg>
+              <span className="hidden sm:inline">Videos</span>
+              <span className="sm:hidden">Vid</span>
             </Link>
 
             {/* Theory dropdown */}
             <div className="relative" ref={theoryDropdownRef}>
               <button
                 onClick={() => setShowTheory(!showTheory)}
-                className={`flex items-center gap-1 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                className={`flex items-center gap-1 px-2 sm:px-4 py-2 rounded-md text-sm font-medium transition-colors ${
                   isTheoryActive
                     ? 'bg-gray-700 text-white'
                     : 'text-gray-400 hover:text-white hover:bg-gray-700/50'
                 }`}
               >
-                Theory
+                <span className="hidden sm:inline">Theory</span>
+                <span className="sm:hidden">Thry</span>
                 <svg className={`w-3 h-3 transition-transform ${showTheory ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                 </svg>
@@ -235,25 +258,30 @@ const TopNav = memo(function TopNav({ activeSection, onSectionChange }: TopNavPr
             <Link
               href="/tools"
               onClick={() => onSectionChange('tools')}
-              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+              className={`px-2 sm:px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-1 ${
                 activeSection === 'tools'
                   ? 'bg-gray-700 text-white'
                   : 'text-gray-400 hover:text-white hover:bg-gray-700/50'
               }`}
             >
-              Tools
+              <svg className="w-4 h-4 sm:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+              <span className="hidden sm:inline">Tools</span>
+              <span className="sm:hidden">Tool</span>
             </Link>
           </div>
 
-          {/* Spacer to balance the metronome button */}
-          <div className="w-[120px]" />
+          {/* Spacer to balance the left side - Hide on mobile */}
+          <div className="hidden xl:block xl:w-[120px]" />
         </div>
       </nav>
 
       {/* Mini Metronome Panel */}
       {showMetronome && (
-        <div className="bg-gray-800 border-b border-gray-700 px-4 py-3">
-          <div className="flex items-center justify-center gap-6">
+        <div className="bg-gray-800 border-b border-gray-700 px-3 sm:px-4 py-3">
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-6">
             {/* Beat Indicator */}
             <div className="flex gap-1.5">
               {Array.from({ length: beatsPerMeasure }).map((_, i) => (
@@ -274,7 +302,7 @@ const TopNav = memo(function TopNav({ activeSection, onSectionChange }: TopNavPr
             <div className="flex items-center gap-2">
               <button
                 onClick={() => handleBpmChange(bpm - 5)}
-                className="w-7 h-7 flex items-center justify-center bg-gray-700 hover:bg-gray-600 rounded text-white text-sm"
+                className="w-10 h-10 sm:w-7 sm:h-7 flex items-center justify-center bg-gray-700 hover:bg-gray-600 rounded text-white text-sm"
               >
                 −
               </button>
@@ -288,21 +316,21 @@ const TopNav = memo(function TopNav({ activeSection, onSectionChange }: TopNavPr
               />
               <button
                 onClick={() => handleBpmChange(bpm + 5)}
-                className="w-7 h-7 flex items-center justify-center bg-gray-700 hover:bg-gray-600 rounded text-white text-sm"
+                className="w-10 h-10 sm:w-7 sm:h-7 flex items-center justify-center bg-gray-700 hover:bg-gray-600 rounded text-white text-sm"
               >
                 +
               </button>
               <span className="text-gray-400 text-sm">BPM</span>
             </div>
 
-            {/* BPM Slider */}
+            {/* BPM Slider - Hide on mobile */}
             <input
               type="range"
               min="20"
               max="300"
               value={bpm}
               onChange={(e) => handleBpmChange(parseInt(e.target.value))}
-              className="w-32 h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500"
+              className="hidden sm:block w-24 md:w-32 h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500"
             />
 
             {/* Time Signature */}
@@ -311,7 +339,7 @@ const TopNav = memo(function TopNav({ activeSection, onSectionChange }: TopNavPr
                 <button
                   key={sig}
                   onClick={() => setTimeSignature(sig)}
-                  className={`px-2 py-1 rounded text-xs transition-colors ${
+                  className={`px-3 py-1.5 sm:px-2 sm:py-1 rounded text-xs transition-colors ${
                     timeSignature === sig
                       ? 'bg-blue-600 text-white'
                       : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
