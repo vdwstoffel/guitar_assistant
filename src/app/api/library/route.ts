@@ -38,7 +38,6 @@ export async function GET() {
             orderBy: { timestamp: "asc" },
           },
           pdfs: {
-            include: { pageSyncPoints: { orderBy: { timeInSeconds: "asc" } } },
             orderBy: { sortOrder: "asc" },
           },
         },

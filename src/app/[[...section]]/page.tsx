@@ -416,7 +416,7 @@ export default function Home() {
     }
   };
 
-  const handleJamTrackSelect = (jamTrack: JamTrack) => {
+  const handleJamTrackSelect = async (jamTrack: JamTrack) => {
     setCurrentJamTrackId(jamTrack.id);
     setCurrentTrack(null);
     setCurrentAuthorId(null);
@@ -424,6 +424,19 @@ export default function Home() {
     setPageSyncEditMode(false);
     setActivePdfId(null);
     setActivePdfPage(1);
+
+    // Fetch full jam track data with sync points (not loaded by library endpoint)
+    if (jamTrack.pdfs.length > 0 && !jamTrack.pdfs[0].pageSyncPoints) {
+      try {
+        const res = await fetch(`/api/jamtracks/${jamTrack.id}`);
+        if (res.ok) {
+          const fullJamTrack = await res.json();
+          setJamTracks(prev => prev.map(jt => jt.id === jamTrack.id ? fullJamTrack : jt));
+        }
+      } catch (err) {
+        console.error("Failed to fetch jam track details:", err);
+      }
+    }
   };
 
   const handleMarkerAdd = async (
@@ -1316,7 +1329,7 @@ export default function Home() {
                       currentTrack={currentTrack}
                       selectedVideo={selectedVideo}
                       showVideo={showVideo}
-                      onTrackSelect={(track) => handleTrackSelect(track)}
+                      onTrackSelect={handleTrackSelect}
                       onVideoSelect={handleVideoSelect}
                       onToggleVideo={() => setShowVideo(!showVideo)}
                       onBack={() => {

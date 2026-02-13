@@ -2,6 +2,7 @@
 
 import { BookVideo } from "@/types";
 import { useState, useRef } from "react";
+import { formatDurationLong } from "@/lib/formatting";
 
 interface VideoListProps {
   videos: BookVideo[];
@@ -357,7 +358,7 @@ export default function VideoList({
                             : "text-neutral-400"
                         }`}
                       >
-                        {formatDuration(video.duration)}
+                        {formatDurationLong(video.duration)}
                       </p>
                     )}
                   </div>
@@ -451,13 +452,3 @@ export default function VideoList({
   );
 }
 
-function formatDuration(seconds: number): string {
-  const hours = Math.floor(seconds / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  const secs = Math.floor(seconds % 60);
-
-  if (hours > 0) {
-    return `${hours}:${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
-  }
-  return `${minutes}:${String(secs).padStart(2, "0")}`;
-}
