@@ -34,9 +34,6 @@ export async function GET() {
       }),
       prisma.jamTrack.findMany({
         include: {
-          markers: {
-            orderBy: { timestamp: "asc" },
-          },
           pdfs: {
             orderBy: { sortOrder: "asc" },
           },

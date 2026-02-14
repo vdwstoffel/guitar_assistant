@@ -196,7 +196,10 @@ export default function Home() {
       if (response.ok) {
         const data = await response.json();
         const authorsData: AuthorSummary[] = data.authors || [];
-        const jamTracksData = data.jamTracks || [];
+        const jamTracksData = (data.jamTracks || []).map((jt: JamTrack) => ({
+          ...jt,
+          markers: jt.markers ?? [],
+        }));
         setAuthors(authorsData);
         setJamTracks(jamTracksData);
 
@@ -425,17 +428,15 @@ export default function Home() {
     setActivePdfId(null);
     setActivePdfPage(1);
 
-    // Fetch full jam track data with sync points (not loaded by library endpoint)
-    if (jamTrack.pdfs.length > 0 && !jamTrack.pdfs[0].pageSyncPoints) {
-      try {
-        const res = await fetch(`/api/jamtracks/${jamTrack.id}`);
-        if (res.ok) {
-          const fullJamTrack = await res.json();
-          setJamTracks(prev => prev.map(jt => jt.id === jamTrack.id ? fullJamTrack : jt));
-        }
-      } catch (err) {
-        console.error("Failed to fetch jam track details:", err);
+    // Fetch full jam track data (markers, sync points) - not loaded by library endpoint
+    try {
+      const res = await fetch(`/api/jamtracks/${jamTrack.id}`);
+      if (res.ok) {
+        const fullJamTrack = await res.json();
+        setJamTracks(prev => prev.map(jt => jt.id === jamTrack.id ? fullJamTrack : jt));
       }
+    } catch (err) {
+      console.error("Failed to fetch jam track details:", err);
     }
   };
 
@@ -1436,7 +1437,7 @@ export default function Home() {
                       <PageSyncEditor
                         pdfId={activePdf.id}
                         pdfName={activePdf.name}
-                        syncPoints={activePdf.pageSyncPoints}
+                        syncPoints={activePdf.pageSyncPoints ?? []}
                         syncEditMode={pageSyncEditMode}
                         onToggleSyncEditMode={() => setPageSyncEditMode(!pageSyncEditMode)}
                         currentAudioTime={currentAudioTime}

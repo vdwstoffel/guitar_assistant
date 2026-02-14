@@ -5,6 +5,7 @@ import { Track, Marker, JamTrack, JamTrackMarker } from "@/types";
 import WaveSurfer from "wavesurfer.js";
 import RegionsPlugin from "wavesurfer.js/dist/plugins/regions.js";
 import { playCountIn } from "@/lib/clickGenerator";
+import KeyboardShortcutsHelp from "./KeyboardShortcutsHelp";
 
 export interface MarkerBarState {
   showMarkers: boolean;
@@ -77,6 +78,7 @@ function BottomPlayer({
     }
     return 100;
   });
+  const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
   const [showMarkers, setShowMarkers] = useState(false);
   const [newMarkerName, setNewMarkerName] = useState("");
   const [leadIn, setLeadIn] = useState(0);
@@ -435,6 +437,11 @@ function BottomPlayer({
           wavesurferRef.current.play();
         }
       }
+
+      if (e.key === "?") {
+        e.preventDefault();
+        setShowShortcutsHelp(prev => !prev);
+      }
     };
 
     window.addEventListener("keydown", handleKeyDown);
@@ -678,6 +685,7 @@ function BottomPlayer({
 
   return (
     <div className="h-full flex flex-col bg-gray-800 border-t border-gray-700 text-white">
+      <KeyboardShortcutsHelp isOpen={showShortcutsHelp} onClose={() => setShowShortcutsHelp(false)} />
       {/* Main Player Section */}
       <div className="flex-1 flex flex-col px-2 sm:px-4 py-2">
           {/* Controls - Multi-row responsive layout */}
@@ -749,7 +757,19 @@ function BottomPlayer({
           <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-4 text-xs">
             {/* Speed */}
             <div className="flex items-center gap-1 sm:gap-2">
-              <span className="text-gray-500 text-xs">Speed:</span>
+              {[50, 75, 90, 100].map((preset) => (
+                <button
+                  key={preset}
+                  onClick={() => handlePlaybackSpeed(preset)}
+                  className={`px-1.5 py-0.5 rounded text-xs font-medium transition-colors ${
+                    playbackSpeed === preset
+                      ? "bg-green-600 text-white"
+                      : "bg-gray-700 text-gray-400 hover:text-white hover:bg-gray-600"
+                  }`}
+                >
+                  {preset}
+                </button>
+              ))}
               <input
                 type="number"
                 min={10}
