@@ -56,6 +56,16 @@
 2. Extract InProgressIndicator to shared component (30 min)
 3. Remove inline arrow wrappers in page.tsx JSX (10 min)
 
+## AlphaTab Integration (2026-02-14)
+- Package: `@coderline/alphatab` v1.8.1
+- Files: `src/components/tab-editor/AlphaTabRenderer.tsx`, `src/components/TabEditor.tsx`
+- API types: `src/types/tab.ts`, tab routes at `src/app/api/tabs/`
+- **CRITICAL BUG**: `renderTracks()` fires `scoreLoaded` event (documented in alphaTab.d.ts L2257). Calling `renderTracks()` inside `scoreLoaded` handler creates infinite loop -> 10GB memory.
+- **CRITICAL BUG**: `selectedTrackIndices` array in useEffect deps causes full API destroy/recreate on every track switch (array reference inequality).
+- **FIX PATTERN**: Use `isRenderingTracksRef` guard to break recursion; separate init effect (fileUrl only) from track-filter effect (trackKey string).
+- **FIX PATTERN**: Store callback props in refs to avoid stale closures in alphaTab event handlers.
+- Debug setTimeout (3s) in scoreLoaded handler fires hundreds of times during loop - should be removed.
+
 ## File Locations Reference
 - Main state: `/src/app/[[...section]]/page.tsx`
 - Track listing: `/src/components/TrackListView.tsx`
@@ -63,3 +73,5 @@
 - Library API: `/src/app/api/library/route.ts`
 - Audio player: `/src/components/BottomPlayer.tsx`
 - PDF viewer: `/src/components/PdfViewer.tsx`
+- Tab editor: `/src/components/TabEditor.tsx`
+- AlphaTab renderer: `/src/components/tab-editor/AlphaTabRenderer.tsx`

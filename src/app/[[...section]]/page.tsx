@@ -19,17 +19,18 @@ import ChordBuilder from "@/components/ChordBuilder";
 import PdfViewer from "@/components/PdfViewer";
 import Videos from "@/components/Videos";
 import Tools from "@/components/Tools";
+import TabEditor from "@/components/TabEditor";
 import PageSyncEditor from "@/components/PageSyncEditor";
 import VideoUploadModal from "@/components/VideoUploadModal";
 import VideoPlayer from "@/components/VideoPlayer";
 import { AuthorSummary, BookSummary, Book, Track, Marker, JamTrack, JamTrackMarker, BookVideo } from "@/types";
 
-type Section = 'library' | 'videos' | 'fretboard' | 'intervals' | 'chords' | 'tools' | 'circle';
+type Section = 'library' | 'videos' | 'fretboard' | 'intervals' | 'chords' | 'tools' | 'circle' | 'tabs';
 
 const getSectionFromPath = (section: string[] | undefined): Section => {
   if (!section || section.length === 0) return 'library';
   const first = section[0];
-  if (first === 'videos' || first === 'fretboard' || first === 'intervals' || first === 'chords' || first === 'tools' || first === 'circle') {
+  if (first === 'videos' || first === 'fretboard' || first === 'intervals' || first === 'chords' || first === 'tools' || first === 'circle' || first === 'tabs') {
     return first;
   }
   return 'library';
@@ -1584,6 +1585,8 @@ export default function Home() {
         <IntervalExplorer />
       ) : activeSection === 'chords' ? (
         <ChordBuilder />
+      ) : activeSection === 'tabs' ? (
+        <TabEditor />
       ) : (
         <Fretboard />
       )}
