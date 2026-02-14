@@ -30,7 +30,7 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { title, youtubeUrl } = body;
+    const { title, youtubeUrl, category } = body;
 
     if (!title?.trim()) {
       return NextResponse.json({ error: "Title is required" }, { status: 400 });
@@ -52,6 +52,7 @@ export async function POST(request: NextRequest) {
         title: title.trim(),
         youtubeId,
         sortOrder,
+        category: category || null,
       },
     });
 

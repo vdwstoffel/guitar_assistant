@@ -36,6 +36,8 @@ Standalone play-along tracks (backing tracks, songs) that live outside the book 
 
 ### Video Playlists
 - Manage YouTube video playlists for lessons and tutorials
+- **Custom categories** - Organize videos into collapsible category sections (Warmup, Tutorial, etc.)
+- **Drag-and-drop reordering** - Reorganize both categories and videos within categories
 - Upload book-specific videos, optionally linked to chapters or PDF pages
 
 ## Getting Started

@@ -8,7 +8,7 @@ export async function PUT(
   try {
     const { id } = await params;
     const body = await request.json();
-    const { title } = body;
+    const { title, category } = body;
 
     if (!title?.trim()) {
       return NextResponse.json({ error: "Title is required" }, { status: 400 });
@@ -16,7 +16,10 @@ export async function PUT(
 
     const video = await prisma.video.update({
       where: { id },
-      data: { title: title.trim() },
+      data: {
+        title: title.trim(),
+        ...(category !== undefined && { category: category || null }),
+      },
     });
 
     return NextResponse.json(video);

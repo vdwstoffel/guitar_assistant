@@ -56,8 +56,18 @@ export interface Video {
   title: string;
   youtubeId: string;
   sortOrder: number;
+  category: string | null;
   createdAt: string;
 }
+
+export const VIDEO_CATEGORIES = [
+  "Warmup",
+  "Backing Track",
+  "Play Along",
+  "Tutorial",
+  "Performance",
+  "Exercise"
+] as const;
 
 export interface BookVideo {
   id: string;

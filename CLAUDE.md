@@ -106,3 +106,6 @@ cp prisma/guitar_assistant.db.backup prisma/guitar_assistant.db
 
 ## Documentation
 When adding new features, check if they should be documented in [README.md](README.md). Update the Features section or add new sections as appropriate.
+
+## Task Cleanup
+When a feature or task is fully implemented, delete the corresponding file from `tasks/` or `tasks/features/`. Do not leave completed task files around.

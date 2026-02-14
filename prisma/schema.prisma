@@ -99,6 +99,7 @@ model Video {
   title     String
   youtubeId String
   sortOrder Int      @default(0)
+  category  String?
   createdAt DateTime @default(now())
 }
 
