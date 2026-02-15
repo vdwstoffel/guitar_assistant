@@ -72,6 +72,7 @@ export default function Home() {
   const [isUploading, setIsUploading] = useState(false);
   const [isUploadingJamTracks, setIsUploadingJamTracks] = useState(false);
   const [isImportingFromYouTube, setIsImportingFromYouTube] = useState(false);
+  const [isImportingPsarc, setIsImportingPsarc] = useState(false);
   const [isInProgressSelected, setIsInProgressSelected] = useState(false);
   const [isJamTracksSelected, setIsJamTracksSelected] = useState(false);
   const [isVideoUploadModalOpen, setIsVideoUploadModalOpen] = useState(false);
@@ -389,6 +390,31 @@ export default function Home() {
       throw error;
     } finally {
       setIsImportingFromYouTube(false);
+    }
+  };
+
+  const handlePsarcImport = async (file: File) => {
+    setIsImportingPsarc(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const response = await fetch("/api/jamtracks/rocksmith", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Failed to import .psarc file");
+      }
+
+      await fetchLibrary();
+    } catch (error) {
+      console.error("Error importing .psarc:", error);
+      throw error;
+    } finally {
+      setIsImportingPsarc(false);
     }
   };
 
@@ -1376,6 +1402,8 @@ export default function Home() {
                       isUploading={isUploadingJamTracks}
                       onYouTubeImport={handleYouTubeImport}
                       isImportingFromYouTube={isImportingFromYouTube}
+                      onPsarcImport={handlePsarcImport}
+                      isImportingPsarc={isImportingPsarc}
                     />
                   ) : isInProgressSelected ? (
                     <InProgressGrid

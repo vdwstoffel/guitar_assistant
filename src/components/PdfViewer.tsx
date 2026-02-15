@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import dynamic from "next/dynamic";
 import { PageSyncPoint } from "@/types";
+import AlphaTexViewer from "@/components/AlphaTexViewer";
 
 // Dynamically import react-pdf to avoid SSR issues
 const Document = dynamic(
@@ -35,6 +36,7 @@ interface MultiPdfViewerProps {
     id: string;
     name: string;
     filePath: string;
+    fileType?: string;
     pageSyncPoints: PageSyncPoint[];
   }[];
   currentAudioTime: number;
@@ -500,14 +502,22 @@ function MultiPdfViewer({
         )}
       </div>
 
-      {/* PDF Viewer */}
+      {/* Content Viewer - branches on fileType */}
       <div className="flex-1 min-h-0">
-        <SinglePdfViewerInner
-          pdfPath={activePdf.filePath}
-          currentPage={currentPage}
-          onPageChange={handlePageChange}
-          version={version}
-        />
+        {activePdf.fileType === "alphatex" ? (
+          <AlphaTexViewer
+            filePath={activePdf.filePath}
+            currentAudioTime={currentAudioTime}
+            audioIsPlaying={audioIsPlaying}
+          />
+        ) : (
+          <SinglePdfViewerInner
+            pdfPath={activePdf.filePath}
+            currentPage={currentPage}
+            onPageChange={handlePageChange}
+            version={version}
+          />
+        )}
       </div>
     </div>
   );

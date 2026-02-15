@@ -130,6 +130,7 @@ model JamTrackPdf {
   id             String          @id @default(uuid())
   name           String
   filePath       String          @unique
+  fileType       String          @default("pdf") // "pdf" | "alphatex"
   sortOrder      Int             @default(0)
   jamTrackId     String
   jamTrack       JamTrack        @relation(fields: [jamTrackId], references: [id], onDelete: Cascade)

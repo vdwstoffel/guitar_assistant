@@ -107,6 +107,8 @@ interface JamTracksViewProps {
   isUploading?: boolean;
   onYouTubeImport?: (url: string, title?: string) => Promise<void>;
   isImportingFromYouTube?: boolean;
+  onPsarcImport?: (file: File) => Promise<void>;
+  isImportingPsarc?: boolean;
 }
 
 const JamTracksView = memo(function JamTracksView({
@@ -122,6 +124,8 @@ const JamTracksView = memo(function JamTracksView({
   isUploading,
   onYouTubeImport,
   isImportingFromYouTube,
+  onPsarcImport,
+  isImportingPsarc,
 }: JamTracksViewProps) {
   const [editingJamTrack, setEditingJamTrack] = useState<JamTrack | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -134,6 +138,7 @@ const JamTracksView = memo(function JamTracksView({
   const [youtubeNeedsTitle, setYoutubeNeedsTitle] = useState(false);
   const [youtubeTitle, setYoutubeTitle] = useState("");
   const uploadInputRef = useRef<HTMLInputElement>(null);
+  const psarcInputRef = useRef<HTMLInputElement>(null);
   const youtubeInputRef = useRef<HTMLInputElement>(null);
   const pdfNameInputRef = useRef<HTMLInputElement>(null);
 
@@ -359,6 +364,40 @@ const JamTracksView = memo(function JamTracksView({
             Jam Tracks
           </h1>
           <div className="flex items-center gap-2">
+            {onPsarcImport && (
+              <>
+                <button
+                  onClick={() => psarcInputRef.current?.click()}
+                  disabled={isImportingPsarc}
+                  className="flex items-center gap-2 px-3 py-2 border border-orange-600 hover:bg-orange-600/20 disabled:border-gray-600 disabled:cursor-not-allowed rounded text-sm font-medium text-orange-300 transition-colors"
+                >
+                  {isImportingPsarc ? (
+                    <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                  ) : (
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+                    </svg>
+                  )}
+                  {isImportingPsarc ? "Importing..." : "Rocksmith"}
+                </button>
+                <input
+                  ref={psarcInputRef}
+                  type="file"
+                  accept=".psarc"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      await onPsarcImport(file);
+                      e.target.value = "";
+                    }
+                  }}
+                  className="hidden"
+                />
+              </>
+            )}
             {onYouTubeImport && (
               <button
                 onClick={() => setShowYouTubeModal(true)}
@@ -458,10 +497,14 @@ const JamTracksView = memo(function JamTracksView({
                   {jamTrack.title}
                 </span>
 
-                {/* PDF count indicator */}
+                {/* PDF/Tab count indicator */}
                 {jamTrack.pdfs.length > 0 && (
-                  <span className="text-blue-400 text-xs flex-shrink-0">
-                    {jamTrack.pdfs.length === 1 ? "PDF" : `${jamTrack.pdfs.length} PDFs`}
+                  <span className={`text-xs flex-shrink-0 ${
+                    jamTrack.pdfs.some((p: any) => p.fileType === "alphatex") ? "text-orange-400" : "text-blue-400"
+                  }`}>
+                    {jamTrack.pdfs.some((p: any) => p.fileType === "alphatex")
+                      ? `${jamTrack.pdfs.length} Tab${jamTrack.pdfs.length !== 1 ? "s" : ""}`
+                      : jamTrack.pdfs.length === 1 ? "PDF" : `${jamTrack.pdfs.length} PDFs`}
                   </span>
                 )}
 

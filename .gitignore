@@ -55,3 +55,8 @@ next-env.d.ts
 
 /tasks
 /prisma/*db.backup
+
+# Rocksmith tools and test files
+/tools/
+*.psarc
+*.alphatex

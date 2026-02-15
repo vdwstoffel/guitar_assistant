@@ -102,6 +102,7 @@ export interface JamTrackPdf {
   id: string;
   name: string;
   filePath: string;
+  fileType: "pdf" | "alphatex";
   sortOrder: number;
   jamTrackId: string;
   pageSyncPoints: PageSyncPoint[];
