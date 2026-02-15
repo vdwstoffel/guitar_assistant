@@ -170,22 +170,34 @@ export function generateAlphaTex(
   lines.push(`\\staff{score tabs}`);
   lines.push(`.`); // End of metadata
 
-  // Prepend rest bars to account for silence at the start of the audio.
-  // The SNG beat grid starts at firstBeat.time (seconds into the audio),
-  // but alphaTab's MIDI timeline starts at 0ms. Adding rest bars aligns them.
+  // Find the beat where the first note falls so we can align measure
+  // boundaries to where the music actually starts. Without this, if the
+  // beat grid starts 1 beat before the first note, every bar is offset.
   const barDuration = (BEATS_PER_BAR * 60) / bpm;
-  const restBars = Math.round(firstBeat.time / barDuration);
+  const firstNoteTime = notes.length > 0 ? notes[0].time : firstBeat.time;
+  let beatOffset = 0;
+  for (let i = 0; i < song.beats.length; i++) {
+    if (song.beats[i].time >= firstNoteTime - 0.02) {
+      beatOffset = i;
+      break;
+    }
+  }
+
+  // Calculate rest bars from the beat where notes start
+  const groupStartTime = song.beats[beatOffset].time;
+  const restBars = Math.round(groupStartTime / barDuration);
   for (let i = 0; i < restBars; i++) {
     lines.push(`r.1 |`);
   }
 
-  // Group SNG beats into musical measures (4 beats each in 4/4)
+  // Group SNG beats into musical measures (4 beats each in 4/4),
+  // starting from the beat aligned to the first note
   const musicalMeasures: {
     startTime: number;
     endTime: number;
     beats: Beat[];
   }[] = [];
-  for (let i = 0; i < song.beats.length; i += BEATS_PER_BAR) {
+  for (let i = beatOffset; i < song.beats.length; i += BEATS_PER_BAR) {
     const barBeats = song.beats.slice(i, i + BEATS_PER_BAR);
     const endTime =
       i + BEATS_PER_BAR < song.beats.length
@@ -240,14 +252,6 @@ export function generateAlphaTex(
 
     // Generate AlphaTex for each beat group
     const beatStrings: string[] = [];
-
-    // Add leading rest if notes don't start at the beginning of the measure
-    const firstNoteTime = beatGroups[0][0].time;
-    const leadingGap = firstNoteTime - measure.startTime;
-    if (leadingGap > 0.02) {
-      const leadingDuration = quantizeDuration(leadingGap, bpm);
-      beatStrings.push(`r.${leadingDuration}`);
-    }
 
     for (let i = 0; i < beatGroups.length; i++) {
       const group = beatGroups[i];
@@ -305,22 +309,35 @@ export function getBPM(song: SongData): number {
 export function generateSyncData(song: SongData): {
   bpm: number;
   restBars: number;
-  /** Array of [audioTimeSec, alphaTabTimeMs] pairs, sampled every 4 beats (1 bar) */
+  /** Array of [audioTimeSec, alphaTabTimeMs] pairs, sampled every beat */
   points: [number, number][];
 } {
   const bpm = getBPM(song);
+  const beatDurationMs = 60000 / bpm;
   const BEATS_PER_BAR = 4;
   const barDuration = (BEATS_PER_BAR * 60) / bpm;
-  const firstBeatTime = song.beats[0]?.time ?? 0;
-  const restBars = Math.round(firstBeatTime / barDuration);
-  const restBarsMs = restBars * barDuration * 1000;
-  const beatDurationMs = 60000 / bpm;
 
-  // Sample every bar (every 4 beats) to keep the file small
+  // Find the beat offset aligned to the first note (same logic as generateAlphaTex)
+  const notes = getFullArrangementNotes(song);
+  const firstNoteTime = notes.length > 0 ? notes[0].time : song.beats[0]?.time ?? 0;
+  let beatOffset = 0;
+  for (let i = 0; i < song.beats.length; i++) {
+    if (song.beats[i].time >= firstNoteTime - 0.02) {
+      beatOffset = i;
+      break;
+    }
+  }
+
+  const groupStartTime = song.beats[beatOffset]?.time ?? 0;
+  const restBars = Math.round(groupStartTime / barDuration);
+  const restBarsMs = restBars * BEATS_PER_BAR * beatDurationMs;
+
+  // Sample every beat from the offset onwards. alphaTab MIDI time starts at
+  // restBarsMs for the first musical beat (beatOffset).
   const points: [number, number][] = [];
-  for (let i = 0; i < song.beats.length; i += BEATS_PER_BAR) {
+  for (let i = beatOffset; i < song.beats.length; i++) {
     const audioTime = song.beats[i].time;
-    const alphaTabTime = restBarsMs + i * beatDurationMs;
+    const alphaTabTime = restBarsMs + (i - beatOffset) * beatDurationMs;
     points.push([audioTime, alphaTabTime]);
   }
 
