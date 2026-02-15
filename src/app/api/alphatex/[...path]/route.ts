@@ -18,15 +18,18 @@ export async function GET(
     return NextResponse.json({ error: "Invalid path" }, { status: 403 });
   }
 
-  if (!absolutePath.endsWith(".alphatex")) {
+  if (!absolutePath.endsWith(".alphatex") && !absolutePath.endsWith(".sync.json")) {
     return NextResponse.json({ error: "Invalid file type" }, { status: 400 });
   }
 
   try {
     const content = await fs.readFile(absolutePath, "utf-8");
+    const contentType = absolutePath.endsWith(".sync.json")
+      ? "application/json"
+      : "text/plain; charset=utf-8";
     return new NextResponse(content, {
       headers: {
-        "Content-Type": "text/plain; charset=utf-8",
+        "Content-Type": contentType,
         "Cache-Control": "no-cache",
       },
     });

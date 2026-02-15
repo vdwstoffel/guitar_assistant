@@ -2,6 +2,13 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 
+interface SyncData {
+  bpm: number;
+  restBars: number;
+  /** Array of [audioTimeSec, alphaTabTimeMs] pairs */
+  points: [number, number][];
+}
+
 interface AlphaTexViewerProps {
   /** Relative file path to the .alphatex file (used for API fetch URL) */
   filePath: string;
@@ -18,6 +25,8 @@ export default function AlphaTexViewer({
 }: AlphaTexViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const apiRef = useRef<any>(null);
+  const playerReadyRef = useRef(false);
+  const syncDataRef = useRef<SyncData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const lastSyncTime = useRef(0);
@@ -27,18 +36,32 @@ export default function AlphaTexViewer({
     if (!containerRef.current || typeof window === "undefined") return;
 
     let destroyed = false;
+    playerReadyRef.current = false;
 
     const init = async () => {
       try {
         setIsLoading(true);
         setError(null);
 
-        // Fetch the AlphaTex content
-        const response = await fetch(`/api/alphatex/${filePath}`);
+        // Fetch the AlphaTex content and sync data in parallel
+        const syncFilePath = filePath.replace(/\.alphatex$/, ".sync.json");
+        const [response, syncResponse] = await Promise.all([
+          fetch(`/api/alphatex/${filePath}`),
+          fetch(`/api/alphatex/${syncFilePath}`).catch(() => null),
+        ]);
         if (!response.ok) {
           throw new Error("Failed to load tab data");
         }
         const texContent = await response.text();
+
+        // Load sync data if available
+        if (syncResponse?.ok) {
+          try {
+            syncDataRef.current = await syncResponse.json();
+          } catch {
+            syncDataRef.current = null;
+          }
+        }
 
         if (destroyed) return;
 
@@ -51,14 +74,19 @@ export default function AlphaTexViewer({
         const settings = new Settings();
         settings.core.fontDirectory = "/font/";
         settings.core.useWorkers = false;
-        settings.core.tex = true; // Enable AlphaTex mode
+        settings.core.tex = true;
         settings.display.layoutMode = alphaTab.LayoutMode.Page;
         settings.display.stretchForce = 0.95;
         settings.display.scale = 0.98;
-        // Disable the built-in player - we use BottomPlayer for audio
-        settings.player.enablePlayer = false;
+        // Use ExternalMedia player mode: lightweight player that supports cursor
+        // positioning without needing a sound font or audio synthesizer.
+        // Audio playback is handled by BottomPlayer; we just sync the cursor.
+        settings.player.playerMode = alphaTab.PlayerMode.EnabledExternalMedia;
         settings.player.enableCursor = true;
         settings.player.enableUserInteraction = false;
+        // Auto-scroll the container to keep the cursor visible
+        settings.player.scrollElement = containerRef.current!;
+        settings.player.scrollMode = alphaTab.ScrollMode.OffScreen;
 
         const api = new AlphaTabApi(containerRef.current!, settings);
         apiRef.current = api;
@@ -69,14 +97,19 @@ export default function AlphaTexViewer({
           }
         });
 
+        // Player ready for playback (MIDI loaded) - now play/pause/seek will work
+        api.playerReady.on(() => {
+          if (!destroyed) {
+            playerReadyRef.current = true;
+          }
+        });
+
         api.error.on((e: any) => {
           if (!destroyed) {
             let errorMsg = e.message || "Failed to render tab";
-            // Extract diagnostics from AlphaTexErrorWithDiagnostics
             const inner = e.error || e.innerError;
             if (inner) {
               errorMsg = inner.message || errorMsg;
-              // Log all diagnostic collections for debugging
               for (const key of [
                 "lexerDiagnostics",
                 "parserDiagnostics",
@@ -113,6 +146,8 @@ export default function AlphaTexViewer({
 
     return () => {
       destroyed = true;
+      playerReadyRef.current = false;
+      syncDataRef.current = null;
       if (apiRef.current) {
         try {
           apiRef.current.destroy();
@@ -124,23 +159,83 @@ export default function AlphaTexViewer({
     };
   }, [filePath]);
 
+  // Sync play/pause state with BottomPlayer
+  useEffect(() => {
+    const api = apiRef.current;
+    if (!api || !playerReadyRef.current) return;
+
+    try {
+      if (audioIsPlaying) {
+        api.play();
+      } else {
+        api.pause();
+      }
+    } catch {
+      // Ignore if player not ready yet
+    }
+  }, [audioIsPlaying]);
+
+  // Interpolate audio time to alphaTab MIDI time using beat grid sync data.
+  // The SNG beat grid has exact timing for every beat, so interpolating between
+  // grid points avoids cumulative drift from using a single averaged BPM.
+  const audioTimeToAlphaTabTime = useCallback(
+    (audioTimeSec: number): number => {
+      const sync = syncDataRef.current;
+      if (!sync || sync.points.length === 0) {
+        // Fallback: simple conversion (will drift over time)
+        return audioTimeSec * 1000;
+      }
+
+      const pts = sync.points;
+
+      // Before first sync point
+      if (audioTimeSec <= pts[0][0]) {
+        return pts[0][1] - (pts[0][0] - audioTimeSec) * 1000;
+      }
+
+      // After last sync point
+      if (audioTimeSec >= pts[pts.length - 1][0]) {
+        const last = pts[pts.length - 1];
+        return last[1] + (audioTimeSec - last[0]) * 1000;
+      }
+
+      // Binary search for the surrounding sync points
+      let lo = 0;
+      let hi = pts.length - 1;
+      while (lo < hi - 1) {
+        const mid = (lo + hi) >> 1;
+        if (pts[mid][0] <= audioTimeSec) {
+          lo = mid;
+        } else {
+          hi = mid;
+        }
+      }
+
+      // Linear interpolation between pts[lo] and pts[hi]
+      const [aLo, mLo] = pts[lo];
+      const [aHi, mHi] = pts[hi];
+      const t = (audioTimeSec - aLo) / (aHi - aLo);
+      return mLo + t * (mHi - mLo);
+    },
+    []
+  );
+
   // Sync cursor position with audio playback time
   const syncCursor = useCallback(() => {
-    if (!apiRef.current || !audioIsPlaying) return;
+    const api = apiRef.current;
+    if (!api || !playerReadyRef.current || !audioIsPlaying) return;
 
-    // Only sync if time has changed meaningfully (avoid excessive updates)
     const timeDiff = Math.abs(currentAudioTime - lastSyncTime.current);
     if (timeDiff < 0.05) return;
 
     lastSyncTime.current = currentAudioTime;
 
     try {
-      // alphaTab timePosition is in milliseconds
-      apiRef.current.timePosition = currentAudioTime * 1000;
+      api.timePosition = audioTimeToAlphaTabTime(currentAudioTime);
     } catch {
-      // Ignore cursor sync errors (can happen before score is fully loaded)
+      // Ignore cursor sync errors
     }
-  }, [currentAudioTime, audioIsPlaying]);
+  }, [currentAudioTime, audioIsPlaying, audioTimeToAlphaTabTime]);
 
   useEffect(() => {
     syncCursor();
@@ -148,7 +243,6 @@ export default function AlphaTexViewer({
 
   return (
     <div className="relative flex flex-col h-full bg-gray-900">
-      {/* Loading/error overlays - positioned above the container so alphaTab always has dimensions */}
       {isLoading && (
         <div className="absolute inset-0 z-10 flex items-center justify-center bg-gray-900">
           <span className="text-gray-500 text-sm">Loading tab...</span>

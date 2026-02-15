@@ -4,7 +4,7 @@ import * as fs from "fs/promises";
 import * as path from "path";
 import { PSARC } from "@/lib/rocksmith/psarcParser";
 import { parseSNG } from "@/lib/rocksmith/sngParser";
-import { generateAlphaTex, getBPM } from "@/lib/rocksmith/sngToAlphatex";
+import { generateAlphaTex, generateSyncData, getBPM } from "@/lib/rocksmith/sngToAlphatex";
 import { convertWemToOgg, findFullSongWem } from "@/lib/rocksmith/audioConverter";
 
 const MUSIC_DIR = process.env.MUSIC_DIR || "./music";
@@ -137,6 +137,12 @@ export async function POST(request: NextRequest) {
         const atexFileName = `${sanitizeName(arrName)}.alphatex`;
         const atexPath = path.join(trackFolder, atexFileName);
         await fs.writeFile(atexPath, alphaTex, "utf-8");
+
+        // Save sync data (beat grid mapping for accurate cursor sync)
+        const syncData = generateSyncData(song);
+        const syncFileName = `${sanitizeName(arrName)}.sync.json`;
+        const syncPath = path.join(trackFolder, syncFileName);
+        await fs.writeFile(syncPath, JSON.stringify(syncData), "utf-8");
 
         alphatexFiles.push({
           name: displayName,

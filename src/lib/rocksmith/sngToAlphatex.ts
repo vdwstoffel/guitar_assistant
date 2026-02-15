@@ -170,6 +170,15 @@ export function generateAlphaTex(
   lines.push(`\\staff{score tabs}`);
   lines.push(`.`); // End of metadata
 
+  // Prepend rest bars to account for silence at the start of the audio.
+  // The SNG beat grid starts at firstBeat.time (seconds into the audio),
+  // but alphaTab's MIDI timeline starts at 0ms. Adding rest bars aligns them.
+  const barDuration = (BEATS_PER_BAR * 60) / bpm;
+  const restBars = Math.round(firstBeat.time / barDuration);
+  for (let i = 0; i < restBars; i++) {
+    lines.push(`r.1 |`);
+  }
+
   // Group SNG beats into musical measures (4 beats each in 4/4)
   const musicalMeasures: {
     startTime: number;
@@ -232,6 +241,14 @@ export function generateAlphaTex(
     // Generate AlphaTex for each beat group
     const beatStrings: string[] = [];
 
+    // Add leading rest if notes don't start at the beginning of the measure
+    const firstNoteTime = beatGroups[0][0].time;
+    const leadingGap = firstNoteTime - measure.startTime;
+    if (leadingGap > 0.02) {
+      const leadingDuration = quantizeDuration(leadingGap, bpm);
+      beatStrings.push(`r.${leadingDuration}`);
+    }
+
     for (let i = 0; i < beatGroups.length; i++) {
       const group = beatGroups[i];
       const nextTime = beatGroups[i + 1]?.[0]?.time ?? measure.endTime;
@@ -275,4 +292,37 @@ export function generateAlphaTex(
 export function getBPM(song: SongData): number {
   if (song.beats.length < 2) return 120;
   return Math.round(60 / (song.beats[1].time - song.beats[0].time));
+}
+
+/**
+ * Generate sync data that maps audio time → alphaTab MIDI time.
+ * The SNG beat grid has exact timing for every beat, which is more accurate
+ * than relying on a fixed BPM (which causes cumulative drift).
+ *
+ * Returns an array of [audioTimeSeconds, alphaTabTimeMs] pairs.
+ * The viewer interpolates between these to get accurate cursor positioning.
+ */
+export function generateSyncData(song: SongData): {
+  bpm: number;
+  restBars: number;
+  /** Array of [audioTimeSec, alphaTabTimeMs] pairs, sampled every 4 beats (1 bar) */
+  points: [number, number][];
+} {
+  const bpm = getBPM(song);
+  const BEATS_PER_BAR = 4;
+  const barDuration = (BEATS_PER_BAR * 60) / bpm;
+  const firstBeatTime = song.beats[0]?.time ?? 0;
+  const restBars = Math.round(firstBeatTime / barDuration);
+  const restBarsMs = restBars * barDuration * 1000;
+  const beatDurationMs = 60000 / bpm;
+
+  // Sample every bar (every 4 beats) to keep the file small
+  const points: [number, number][] = [];
+  for (let i = 0; i < song.beats.length; i += BEATS_PER_BAR) {
+    const audioTime = song.beats[i].time;
+    const alphaTabTime = restBarsMs + i * beatDurationMs;
+    points.push([audioTime, alphaTabTime]);
+  }
+
+  return { bpm, restBars, points };
 }
