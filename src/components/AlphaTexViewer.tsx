@@ -84,9 +84,8 @@ export default function AlphaTexViewer({
         settings.player.playerMode = alphaTab.PlayerMode.EnabledExternalMedia;
         settings.player.enableCursor = true;
         settings.player.enableUserInteraction = false;
-        // Auto-scroll the container to keep the cursor visible
-        settings.player.scrollElement = containerRef.current!;
-        settings.player.scrollMode = alphaTab.ScrollMode.OffScreen;
+        // Disable built-in scrolling - we'll implement custom scroll logic
+        settings.player.scrollMode = alphaTab.ScrollMode.Off;
 
         const api = new AlphaTabApi(containerRef.current!, settings);
         apiRef.current = api;
@@ -240,6 +239,45 @@ export default function AlphaTexViewer({
   useEffect(() => {
     syncCursor();
   }, [syncCursor]);
+
+  // Custom auto-scroll: check cursor position and scroll to keep it centered
+  useEffect(() => {
+    if (!containerRef.current || !audioIsPlaying) return;
+
+    const checkAndScroll = () => {
+      const container = containerRef.current;
+      if (!container) return;
+
+      const cursorBar = container.querySelector('.at-cursor-bar') as HTMLElement;
+      if (!cursorBar) return;
+
+      const containerRect = container.getBoundingClientRect();
+      const cursorRect = cursorBar.getBoundingClientRect();
+
+      // Calculate cursor position relative to container viewport
+      const cursorRelativeTop = cursorRect.top - containerRect.top + container.scrollTop;
+      const cursorPositionInViewport = cursorRect.top - containerRect.top;
+
+      // Trigger scroll when cursor is at 65% down the viewport
+      const triggerThreshold = containerRect.height * 0.65;
+
+      // Target position: 35% from top (gives room to read ahead)
+      const targetPosition = containerRect.height * 0.35;
+
+      if (cursorPositionInViewport > triggerThreshold) {
+        // Scroll to position cursor at target position
+        const newScrollTop = cursorRelativeTop - targetPosition;
+        container.scrollTo({
+          top: newScrollTop,
+          behavior: 'smooth'
+        });
+      }
+    };
+
+    // Check scroll position periodically while playing
+    const interval = setInterval(checkAndScroll, 150);
+    return () => clearInterval(interval);
+  }, [audioIsPlaying]);
 
   return (
     <div className="relative flex flex-col h-full bg-gray-900">
