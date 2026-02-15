@@ -1,25 +1,22 @@
 'use client';
 
 import AuthorSidebar from './AuthorSidebar';
-import type { Author, JamTrack } from '@/types';
+import type { AuthorSummary } from '@/types';
 
 interface MobileSidebarProps {
   isOpen: boolean;
   onClose: () => void;
-  authors: Author[];
-  selectedAuthor: Author | null;
-  onAuthorSelect: (author: Author) => void;
+  authors: AuthorSummary[];
+  selectedAuthor: AuthorSummary | null;
+  onAuthorSelect: (author: AuthorSummary) => void;
   onScan: () => void;
-  onUpload: () => void;
+  onUpload: (files: FileList) => Promise<void>;
   onVideoUploadClick: () => void;
   isScanning: boolean;
   isUploading: boolean;
   inProgressCount: number;
   isInProgressSelected: boolean;
   onInProgressSelect: () => void;
-  jamTracksCount: number;
-  isJamTracksSelected: boolean;
-  onJamTracksSelect: () => void;
 }
 
 export default function MobileSidebar({

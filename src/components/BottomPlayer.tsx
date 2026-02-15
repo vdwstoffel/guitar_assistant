@@ -42,6 +42,7 @@ interface BottomPlayerProps {
   onMarkerBarStateChange?: (state: MarkerBarState) => void;
   onTimeUpdate?: (time: number, isPlaying: boolean) => void;
   onSeekReady?: (seekFn: (time: number) => void) => void;
+  compact?: boolean;
 }
 
 function BottomPlayer({
@@ -55,6 +56,7 @@ function BottomPlayer({
   onMarkerBarStateChange,
   onTimeUpdate,
   onSeekReady,
+  compact = false,
 }: BottomPlayerProps) {
   const waveformRef = useRef<HTMLDivElement>(null);
   const waveformContainerRef = useRef<HTMLDivElement>(null);
@@ -64,6 +66,8 @@ function BottomPlayer({
   const isInitialLoadRef = useRef(true);
   const zoomRef = useRef(1);
   const currentTimeRef = useRef(0);
+  const isMountedRef = useRef(true);
+  const isLoadingRef = useRef(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -187,6 +191,7 @@ function BottomPlayer({
     }
 
     setIsLoading(true);
+    isLoadingRef.current = true;
 
     const regions = RegionsPlugin.create();
 
@@ -196,7 +201,9 @@ function BottomPlayer({
       progressColor: "#22c55e",
       cursorColor: "#ffffff",
       cursorWidth: 2,
-      height: showSplitChannels ? 120 : 140,
+      height: compact
+        ? (showSplitChannels ? 160 : 60)  // Compact: smaller heights
+        : (showSplitChannels ? 120 : 140), // Normal: original heights
       normalize: true,
       minPxPerSec: 1,
       autoScroll: true,
@@ -213,8 +220,10 @@ function BottomPlayer({
     regionsRef.current = regions;
 
     ws.on("ready", () => {
+      if (!isMountedRef.current) return;
       setDuration(ws.getDuration());
       setIsLoading(false);
+      isLoadingRef.current = false;
 
       // Apply saved playback speed for this track
       const savedSpeed = localStorage.getItem(`playbackSpeed_${track.id}`);
@@ -253,25 +262,56 @@ function BottomPlayer({
     ws.on("timeupdate", (time) => {
       currentTimeRef.current = time;
       // Only update state if time changed by more than 50ms to reduce re-renders
-      setCurrentTime(prevTime => Math.abs(prevTime - time) > 0.05 ? time : prevTime);
+      if (isMountedRef.current) {
+        setCurrentTime(prevTime => Math.abs(prevTime - time) > 0.05 ? time : prevTime);
+      }
     });
 
-    ws.on("play", () => setIsPlaying(true));
-    ws.on("pause", () => setIsPlaying(false));
+    ws.on("play", () => {
+      if (isMountedRef.current) setIsPlaying(true);
+    });
+    ws.on("pause", () => {
+      if (isMountedRef.current) setIsPlaying(false);
+    });
     ws.on("finish", () => {
       if (isRepeatEnabledRef.current) {
         restartPlaybackRef.current();
       } else {
-        setIsPlaying(false);
+        if (isMountedRef.current) setIsPlaying(false);
       }
+    });
+
+    // Add error handler to suppress AbortErrors during cleanup
+    ws.on("error", (error) => {
+      // Suppress AbortError which is expected when component unmounts during load
+      if (error && typeof error === 'object' && 'name' in error && error.name === 'AbortError') {
+        return;
+      }
+      console.error('WaveSurfer error:', error);
     });
 
     ws.load(`/api/audio/${encodeURIComponent(track.filePath)}`);
 
     wavesurferRef.current = ws;
-  }, [track, showSplitChannels]);
+  }, [track, showSplitChannels, compact]);
+
+  // Add global error handler to suppress AbortErrors from audio loading
+  useEffect(() => {
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      if (event.reason && event.reason.name === 'AbortError') {
+        event.preventDefault();
+      }
+    };
+
+    window.addEventListener('unhandledrejection', handleUnhandledRejection);
+    return () => {
+      window.removeEventListener('unhandledrejection', handleUnhandledRejection);
+    };
+  }, []);
 
   useEffect(() => {
+    isMountedRef.current = true;
+
     if (track) {
       prevMarkerIdsRef.current = new Set();
       isInitialLoadRef.current = true;
@@ -282,8 +322,24 @@ function BottomPlayer({
     }
 
     return () => {
+      isMountedRef.current = false;
+
       if (wavesurferRef.current) {
         try {
+          // If still loading, don't call destroy() to prevent AbortError
+          // Just remove event listeners and let the load complete in background
+          if (isLoadingRef.current) {
+            wavesurferRef.current.unAll();
+            wavesurferRef.current = null;
+            isLoadingRef.current = false;
+
+            if (regionsRef.current) {
+              regionsRef.current.destroy();
+              regionsRef.current = null;
+            }
+            return;
+          }
+
           // Stop playback to release audio resources
           wavesurferRef.current.stop();
 
@@ -295,8 +351,14 @@ function BottomPlayer({
 
           // Destroy WaveSurfer instance
           wavesurferRef.current.destroy();
-        } catch {
-          // Ignore errors during cleanup (e.g., DOM already removed)
+        } catch (error) {
+          // Ignore expected errors during cleanup:
+          // - AbortError from cancelling audio fetch
+          // - DOM errors if elements already removed
+          // Only log unexpected errors
+          if (error instanceof Error && error.name !== 'AbortError') {
+            console.debug('Non-critical error during WaveSurfer cleanup:', error.message);
+          }
         }
         wavesurferRef.current = null;
       }
@@ -869,7 +931,11 @@ function BottomPlayer({
         </div>
 
           {/* Waveform - Responsive height */}
-          <div className={`relative pt-6 ${showSplitChannels ? 'h-[250px] sm:h-[300px]' : 'h-[140px] sm:h-[200px]'}`}>
+          <div className={`relative pt-6 ${
+          compact
+            ? (showSplitChannels ? 'h-[180px]' : 'h-[80px]')
+            : (showSplitChannels ? 'h-[250px] sm:h-[300px]' : 'h-[140px] sm:h-[200px]')
+        }`}>
             {/* Marker labels - positioned above waveform */}
             {track.markers.length > 0 && duration > 0 && !isLoading && containerWidth > 0 && (
               <div className="absolute top-0 left-0 right-0 h-6 overflow-visible pointer-events-none z-10">

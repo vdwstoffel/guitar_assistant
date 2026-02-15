@@ -8,6 +8,7 @@ import BookGrid from "@/components/BookGrid";
 import InProgressGrid from "@/components/InProgressGrid";
 import TrackListView from "@/components/TrackListView";
 import JamTracksView from "@/components/JamTracksView";
+import JamTrackCompactSelector from "@/components/JamTrackCompactSelector";
 import BottomPlayer, { MarkerBarState } from "@/components/BottomPlayer";
 import MarkersBar from "@/components/MarkersBar";
 import TopNav from "@/components/TopNav";
@@ -25,15 +26,15 @@ import VideoUploadModal from "@/components/VideoUploadModal";
 import VideoPlayer from "@/components/VideoPlayer";
 import { AuthorSummary, BookSummary, Book, Track, Marker, JamTrack, JamTrackMarker, BookVideo } from "@/types";
 
-type Section = 'library' | 'videos' | 'fretboard' | 'intervals' | 'chords' | 'tools' | 'circle' | 'tabs';
+type Section = 'lessons' | 'videos' | 'fretboard' | 'intervals' | 'chords' | 'tools' | 'circle' | 'tabs' | 'jamtracks';
 
 const getSectionFromPath = (section: string[] | undefined): Section => {
-  if (!section || section.length === 0) return 'library';
+  if (!section || section.length === 0) return 'lessons';
   const first = section[0];
-  if (first === 'videos' || first === 'fretboard' || first === 'intervals' || first === 'chords' || first === 'tools' || first === 'circle' || first === 'tabs') {
+  if (first === 'videos' || first === 'fretboard' || first === 'intervals' || first === 'chords' || first === 'tools' || first === 'circle' || first === 'tabs' || first === 'jamtracks') {
     return first;
   }
-  return 'library';
+  return 'lessons';
 };
 
 export default function Home() {
@@ -74,7 +75,6 @@ export default function Home() {
   const [isImportingFromYouTube, setIsImportingFromYouTube] = useState(false);
   const [isImportingPsarc, setIsImportingPsarc] = useState(false);
   const [isInProgressSelected, setIsInProgressSelected] = useState(false);
-  const [isJamTracksSelected, setIsJamTracksSelected] = useState(false);
   const [isVideoUploadModalOpen, setIsVideoUploadModalOpen] = useState(false);
   const [selectedVideo, setSelectedVideo] = useState<BookVideo | null>(null);
   const [showVideo, setShowVideo] = useState(false);
@@ -151,28 +151,41 @@ export default function Home() {
   const activeSection = getSectionFromPath(params.section as string[] | undefined);
 
   // Helper to update library URL with artist/album params
-  const updateLibraryUrl = (artistId: string | null, albumId: string | null) => {
+  const updateLibraryUrl = (
+    artistId: string | null,
+    albumId: string | null,
+    trackId?: string | null
+  ) => {
     const params = new URLSearchParams();
     if (artistId) params.set('artist', artistId);
     if (albumId) params.set('album', albumId);
+    if (trackId) params.set('track', trackId);
     const newUrl = params.toString() ? `/?${params.toString()}` : '/';
     window.history.replaceState({}, '', newUrl);
   };
 
+  const updateJamTrackUrl = (jamTrackId: string | null) => {
+    const newUrl = jamTrackId ? `/jamtracks?track=${jamTrackId}` : '/jamtracks';
+    window.history.replaceState({}, '', newUrl);
+  };
+
   const handleSectionChange = (section: Section) => {
-    if (section !== 'library') {
+    if (section !== 'lessons') {
       setCurrentTrack(null);
       setCurrentAuthorId(null);
       setCurrentBookId(null);
     }
-    if (section === 'library') {
+    if (section !== 'jamtracks') {
+      setCurrentJamTrackId(null);
+    }
+    if (section === 'lessons') {
       router.push('/');
     } else {
       router.push(`/${section}`);
     }
   };
 
-  const fetchBookDetail = useCallback(async (bookId: string) => {
+  const fetchBookDetail = useCallback(async (bookId: string): Promise<Book | null> => {
     try {
       const response = await fetch(`/api/books/${bookId}/detail`);
       if (response.ok) {
@@ -186,10 +199,13 @@ export default function Home() {
             || bookData.chapters?.flatMap(ch => ch.tracks).find(t => t.id === prev.id);
           return found || prev;
         });
+
+        return bookData;
       }
     } catch (error) {
       console.error("Error fetching book detail:", error);
     }
+    return null;
   }, []);
 
   const fetchLibrary = useCallback(async (restoreFromUrl = false) => {
@@ -209,6 +225,10 @@ export default function Home() {
         if (restoreFromUrl) {
           const authorId = searchParams.get('artist');
           const bookId = searchParams.get('album');
+          const trackId = searchParams.get('track');
+          const jamTrackId = searchParams.get('track'); // For jamtracks section
+
+          // Restore library selection (author/book/track)
           if (authorId) {
             const author = authorsData.find((a: AuthorSummary) => a.id === authorId);
             if (author) {
@@ -220,11 +240,33 @@ export default function Home() {
                   if (book.pdfPath) {
                     setPdfPath(book.pdfPath);
                   }
-                  await fetchBookDetail(bookId);
+                  const bookDetail = await fetchBookDetail(bookId);
+
+                  // Restore track selection if specified in URL
+                  if (trackId && bookDetail?.tracks) {
+                    const track = bookDetail.tracks.find((t: Track) => t.id === trackId);
+                    if (track) {
+                      setCurrentTrack(track);
+                      setCurrentAuthorId(authorId);
+                      setCurrentBookId(bookId);
+                    }
+                  }
                 }
               }
             }
           }
+
+          // Restore jam track selection if on jamtracks section
+          if (jamTrackId && window.location.pathname.includes('jamtracks')) {
+            const jamTrack = jamTracksData.find((jt: JamTrack) => jt.id === jamTrackId);
+            if (jamTrack) {
+              // Use setTimeout to ensure state is set after component mounts
+              setTimeout(() => {
+                handleJamTrackSelect(jamTrack);
+              }, 0);
+            }
+          }
+
           return;
         }
 
@@ -246,7 +288,6 @@ export default function Home() {
 
   const handleAuthorSelect = (author: AuthorSummary) => {
     setIsInProgressSelected(false);
-    setIsJamTracksSelected(false);
     setSelectedAuthorId(author.id);
     setSelectedBookId(null);
     setSelectedBookDetail(null);
@@ -259,7 +300,6 @@ export default function Home() {
 
   const handleInProgressSelect = () => {
     setIsInProgressSelected(true);
-    setIsJamTracksSelected(false);
     setSelectedAuthorId(null);
     setSelectedBookId(null);
     setSelectedBookDetail(null);
@@ -270,17 +310,6 @@ export default function Home() {
     updateLibraryUrl(null, null);
   };
 
-  const handleJamTracksSelect = () => {
-    setIsJamTracksSelected(true);
-    setIsInProgressSelected(false);
-    setSelectedAuthorId(null);
-    setSelectedBookId(null);
-    setSelectedBookDetail(null);
-    setCurrentTrack(null);
-    setCurrentAuthorId(null);
-    setCurrentBookId(null);
-    updateLibraryUrl(null, null);
-  };
 
   const handleInProgressBookSelect = (book: BookSummary, author: AuthorSummary) => {
     setSelectedAuthorId(author.id);
@@ -428,6 +457,8 @@ export default function Home() {
     if (selectedBookDetail?.pdfPath) {
       setPdfPath(selectedBookDetail.pdfPath);
     }
+    // Update URL with track selection
+    updateLibraryUrl(selectedAuthorId, selectedBookId, track.id);
   };
 
   const handleVideoSelect = (video: BookVideo) => {
@@ -454,6 +485,9 @@ export default function Home() {
     setPageSyncEditMode(false);
     setActivePdfId(null);
     setActivePdfPage(1);
+
+    // Update URL with jam track selection
+    updateJamTrackUrl(jamTrack.id);
 
     // Fetch full jam track data (markers, sync points) - not loaded by library endpoint
     try {
@@ -1308,16 +1342,10 @@ export default function Home() {
           handleInProgressSelect();
           setIsMobileSidebarOpen(false);
         }}
-        jamTracksCount={jamTracks.length}
-        isJamTracksSelected={isJamTracksSelected}
-        onJamTracksSelect={() => {
-          handleJamTracksSelect();
-          setIsMobileSidebarOpen(false);
-        }}
       />
 
       {/* Section Content */}
-      {activeSection === 'library' ? (
+      {activeSection === 'lessons' ? (
         <>
           <div className="flex flex-col xl:flex-row flex-1 min-h-0">
             {/* Left side: Sidebar + Content + Player - Full width on mobile, 50% on xl+ */}
@@ -1338,9 +1366,6 @@ export default function Home() {
                     inProgressCount={inProgressCount}
                     isInProgressSelected={isInProgressSelected}
                     onInProgressSelect={handleInProgressSelect}
-                    jamTracksCount={jamTracks.length}
-                    isJamTracksSelected={isJamTracksSelected}
-                    onJamTracksSelect={handleJamTracksSelect}
                   />
                 </div>
 
@@ -1387,23 +1412,6 @@ export default function Home() {
                       onVideoUpdate={handleVideoUpdate}
                       onVideoComplete={handleVideoComplete}
                       onLibraryRefresh={fetchLibrary}
-                    />
-                  ) : isJamTracksSelected ? (
-                    <JamTracksView
-                      jamTracks={jamTracks}
-                      currentJamTrack={currentJamTrack}
-                      onJamTrackSelect={handleJamTrackSelect}
-                      onJamTrackUpdate={handleJamTrackUpdate}
-                      onJamTrackComplete={handleJamTrackComplete}
-                      onJamTrackDelete={handleJamTrackDelete}
-                      onPdfUpload={handleJamTrackPdfUpload}
-                      onPdfDelete={handleJamTrackPdfDelete}
-                      onUpload={handleJamTrackUpload}
-                      isUploading={isUploadingJamTracks}
-                      onYouTubeImport={handleYouTubeImport}
-                      isImportingFromYouTube={isImportingFromYouTube}
-                      onPsarcImport={handlePsarcImport}
-                      isImportingPsarc={isImportingPsarc}
                     />
                   ) : isInProgressSelected ? (
                     <InProgressGrid
@@ -1599,6 +1607,236 @@ export default function Home() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
                 <span className="text-xs">PDF</span>
+              </button>
+            </div>
+          </div>
+        </>
+      ) : activeSection === 'jamtracks' ? (
+        <>
+          {/* Show full layout when no track selected */}
+          {!currentJamTrack ? (
+            <div className="flex flex-col xl:flex-row flex-1 min-h-0">
+              {/* Left: Full track list */}
+              <div className="w-full xl:w-1/2 flex flex-col min-w-0 xl:border-r border-gray-700">
+                <div className="flex-1 min-w-0 overflow-y-auto">
+                  <JamTracksView
+                    jamTracks={jamTracks}
+                    currentJamTrack={currentJamTrack}
+                    onJamTrackSelect={handleJamTrackSelect}
+                    onJamTrackUpdate={handleJamTrackUpdate}
+                    onJamTrackComplete={handleJamTrackComplete}
+                    onJamTrackDelete={handleJamTrackDelete}
+                    onPdfUpload={handleJamTrackPdfUpload}
+                    onPdfDelete={handleJamTrackPdfDelete}
+                    onUpload={handleJamTrackUpload}
+                    isUploading={isUploadingJamTracks}
+                    onYouTubeImport={handleYouTubeImport}
+                    isImportingFromYouTube={isImportingFromYouTube}
+                    onPsarcImport={handlePsarcImport}
+                    isImportingPsarc={isImportingPsarc}
+                  />
+                </div>
+              </div>
+
+              {/* Right: Empty state */}
+              <div className="hidden xl:flex xl:w-1/2 flex-col items-center justify-center bg-gray-900 text-gray-500">
+                <div className="text-center">
+                  <svg className="w-16 h-16 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+                  </svg>
+                  <p className="text-lg">Select a jam track to get started</p>
+                </div>
+              </div>
+            </div>
+          ) : (
+            /* Compact layout when track selected */
+            <div className="flex flex-col h-full overflow-hidden">
+              {/* Top: Compact selector - Desktop only */}
+              <div className="hidden xl:block shrink-0">
+                <JamTrackCompactSelector
+                  jamTracks={jamTracks}
+                  currentJamTrack={currentJamTrack}
+                  onJamTrackSelect={handleJamTrackSelect}
+                  onJamTrackUpdate={handleJamTrackUpdate}
+                  onUpload={handleJamTrackUpload}
+                  isUploading={isUploadingJamTracks}
+                  onYouTubeImport={handleYouTubeImport}
+                  isImportingFromYouTube={isImportingFromYouTube}
+                  onPsarcImport={handlePsarcImport}
+                  isImportingPsarc={isImportingPsarc}
+                />
+              </div>
+
+              {/* Mobile: Keep full JamTracksView */}
+              <div className="xl:hidden flex-1 overflow-y-auto">
+                <JamTracksView
+                  jamTracks={jamTracks}
+                  currentJamTrack={currentJamTrack}
+                  onJamTrackSelect={handleJamTrackSelect}
+                  onJamTrackUpdate={handleJamTrackUpdate}
+                  onJamTrackComplete={handleJamTrackComplete}
+                  onJamTrackDelete={handleJamTrackDelete}
+                  onPdfUpload={handleJamTrackPdfUpload}
+                  onPdfDelete={handleJamTrackPdfDelete}
+                  onUpload={handleJamTrackUpload}
+                  isUploading={isUploadingJamTracks}
+                  onYouTubeImport={handleYouTubeImport}
+                  isImportingFromYouTube={isImportingFromYouTube}
+                  onPsarcImport={handlePsarcImport}
+                  isImportingPsarc={isImportingPsarc}
+                />
+              </div>
+
+              {/* Middle: PDF Viewer + Markers Sidebar - Desktop */}
+              <div className="hidden xl:flex flex-1 min-h-0 overflow-hidden" style={{ maxHeight: 'calc(100vh - 280px)' }}>
+                {/* PDF Viewer - Left side */}
+                <div className="flex-1 flex flex-col overflow-hidden">
+                  {currentJamTrack.pdfs.length > 0 ? (
+                    <>
+                      {(() => {
+                        const activePdf = currentJamTrack.pdfs.find(p => p.id === activePdfId) || currentJamTrack.pdfs[0];
+                        return activePdf ? (
+                          <PageSyncEditor
+                            pdfId={activePdf.id}
+                            pdfName={activePdf.name}
+                            syncPoints={activePdf.pageSyncPoints ?? []}
+                            syncEditMode={pageSyncEditMode}
+                            onToggleSyncEditMode={() => setPageSyncEditMode(!pageSyncEditMode)}
+                            currentAudioTime={currentAudioTime}
+                            currentVisiblePage={activePdfPage}
+                            onAddSyncPoint={handleAddPageSyncPoint}
+                            onDeleteSyncPoint={handleDeletePageSyncPoint}
+                            onClearSyncPoints={handleClearPageSyncPoints}
+                          />
+                        ) : null;
+                      })()}
+                      <div className="flex-1 overflow-hidden">
+                        <PdfViewer
+                          pdfs={currentJamTrack.pdfs}
+                          currentAudioTime={currentAudioTime}
+                          audioIsPlaying={audioIsPlaying}
+                          onActivePdfChange={handleActivePdfChange}
+                        />
+                      </div>
+                    </>
+                  ) : (
+                    <div className="h-full flex items-center justify-center bg-gray-900 text-gray-500">
+                      <div className="text-center">
+                        <svg className="w-16 h-16 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        <p className="text-lg">No tabs or sheets available for this track</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Markers Sidebar - Right side */}
+                {markerBarState && (
+                  <div className="w-80 border-l border-gray-700 bg-gray-900 flex flex-col overflow-hidden">
+                    <MarkersBar
+                      markers={currentJamTrack.markers}
+                      visible={true}
+                      leadIn={markerBarState.leadIn}
+                      newMarkerName={markerBarState.newMarkerName}
+                      editingMarkerId={markerBarState.editingMarkerId}
+                      editingMarkerName={markerBarState.editingMarkerName}
+                      currentTime={markerBarState.currentTime}
+                      onLeadInChange={markerBarState.setLeadIn}
+                      onNewMarkerNameChange={markerBarState.setNewMarkerName}
+                      onAddMarker={markerBarState.addMarker}
+                      onJumpToMarker={markerBarState.jumpToMarker}
+                      onStartEdit={(id, name) => {
+                        markerBarState.setEditingMarkerId(id);
+                        markerBarState.setEditingMarkerName(name);
+                      }}
+                      onEditNameChange={markerBarState.setEditingMarkerName}
+                      onSaveEdit={(markerId, name) => {
+                        handleJamTrackMarkerRename(currentJamTrack.id, markerId, name);
+                        markerBarState.setEditingMarkerId(null);
+                      }}
+                      onCancelEdit={() => markerBarState.setEditingMarkerId(null)}
+                      onDelete={(markerId) => handleJamTrackMarkerDelete(currentJamTrack.id, markerId)}
+                      onClearAll={() => handleJamTrackMarkersClear(currentJamTrack.id)}
+                      formatTime={markerBarState.formatTime}
+                      isCountingIn={markerBarState.isCountingIn}
+                      currentCountInBeat={markerBarState.currentCountInBeat}
+                      totalCountInBeats={markerBarState.totalCountInBeats}
+                      trackTempo={markerBarState.trackTempo}
+                      trackTimeSignature={markerBarState.trackTimeSignature}
+                      onTempoChange={handleTempoChange}
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Bottom: Compact Player - Desktop */}
+              <div className="hidden xl:block shrink-0">
+                <BottomPlayer
+                  track={currentJamTrack}
+                  compact={true}
+                  onMarkerAdd={stableOnMarkerAdd}
+                  onMarkerUpdate={stableOnMarkerUpdate}
+                  onMarkerRename={stableOnMarkerRename}
+                  onMarkerDelete={stableOnMarkerDelete}
+                  onMarkersClear={stableOnMarkersClear}
+                  externalMarkersBar={true}
+                  onMarkerBarStateChange={setMarkerBarState}
+                  onTimeUpdate={stableOnTimeUpdate}
+                  onSeekReady={stableOnSeekReady}
+                />
+              </div>
+
+              {/* Mobile: Keep existing player at full size */}
+              <div className={`xl:hidden shrink-0 overflow-hidden transition-all duration-300 ${currentJamTrack ? "h-[30vh] min-h-55 max-h-80" : "h-0"}`}>
+                <BottomPlayer
+                  track={currentJamTrack}
+                  compact={false}
+                  onMarkerAdd={stableOnMarkerAdd}
+                  onMarkerUpdate={stableOnMarkerUpdate}
+                  onMarkerRename={stableOnMarkerRename}
+                  onMarkerDelete={stableOnMarkerDelete}
+                  onMarkersClear={stableOnMarkersClear}
+                  externalMarkersBar={true}
+                  onMarkerBarStateChange={setMarkerBarState}
+                  onTimeUpdate={stableOnTimeUpdate}
+                  onSeekReady={stableOnSeekReady}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Mobile Bottom Navigation - unchanged */}
+          <div className="xl:hidden fixed bottom-0 left-0 right-0 bg-gray-800 border-t border-gray-700 z-30">
+            <div className="flex">
+              <button
+                className={`flex-1 flex flex-col items-center justify-center py-3 gap-1 ${mobileView === 'library' ? 'text-blue-400' : 'text-gray-400'}`}
+                onClick={() => setMobileView('library')}
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7h18M3 12h18M3 17h18" />
+                </svg>
+                <span className="text-xs">Tracks</span>
+              </button>
+              <button
+                className={`flex-1 flex flex-col items-center py-3 gap-1 ${mobileView === 'player' ? 'text-blue-400' : 'text-gray-400'} ${!currentJamTrack ? 'opacity-50' : ''}`}
+                onClick={() => currentJamTrack && setMobileView('player')}
+                disabled={!currentJamTrack}
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                </svg>
+                <span className="text-xs">Player</span>
+              </button>
+              <button
+                className={`flex-1 flex flex-col items-center py-3 gap-1 ${mobileView === 'pdf' ? 'text-blue-400' : 'text-gray-400'} ${!currentJamTrack || !currentJamTrack.pdfs.length ? 'opacity-50' : ''}`}
+                onClick={() => currentJamTrack && currentJamTrack.pdfs.length > 0 && setMobileView('pdf')}
+                disabled={!currentJamTrack || !currentJamTrack.pdfs.length}
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <span className="text-xs">Tabs</span>
               </button>
             </div>
           </div>
