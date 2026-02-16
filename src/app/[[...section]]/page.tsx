@@ -1520,12 +1520,10 @@ export default function Home() {
               markers={(currentTrack || currentJamTrack)!.markers}
               visible={markerBarState.showMarkers}
               leadIn={markerBarState.leadIn}
-              newMarkerName={markerBarState.newMarkerName}
               editingMarkerId={markerBarState.editingMarkerId}
               editingMarkerName={markerBarState.editingMarkerName}
               currentTime={markerBarState.currentTime}
               onLeadInChange={markerBarState.setLeadIn}
-              onNewMarkerNameChange={markerBarState.setNewMarkerName}
               onAddMarker={markerBarState.addMarker}
               onJumpToMarker={markerBarState.jumpToMarker}
               onStartEdit={(id, name) => {
@@ -1738,12 +1736,10 @@ export default function Home() {
                       markers={currentJamTrack.markers}
                       visible={true}
                       leadIn={markerBarState.leadIn}
-                      newMarkerName={markerBarState.newMarkerName}
                       editingMarkerId={markerBarState.editingMarkerId}
                       editingMarkerName={markerBarState.editingMarkerName}
                       currentTime={markerBarState.currentTime}
                       onLeadInChange={markerBarState.setLeadIn}
-                      onNewMarkerNameChange={markerBarState.setNewMarkerName}
                       onAddMarker={markerBarState.addMarker}
                       onJumpToMarker={markerBarState.jumpToMarker}
                       onStartEdit={(id, name) => {

@@ -3,18 +3,17 @@
 import { useEffect, useState, useRef, useCallback, memo, useMemo } from "react";
 import { Marker, JamTrackMarker } from "@/types";
 import { createTapTempo } from "@/lib/tapTempo";
+import MarkerNameDialog from "./MarkerNameDialog";
 
 interface MarkersBarProps {
   markers: (Marker | JamTrackMarker)[];
   visible: boolean;
   leadIn: number;
-  newMarkerName: string;
   editingMarkerId: string | null;
   editingMarkerName: string;
   currentTime: number;
   onLeadInChange: (value: number) => void;
-  onNewMarkerNameChange: (value: string) => void;
-  onAddMarker: () => void;
+  onAddMarker: (name: string, timestamp: number) => void;
   onJumpToMarker: (timestamp: number) => void;
   onStartEdit: (markerId: string, name: string) => void;
   onEditNameChange: (value: string) => void;
@@ -36,12 +35,10 @@ const MarkersBar = memo(function MarkersBar({
   markers,
   visible,
   leadIn,
-  newMarkerName,
   editingMarkerId,
   editingMarkerName,
   currentTime,
   onLeadInChange,
-  onNewMarkerNameChange,
   onAddMarker,
   onJumpToMarker,
   onStartEdit,
@@ -61,6 +58,8 @@ const MarkersBar = memo(function MarkersBar({
   const [tapBpm, setTapBpm] = useState<number | null>(null);
   const [tapCount, setTapCount] = useState(0);
   const tapTempoRef = useRef(createTapTempo());
+  const [showDialog, setShowDialog] = useState(false);
+  const [pendingMarkerTimestamp, setPendingMarkerTimestamp] = useState(0);
 
   const handleTap = useCallback(() => {
     const bpm = tapTempoRef.current.tap();
@@ -91,6 +90,20 @@ const MarkersBar = memo(function MarkersBar({
       onTempoChange(trackTempo, newTimeSignature);
     }
   }, [onTempoChange, trackTempo]);
+
+  const handleOpenDialog = useCallback(() => {
+    setPendingMarkerTimestamp(currentTime);
+    setShowDialog(true);
+  }, [currentTime]);
+
+  const handleSaveMarker = useCallback((name: string) => {
+    onAddMarker(name, pendingMarkerTimestamp);
+    setShowDialog(false);
+  }, [onAddMarker, pendingMarkerTimestamp]);
+
+  const handleCancelDialog = useCallback(() => {
+    setShowDialog(false);
+  }, []);
   // Keyboard shortcuts: 1-9 jump to marker 1-9, 0 jumps to marker 10
   useEffect(() => {
     if (!visible) return;
@@ -201,23 +214,12 @@ const MarkersBar = memo(function MarkersBar({
           </div>
         )}
 
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={newMarkerName}
-            onChange={(e) => onNewMarkerNameChange(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && onAddMarker()}
-            placeholder="Marker name"
-            className="w-32 px-2 py-1 bg-gray-700 border border-gray-600 rounded text-xs focus:outline-none focus:border-green-500"
-          />
-          <button
-            onClick={onAddMarker}
-            disabled={!newMarkerName.trim()}
-            className="px-2 py-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 rounded text-xs"
-          >
-            Add
-          </button>
-        </div>
+        <button
+          onClick={handleOpenDialog}
+          className="px-3 py-1 bg-green-600 hover:bg-green-700 rounded text-xs"
+        >
+          Add Marker
+        </button>
 
         {markers.length > 0 && (
           <button
@@ -297,6 +299,14 @@ const MarkersBar = memo(function MarkersBar({
             })}
         </div>
       )}
+
+      <MarkerNameDialog
+        isOpen={showDialog}
+        timestamp={pendingMarkerTimestamp}
+        formatTime={formatTime}
+        onSave={handleSaveMarker}
+        onCancel={handleCancelDialog}
+      />
     </div>
   );
 });

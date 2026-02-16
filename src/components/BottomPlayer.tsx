@@ -6,12 +6,11 @@ import WaveSurfer from "wavesurfer.js";
 import RegionsPlugin from "wavesurfer.js/dist/plugins/regions.js";
 import { playCountIn } from "@/lib/clickGenerator";
 import KeyboardShortcutsHelp from "./KeyboardShortcutsHelp";
+import MarkerNameDialog from "./MarkerNameDialog";
 
 export interface MarkerBarState {
   showMarkers: boolean;
   setShowMarkers: (value: boolean) => void;
-  newMarkerName: string;
-  setNewMarkerName: (value: string) => void;
   leadIn: number;
   setLeadIn: (value: number) => void;
   editingMarkerId: string | null;
@@ -20,7 +19,7 @@ export interface MarkerBarState {
   setEditingMarkerName: (value: string) => void;
   currentTime: number;
   jumpToMarker: (timestamp: number) => void;
-  addMarker: () => void;
+  addMarker: (name: string, timestamp: number) => void;
   formatTime: (seconds: number) => string;
   // Count-in state
   isCountingIn: boolean;
@@ -84,10 +83,11 @@ function BottomPlayer({
   });
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
   const [showMarkers, setShowMarkers] = useState(false);
-  const [newMarkerName, setNewMarkerName] = useState("");
   const [leadIn, setLeadIn] = useState(0);
   const [editingMarkerId, setEditingMarkerId] = useState<string | null>(null);
   const [editingMarkerName, setEditingMarkerName] = useState("");
+  const [showMarkerDialog, setShowMarkerDialog] = useState(false);
+  const [pendingMarkerTimestamp, setPendingMarkerTimestamp] = useState(0);
   const [scrollLeft, setScrollLeft] = useState(0);
   const [containerWidth, setContainerWidth] = useState(0);
   const [isCountingIn, setIsCountingIn] = useState(false);
@@ -472,44 +472,6 @@ function BottomPlayer({
     };
   }, [track, isLoading]);
 
-  // Keyboard shortcuts
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
-        return;
-      }
-
-      if (e.code === "Space") {
-        e.preventDefault();
-        if (wavesurferRef.current) {
-          wavesurferRef.current.playPause();
-        }
-      }
-
-      if (e.code === "KeyM" && track) {
-        e.preventDefault();
-        const markerCount = track.markers.length + 1;
-        onMarkerAdd(track.id, `Marker ${markerCount}`, currentTime);
-      }
-
-      if (e.code === "ArrowLeft") {
-        e.preventDefault();
-        if (wavesurferRef.current) {
-          wavesurferRef.current.seekTo(0);
-          wavesurferRef.current.play();
-        }
-      }
-
-      if (e.key === "?") {
-        e.preventDefault();
-        setShowShortcutsHelp(prev => !prev);
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [track, currentTime, onMarkerAdd]);
-
   // Stop playback when reaching stop marker
   useEffect(() => {
     if (stopMarker === null || !isPlaying || !wavesurferRef.current || !duration) return;
@@ -673,17 +635,63 @@ function BottomPlayer({
     }
   }, [duration, leadIn, track?.tempo, track?.timeSignature, volume]);
 
-  const addMarker = useCallback(() => {
-    if (!track || !newMarkerName.trim()) return;
-    onMarkerAdd(track.id, newMarkerName.trim(), currentTimeRef.current);
-    setNewMarkerName("");
-  }, [track, newMarkerName, onMarkerAdd]);
+  const handleOpenMarkerDialog = useCallback(() => {
+    setPendingMarkerTimestamp(currentTimeRef.current);
+    setShowMarkerDialog(true);
+  }, []);
+
+  const addMarker = useCallback((name: string, timestamp: number) => {
+    if (!track || !name.trim()) return;
+    onMarkerAdd(track.id, name.trim(), timestamp);
+    setShowMarkerDialog(false);
+  }, [track, onMarkerAdd]);
+
+  const handleCancelMarkerDialog = useCallback(() => {
+    setShowMarkerDialog(false);
+  }, []);
 
   const formatTime = useCallback((seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
     return `${mins}:${secs.toString().padStart(2, "0")}`;
   }, []);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+
+      if (e.code === "Space") {
+        e.preventDefault();
+        if (wavesurferRef.current) {
+          wavesurferRef.current.playPause();
+        }
+      }
+
+      if (e.code === "KeyM" && track) {
+        e.preventDefault();
+        handleOpenMarkerDialog();
+      }
+
+      if (e.code === "ArrowLeft") {
+        e.preventDefault();
+        if (wavesurferRef.current) {
+          wavesurferRef.current.seekTo(0);
+          wavesurferRef.current.play();
+        }
+      }
+
+      if (e.key === "?") {
+        e.preventDefault();
+        setShowShortcutsHelp(prev => !prev);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [track, handleOpenMarkerDialog]);
 
   // Handle marker label click to set/clear stop marker
   const handleMarkerLabelClick = useCallback((timestamp: number) => {
@@ -707,8 +715,6 @@ function BottomPlayer({
         onMarkerBarStateChangeRef.current({
           showMarkers,
           setShowMarkers,
-          newMarkerName,
-          setNewMarkerName,
           leadIn,
           setLeadIn,
           editingMarkerId,
@@ -735,7 +741,7 @@ function BottomPlayer({
       }
     };
   // Note: currentTime is accessed via currentTimeRef.current to avoid effect firing on every time update (~20/sec)
-  }, [showMarkers, newMarkerName, leadIn, editingMarkerId, editingMarkerName, jumpToMarker, addMarker, formatTime, isCountingIn, currentCountInBeat, totalCountInBeats, track?.tempo, track?.timeSignature, volume]);
+  }, [showMarkers, leadIn, editingMarkerId, editingMarkerName, jumpToMarker, addMarker, formatTime, isCountingIn, currentCountInBeat, totalCountInBeats, track?.tempo, track?.timeSignature, volume]);
 
   if (!track) {
     return (
@@ -1006,23 +1012,12 @@ function BottomPlayer({
                   <span className="text-xs text-gray-500">sec</span>
                 </div>
 
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={newMarkerName}
-                    onChange={(e) => setNewMarkerName(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && addMarker()}
-                    placeholder="Marker name"
-                    className="w-32 px-2 py-1 bg-gray-700 border border-gray-600 rounded text-xs focus:outline-none focus:border-green-500"
-                  />
-                  <button
-                    onClick={addMarker}
-                    disabled={!newMarkerName.trim()}
-                    className="px-2 py-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 rounded text-xs"
-                  >
-                    Add
-                  </button>
-                </div>
+                <button
+                  onClick={handleOpenMarkerDialog}
+                  className="px-3 py-1 bg-green-600 hover:bg-green-700 rounded text-xs"
+                >
+                  Add Marker
+                </button>
 
                 {track.markers.length > 0 && (
                   <button
@@ -1101,6 +1096,14 @@ function BottomPlayer({
             </div>
           )}
         </div>
+
+        <MarkerNameDialog
+          isOpen={showMarkerDialog}
+          timestamp={pendingMarkerTimestamp}
+          formatTime={formatTime}
+          onSave={(name) => addMarker(name, pendingMarkerTimestamp)}
+          onCancel={handleCancelMarkerDialog}
+        />
     </div>
   );
 }
