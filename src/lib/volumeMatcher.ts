@@ -136,10 +136,7 @@ export class VolumeMatcher {
     }
 
     try {
-      console.log("VolumeMatcher: Connecting playback source...");
       const ctx = getAudioContext();
-      console.log("VolumeMatcher: AudioContext state:", ctx.state);
-      console.log("VolumeMatcher: Audio element paused:", audioElement.paused, "src:", audioElement.src.substring(0, 100));
 
       // Create analyser for playback audio
       this.playbackAnalyser = ctx.createAnalyser();
@@ -153,7 +150,6 @@ export class VolumeMatcher {
       this.playbackAnalyser.connect(ctx.destination);
 
       this.isPlaybackConnected = true;
-      console.log("VolumeMatcher: Playback source connected successfully");
     } catch (error) {
       // If createMediaElementSource fails (already created), try to reuse existing connection
       console.error("VolumeMatcher: Failed to connect playback source:", error);
@@ -178,8 +174,6 @@ export class VolumeMatcher {
     this.updateIntervalId = window.setInterval(() => {
       this.updateVolumes();
     }, this.options.updateInterval);
-
-    console.log("VolumeMatcher started (mic-only mode)");
   }
 
   /**
@@ -262,11 +256,6 @@ export class VolumeMatcher {
       this.smoothedMicLevel * micSmoothingFactor +
       this.currentMicLevel * (1 - micSmoothingFactor);
 
-    // Debug logging every 2 seconds (10 updates at 200ms interval)
-    if (Math.random() < 0.05) {
-      console.log(`VolumeMatcher levels - Mic: ${this.smoothedMicLevel.toFixed(3)}, Threshold: ${this.options.micThreshold}`);
-    }
-
     // Adjust volume based on playing or apply decay when stopped
     if (this.smoothedMicLevel > this.options.micThreshold) {
       // User is playing - adjust volume based on mic level
@@ -308,7 +297,6 @@ export class VolumeMatcher {
     // Only trigger callback if change is significant (reduces unnecessary updates)
     const changePercent = Math.abs(clampedVolume - this.lastAdjustedVolume);
     if (changePercent >= this.options.minChangePercent) {
-      console.log(`VolumeMatcher: Adjusting volume from ${this.lastAdjustedVolume.toFixed(1)}% to ${clampedVolume.toFixed(1)}% (mic: ${this.smoothedMicLevel.toFixed(3)})`);
       this.lastAdjustedVolume = clampedVolume;
       this.onVolumeAdjust(Math.round(clampedVolume));
     }
@@ -333,7 +321,6 @@ export class VolumeMatcher {
       // Only update if change is significant
       const changePercent = Math.abs(targetVolume - this.lastAdjustedVolume);
       if (changePercent >= this.options.minChangePercent) {
-        console.log(`VolumeMatcher: Decaying volume from ${this.lastAdjustedVolume.toFixed(1)}% to ${targetVolume.toFixed(1)}%`);
         this.lastAdjustedVolume = targetVolume;
         this.onVolumeAdjust(Math.round(targetVolume));
       }

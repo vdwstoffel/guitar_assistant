@@ -484,14 +484,12 @@ function BottomPlayer({
 
         // Check if component is still mounted after async operation
         if (!volumeMatcherRef.current || !isMountedRef.current) {
-          console.log("VolumeMatcher: Component unmounted during initialization");
           return;
         }
 
         if (granted) {
           setMicPermissionState('granted');
           volumeMatcherRef.current.start();
-          console.log("VolumeMatcher: Using mic-only mode (playback owned by WaveSurfer)");
         } else {
           setMicPermissionState('denied');
           alert("Microphone access was denied. Please enable it in browser settings to use auto volume matching.");
@@ -595,7 +593,7 @@ function BottomPlayer({
       if (isRepeatEnabledRef.current) {
         restartPlaybackRef.current();
       } else {
-        wavesurferRef.current.pause();
+        wavesurferRef.current.stop();
         wavesurferRef.current.seekTo(stopMarker / duration);
       }
     }
@@ -650,9 +648,9 @@ function BottomPlayer({
 
   const restartFromBeginning = () => {
     if (!wavesurferRef.current) return;
-    // Pause first to prevent multiple playback instances
+    // Stop first to prevent multiple playback instances
     if (wavesurferRef.current.isPlaying()) {
-      wavesurferRef.current.pause();
+      wavesurferRef.current.stop();
     }
     wavesurferRef.current.seekTo(0);
     wavesurferRef.current.play();
@@ -661,9 +659,9 @@ function BottomPlayer({
   const restartPlayback = useCallback(async () => {
     if (!wavesurferRef.current || !duration || isCountingIn) return;
 
-    // Pause first to prevent multiple playback instances
+    // Stop first to prevent multiple playback instances
     if (wavesurferRef.current.isPlaying()) {
-      wavesurferRef.current.pause();
+      wavesurferRef.current.stop();
     }
 
     wavesurferRef.current.seekTo(0);
@@ -708,9 +706,13 @@ function BottomPlayer({
   const jumpToMarker = useCallback(async (timestamp: number) => {
     if (!wavesurferRef.current || !duration) return;
 
-    // Stop current playback before seeking (check WaveSurfer's state directly)
-    if (wavesurferRef.current.isPlaying()) {
-      wavesurferRef.current.pause();
+    // Remember if we were playing
+    const wasPlaying = wavesurferRef.current.isPlaying();
+
+    // IMPORTANT: Use stop() instead of pause() to fully stop the audio element
+    // This prevents duplicate audio instances when clicking markers during playback
+    if (wasPlaying) {
+      wavesurferRef.current.stop();
     }
 
     // If track has tempo, use beat-based count-in
@@ -722,7 +724,7 @@ function BottomPlayer({
       setCurrentCountInBeat(0);
       setTotalCountInBeats(beats);
 
-      // Seek to marker position (paused)
+      // Seek to marker position (stopped)
       wavesurferRef.current.seekTo(timestamp / duration);
       lastSeekPositionRef.current = timestamp; // Guard against false stop triggers
 
@@ -740,14 +742,18 @@ function BottomPlayer({
       setIsCountingIn(false);
       setCurrentCountInBeat(0);
 
-      // Start playback
+      // Only start playback if we were playing before (or always play after count-in)
       wavesurferRef.current?.play();
     } else {
       // Fallback to seconds-based lead-in
       const startTime = Math.max(0, timestamp - leadIn);
       wavesurferRef.current.seekTo(startTime / duration);
       lastSeekPositionRef.current = startTime; // Guard against false stop triggers
-      wavesurferRef.current.play();
+
+      // Only play if we were playing before, OR always play for jam tracks
+      if (wasPlaying) {
+        wavesurferRef.current.play();
+      }
     }
   }, [duration, leadIn, track?.tempo, track?.timeSignature, volume]);
 
