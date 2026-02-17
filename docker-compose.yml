@@ -1,8 +1,8 @@
 services:
   nextjs-app:
     build: .
-    ports:
-      - "3000:3000"
+    expose:
+      - "3000"
     environment:
       - DATABASE_URL=file:/app/prisma/guitar_assistant.db
       - MUSIC_DIR=/app/music
@@ -10,3 +10,14 @@ services:
       - .:/app
       - /app/node_modules
       - ./music:/app/music
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - nextjs-app

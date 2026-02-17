@@ -5,6 +5,7 @@ import { Track, Marker, JamTrack, JamTrackMarker } from "@/types";
 import WaveSurfer from "wavesurfer.js";
 import RegionsPlugin from "wavesurfer.js/dist/plugins/regions.js";
 import { playCountIn } from "@/lib/clickGenerator";
+import { VolumeMatcher } from "@/lib/volumeMatcher";
 import KeyboardShortcutsHelp from "./KeyboardShortcutsHelp";
 import MarkerNameDialog from "./MarkerNameDialog";
 
@@ -99,6 +100,17 @@ function BottomPlayer({
   const isRepeatEnabledRef = useRef(false);
   const restartPlaybackRef = useRef<() => void>(() => {});
   const [showSplitChannels, setShowSplitChannels] = useState(false);
+
+  // Auto volume matching state
+  const [autoVolumeMatch, setAutoVolumeMatch] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('autoVolumeMatch');
+      return saved === 'true';
+    }
+    return false;
+  });
+  const [micPermissionState, setMicPermissionState] = useState<'prompt' | 'granted' | 'denied'>('prompt');
+  const volumeMatcherRef = useRef<VolumeMatcher | null>(null);
 
   const handleZoom = (newZoom: number) => {
     const clampedZoom = Math.max(1, Math.min(200, newZoom));
@@ -324,6 +336,13 @@ function BottomPlayer({
     return () => {
       isMountedRef.current = false;
 
+      // Cleanup volume matcher when track changes
+      if (volumeMatcherRef.current) {
+        volumeMatcherRef.current.stop();
+        volumeMatcherRef.current.cleanup();
+        volumeMatcherRef.current = null;
+      }
+
       if (wavesurferRef.current) {
         try {
           // If still loading, don't call destroy() to prevent AbortError
@@ -405,6 +424,89 @@ function BottomPlayer({
       container.removeEventListener("wheel", handleWheelZoom);
     };
   }, [handleWheelZoom, track, isLoading]);
+
+  // Sync volume with wavesurfer when volume state changes
+  useEffect(() => {
+    if (wavesurferRef.current && !isLoading) {
+      wavesurferRef.current.setVolume(volume / 100);
+    }
+  }, [volume, isLoading]);
+
+  // Auto volume matching lifecycle
+  useEffect(() => {
+    // Cleanup function
+    const cleanup = () => {
+      if (volumeMatcherRef.current) {
+        volumeMatcherRef.current.stop();
+        volumeMatcherRef.current.cleanup();
+        volumeMatcherRef.current = null;
+      }
+    };
+
+    // If feature is disabled, clean up and exit
+    if (!autoVolumeMatch) {
+      cleanup();
+      return;
+    }
+
+    // Wait until wavesurfer is ready and not loading
+    if (!wavesurferRef.current || isLoading || !track) {
+      return;
+    }
+
+    // Initialize volume matcher
+    const initVolumeMatching = async () => {
+      try {
+        // Create volume matcher instance if not exists
+        if (!volumeMatcherRef.current) {
+          volumeMatcherRef.current = new VolumeMatcher({
+            smoothingFactor: 0.3,
+            updateInterval: 200,
+            minVolume: 10,
+            maxVolume: 100,
+            targetRatio: 1.0,
+            micThreshold: 0.02, // Lower threshold for guitar input
+            minChangePercent: 2,
+            micSmoothingFactor: 0.85,
+          });
+
+          // Set callback to update volume based on mic level
+          volumeMatcherRef.current.setVolumeAdjustCallback((newVolume) => {
+            setVolume(newVolume);
+            if (wavesurferRef.current) {
+              wavesurferRef.current.setVolume(newVolume / 100);
+            }
+          });
+        }
+
+        // Request microphone access only (skip playback connection)
+        const granted = await volumeMatcherRef.current.requestMicrophoneAccess();
+
+        // Check if component is still mounted after async operation
+        if (!volumeMatcherRef.current || !isMountedRef.current) {
+          console.log("VolumeMatcher: Component unmounted during initialization");
+          return;
+        }
+
+        if (granted) {
+          setMicPermissionState('granted');
+          volumeMatcherRef.current.start();
+          console.log("VolumeMatcher: Using mic-only mode (playback owned by WaveSurfer)");
+        } else {
+          setMicPermissionState('denied');
+          alert("Microphone access was denied. Please enable it in browser settings to use auto volume matching.");
+        }
+      } catch (error) {
+        console.error("Failed to initialize volume matching:", error);
+        setMicPermissionState('denied');
+      }
+    };
+
+    initVolumeMatching();
+
+    // Cleanup on unmount or when dependencies change
+    return cleanup;
+  }, [autoVolumeMatch, isLoading, track]);
 
   // Call onTimeUpdate when time or playing state changes
   useEffect(() => {
@@ -536,8 +638,8 @@ function BottomPlayer({
   const togglePlay = async () => {
     if (!wavesurferRef.current || !duration) return;
 
-    // If playing, just pause
-    if (isPlaying) {
+    // Check WaveSurfer's current playing state directly to avoid race conditions
+    if (wavesurferRef.current.isPlaying()) {
       wavesurferRef.current.pause();
       return;
     }
@@ -548,12 +650,21 @@ function BottomPlayer({
 
   const restartFromBeginning = () => {
     if (!wavesurferRef.current) return;
+    // Pause first to prevent multiple playback instances
+    if (wavesurferRef.current.isPlaying()) {
+      wavesurferRef.current.pause();
+    }
     wavesurferRef.current.seekTo(0);
     wavesurferRef.current.play();
   };
 
   const restartPlayback = useCallback(async () => {
     if (!wavesurferRef.current || !duration || isCountingIn) return;
+
+    // Pause first to prevent multiple playback instances
+    if (wavesurferRef.current.isPlaying()) {
+      wavesurferRef.current.pause();
+    }
 
     wavesurferRef.current.seekTo(0);
     lastSeekPositionRef.current = 0;
@@ -596,6 +707,11 @@ function BottomPlayer({
 
   const jumpToMarker = useCallback(async (timestamp: number) => {
     if (!wavesurferRef.current || !duration) return;
+
+    // Stop current playback before seeking (check WaveSurfer's state directly)
+    if (wavesurferRef.current.isPlaying()) {
+      wavesurferRef.current.pause();
+    }
 
     // If track has tempo, use beat-based count-in
     if (track?.tempo && track.tempo > 0) {
@@ -678,6 +794,10 @@ function BottomPlayer({
       if (e.code === "ArrowLeft") {
         e.preventDefault();
         if (wavesurferRef.current) {
+          // Pause first to prevent multiple playback instances
+          if (wavesurferRef.current.isPlaying()) {
+            wavesurferRef.current.pause();
+          }
           wavesurferRef.current.seekTo(0);
           wavesurferRef.current.play();
         }
@@ -919,6 +1039,36 @@ function BottomPlayer({
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
               </svg>
               {showSplitChannels ? "Split" : "Mono"}
+            </button>
+
+            {/* Auto Volume Matching Toggle */}
+            <button
+              onClick={() => {
+                // If enabling and permission was denied, show alert
+                if (!autoVolumeMatch && micPermissionState === 'denied') {
+                  alert("Microphone access was previously denied. Please enable it in browser settings to use auto volume matching.");
+                  return;
+                }
+
+                const newValue = !autoVolumeMatch;
+                setAutoVolumeMatch(newValue);
+                localStorage.setItem('autoVolumeMatch', newValue.toString());
+              }}
+              className={`relative flex items-center gap-1 px-3 py-1.5 rounded text-xs ${
+                autoVolumeMatch ? "bg-purple-600 text-white" : "bg-gray-700 hover:bg-gray-600 text-gray-300"
+              }`}
+              title={autoVolumeMatch ? "Auto volume matching ON - lesson volume adjusts to your playing" : "Auto volume matching OFF - click to enable"}
+            >
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+              </svg>
+              Auto Vol
+              {/* Red warning icon when permission denied */}
+              {micPermissionState === 'denied' && (
+                <svg className="absolute -top-1 -right-1 w-3 h-3 text-red-500" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                </svg>
+              )}
             </button>
 
             {/* Markers Toggle */}

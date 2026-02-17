@@ -725,6 +725,39 @@ export async function POST() {
       jamTracksRemoved = jamTracksToDelete.length;
     }
 
+    // Clean up empty folders in JamTracks directory
+    let emptyFoldersRemoved = 0;
+    try {
+      const jamTracksPath = path.join(musicPath, JAM_TRACKS_FOLDER);
+      await fs.access(jamTracksPath);
+
+      const entries = await fs.readdir(jamTracksPath, { withFileTypes: true });
+      for (const entry of entries) {
+        if (!entry.isDirectory()) continue;
+
+        const trackFolder = path.join(jamTracksPath, entry.name);
+        try {
+          const folderEntries = await fs.readdir(trackFolder);
+
+          // Check if folder is empty or only contains README.txt
+          const meaningfulFiles = folderEntries.filter(
+            f => f.toLowerCase() !== "readme.txt" && !f.startsWith(".")
+          );
+
+          if (meaningfulFiles.length === 0) {
+            // Empty folder or only README, delete it
+            await fs.rm(trackFolder, { recursive: true, force: true });
+            emptyFoldersRemoved++;
+            console.log(`Removed empty jam track folder: ${entry.name}`);
+          }
+        } catch (err) {
+          console.error(`Error checking folder ${trackFolder}:`, err);
+        }
+      }
+    } catch {
+      // JamTracks folder doesn't exist, nothing to clean
+    }
+
     return NextResponse.json({
       message: "Library scan complete",
       count: tracks.length,
@@ -736,6 +769,7 @@ export async function POST() {
       jamTracks: {
         found: jamTracks.length,
         removed: jamTracksRemoved,
+        emptyFoldersRemoved,
       },
     });
   } catch (error) {
