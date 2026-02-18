@@ -21,7 +21,7 @@ async function extractSong(
   psarc: PSARC,
   songTitle: string,
   artistName: string,
-  persistentIDs: string[],
+  songKey: string,
   allFiles: string[],
   musicPath: string
 ) {
@@ -39,40 +39,28 @@ async function extractSong(
     await prisma.jamTrack.delete({ where: { id: existing.id } });
   }
 
-  // Find all SNG files for this song (match by persistent ID in filename)
+  // Find all SNG files for this song by song key.
+  // SNG filenames follow the pattern: songs/bin/generic/<songkey>_<arrangement>.sng
+  // Note: SongKey in manifest may have mixed case (e.g., "DarkTran") while
+  // filenames are lowercase (e.g., "darktran_bass.sng"), so compare case-insensitively.
+  const songKeyLower = songKey.toLowerCase();
   const sngIndices: number[] = [];
   for (let i = 0; i < allFiles.length; i++) {
-    const filePath = allFiles[i];
-    if (filePath.endsWith(".sng") && persistentIDs.some((id) => filePath.includes(id))) {
+    const filePath = allFiles[i].toLowerCase();
+    if (filePath.endsWith(".sng") && filePath.includes(`/${songKeyLower}_`)) {
       sngIndices.push(i);
     }
   }
 
-  // Find all WEM audio files for this song
-  // Note: WEM files might not contain persistent IDs in their paths
-  // Log all WEM files to understand the structure
-  const allWemFiles: string[] = [];
-  for (let i = 0; i < allFiles.length; i++) {
-    if (allFiles[i].endsWith(".wem")) {
-      allWemFiles.push(allFiles[i]);
-    }
-  }
-
-  console.log(`DEBUG: Total .wem files in archive: ${allWemFiles.length}`);
-  console.log(`DEBUG: Sample .wem filenames:`, allWemFiles.slice(0, 5));
-  console.log(`DEBUG: Looking for audio for "${songTitle}" with IDs:`, persistentIDs);
-
+  // Collect all WEM audio files in the archive.
+  // WEM filenames are numeric hashes (e.g., "audio/windows/18056767.wem")
+  // and cannot be matched by persistent ID or song key.
+  // For single-song PSARCs, we pick the largest WEM (full song vs preview).
   const wemIndices: number[] = [];
   for (let i = 0; i < allFiles.length; i++) {
-    const filePath = allFiles[i];
-    if (filePath.endsWith(".wem") && persistentIDs.some((id) => filePath.includes(id))) {
+    if (allFiles[i].endsWith(".wem")) {
       wemIndices.push(i);
     }
-  }
-
-  console.log(`DEBUG: Matched ${wemIndices.length} .wem files for this song`);
-  if (wemIndices.length > 0) {
-    console.log(`DEBUG: Matched files:`, wemIndices.map(i => allFiles[i]));
   }
 
   // Extract and convert audio (.wem → .ogg)
@@ -258,16 +246,21 @@ export async function POST(request: NextRequest) {
     }
 
     // Group arrangements by unique song (songName + artistName)
-    const songGroups = new Map<string, { persistentIDs: string[]; metadata: typeof arrangements[string] }>();
+    // Extract the song key from the manifest JSON path (e.g., "manifests/songs_dlc_darktran/darktran_lead.json" → "darktran")
+    const songGroups = new Map<string, { songKey: string; metadata: typeof arrangements[string] }>();
 
-    for (const [persistentID, arr] of Object.entries(arrangements)) {
-      const songKey = `${arr.artistName}|||${arr.songName}`;
+    for (const [, arr] of Object.entries(arrangements)) {
+      // Skip arrangements with no song name (e.g., showlights)
+      if (!arr.songName || !arr.artistName) continue;
 
-      if (!songGroups.has(songKey)) {
-        songGroups.set(songKey, { persistentIDs: [], metadata: arr });
+      const groupKey = `${arr.artistName}|||${arr.songName}`;
+
+      if (!songGroups.has(groupKey)) {
+        // Derive song key from srcJson path or from raw SongKey attribute
+        const rawSongKey = String(arr.raw.SongKey || "");
+        const derivedKey = rawSongKey || path.basename(arr.srcJson, ".json").split("_")[0];
+        songGroups.set(groupKey, { songKey: derivedKey, metadata: arr });
       }
-
-      songGroups.get(songKey)!.persistentIDs.push(persistentID);
     }
 
     console.log(`Found ${songGroups.size} unique song(s) in PSARC`);
@@ -275,26 +268,20 @@ export async function POST(request: NextRequest) {
     // Extract and import each song
     const musicPath = path.resolve(MUSIC_DIR);
     const allFiles = psarc.getFiles();
-
-    // Debug: Show all files in archive
-    console.log(`DEBUG: Total files in archive: ${allFiles.length}`);
-    console.log(`DEBUG: Sample files (first 30):`);
-    allFiles.slice(0, 30).forEach(f => console.log(`  ${f}`));
     const results = [];
     const errors = [];
 
-    for (const [, { persistentIDs, metadata }] of songGroups.entries()) {
-      const songTitle = metadata.songName || "Unknown Song";
-      const artistName = metadata.artistName || "Unknown Artist";
+    for (const [, { songKey, metadata }] of songGroups.entries()) {
+      const songTitle = metadata.songName;
+      const artistName = metadata.artistName;
 
       try {
-        console.log(`Importing: ${artistName} - ${songTitle}`);
-        console.log(`DEBUG: Arrangement metadata keys:`, Object.keys(metadata.raw).filter(k => k.toLowerCase().includes('audio') || k.toLowerCase().includes('wem')));
+        console.log(`Importing: ${artistName} - ${songTitle} (songKey: ${songKey})`);
         const jamTrack = await extractSong(
           psarc,
           songTitle,
           artistName,
-          persistentIDs,
+          songKey,
           allFiles,
           musicPath
         );

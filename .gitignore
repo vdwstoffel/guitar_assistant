@@ -63,3 +63,5 @@ next-env.d.ts
 
 # SSL certificates
 nginx/ssl/*.pem
+
+/test_files

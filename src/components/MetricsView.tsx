@@ -21,6 +21,7 @@ interface TrackMetric {
   jamTrackId: string | null;
   bookVideoId: string | null;
   title: string;
+  bookName: string | null;
   playCount: number;
   totalPracticeTime: number;
   averageSpeed: number;

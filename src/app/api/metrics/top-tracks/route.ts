@@ -18,6 +18,7 @@ export async function GET(request: NextRequest) {
         playbackSpeed: true,
         startTime: true,
         completedSession: true,
+        track: { select: { book: { select: { name: true } } } },
       },
       orderBy: { startTime: "desc" },
     });
@@ -30,6 +31,7 @@ export async function GET(request: NextRequest) {
         jamTrackId: string | null;
         bookVideoId: string | null;
         title: string;
+        bookName: string | null;
         playCount: number;
         totalPracticeTime: number;
         totalSpeed: number;
@@ -48,7 +50,7 @@ export async function GET(request: NextRequest) {
         if (s.completedSession) existing.completedCount++;
         if (s.startTime > existing.lastPracticed) {
           existing.lastPracticed = s.startTime;
-          existing.title = s.trackTitle; // use most recent title
+          existing.title = s.trackTitle;
         }
       } else {
         trackMap.set(key, {
@@ -56,6 +58,7 @@ export async function GET(request: NextRequest) {
           jamTrackId: s.jamTrackId,
           bookVideoId: s.bookVideoId,
           title: s.trackTitle,
+          bookName: s.track?.book?.name ?? null,
           playCount: 1,
           totalPracticeTime: s.durationSeconds,
           totalSpeed: s.playbackSpeed,
@@ -70,6 +73,7 @@ export async function GET(request: NextRequest) {
       jamTrackId: t.jamTrackId,
       bookVideoId: t.bookVideoId,
       title: t.title,
+      bookName: t.bookName,
       playCount: t.playCount,
       totalPracticeTime: Math.round(t.totalPracticeTime),
       averageSpeed: Math.round(t.totalSpeed / t.playCount),

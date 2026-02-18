@@ -7,6 +7,7 @@ interface TrackMetric {
   jamTrackId: string | null;
   bookVideoId: string | null;
   title: string;
+  bookName: string | null;
   playCount: number;
   totalPracticeTime: number;
   averageSpeed: number;
@@ -136,7 +137,10 @@ export default function TopTracksTable({ tracks, isLoading, onTrackSelect }: Pro
                     {track.bookVideoId && (
                       <span className="text-xs bg-blue-500/20 text-blue-400 px-1.5 py-0.5 rounded">Video</span>
                     )}
-                    {track.title}
+                    <span className="truncate">{track.title}</span>
+                    {track.bookName && (
+                      <span className="text-xs text-gray-500 truncate shrink-0">{track.bookName}</span>
+                    )}
                   </div>
                 </td>
                 <td className="py-2 px-2 text-right text-gray-300">{track.playCount}</td>
