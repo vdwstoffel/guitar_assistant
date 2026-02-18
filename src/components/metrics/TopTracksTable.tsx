@@ -5,6 +5,7 @@ import { useState } from "react";
 interface TrackMetric {
   trackId: string | null;
   jamTrackId: string | null;
+  bookVideoId: string | null;
   title: string;
   playCount: number;
   totalPracticeTime: number;
@@ -44,7 +45,7 @@ type SortField = "playCount" | "totalPracticeTime" | "averageSpeed" | "lastPract
 interface Props {
   tracks: TrackMetric[];
   isLoading: boolean;
-  onTrackSelect: (trackId: string | null, jamTrackId: string | null) => void;
+  onTrackSelect: (trackId: string | null, jamTrackId: string | null, bookVideoId: string | null) => void;
 }
 
 export default function TopTracksTable({ tracks, isLoading, onTrackSelect }: Props) {
@@ -123,14 +124,17 @@ export default function TopTracksTable({ tracks, isLoading, onTrackSelect }: Pro
           <tbody>
             {sorted.map((track) => (
               <tr
-                key={track.trackId ?? track.jamTrackId}
+                key={track.trackId ?? track.jamTrackId ?? track.bookVideoId}
                 className="border-b border-gray-700/50 hover:bg-gray-700/30 cursor-pointer transition-colors"
-                onClick={() => onTrackSelect(track.trackId, track.jamTrackId)}
+                onClick={() => onTrackSelect(track.trackId, track.jamTrackId, track.bookVideoId)}
               >
                 <td className="py-2 pr-4 text-white max-w-xs truncate">
                   <div className="flex items-center gap-2">
                     {track.jamTrackId && (
                       <span className="text-xs bg-purple-500/20 text-purple-400 px-1.5 py-0.5 rounded">Jam</span>
+                    )}
+                    {track.bookVideoId && (
+                      <span className="text-xs bg-blue-500/20 text-blue-400 px-1.5 py-0.5 rounded">Video</span>
                     )}
                     {track.title}
                   </div>

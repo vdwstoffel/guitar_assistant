@@ -12,6 +12,7 @@ export async function GET(request: NextRequest) {
       select: {
         trackId: true,
         jamTrackId: true,
+        bookVideoId: true,
         trackTitle: true,
         durationSeconds: true,
         playbackSpeed: true,
@@ -27,6 +28,7 @@ export async function GET(request: NextRequest) {
       {
         trackId: string | null;
         jamTrackId: string | null;
+        bookVideoId: string | null;
         title: string;
         playCount: number;
         totalPracticeTime: number;
@@ -37,7 +39,7 @@ export async function GET(request: NextRequest) {
     >();
 
     for (const s of sessions) {
-      const key = s.trackId ?? s.jamTrackId ?? "unknown";
+      const key = s.trackId ?? s.jamTrackId ?? s.bookVideoId ?? "unknown";
       const existing = trackMap.get(key);
       if (existing) {
         existing.playCount++;
@@ -52,6 +54,7 @@ export async function GET(request: NextRequest) {
         trackMap.set(key, {
           trackId: s.trackId,
           jamTrackId: s.jamTrackId,
+          bookVideoId: s.bookVideoId,
           title: s.trackTitle,
           playCount: 1,
           totalPracticeTime: s.durationSeconds,
@@ -65,6 +68,7 @@ export async function GET(request: NextRequest) {
     let tracks = Array.from(trackMap.values()).map((t) => ({
       trackId: t.trackId,
       jamTrackId: t.jamTrackId,
+      bookVideoId: t.bookVideoId,
       title: t.title,
       playCount: t.playCount,
       totalPracticeTime: Math.round(t.totalPracticeTime),

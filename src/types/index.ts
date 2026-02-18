@@ -146,6 +146,7 @@ export interface PracticeSession {
   id: string;
   trackId: string | null;
   jamTrackId: string | null;
+  bookVideoId: string | null;
   startTime: string;
   durationSeconds: number;
   playbackSpeed: number;

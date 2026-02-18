@@ -3,6 +3,7 @@
 import { BookVideo } from "@/types";
 import { useEffect, useRef, useState } from "react";
 import { formatDurationLong } from "@/lib/formatting";
+import { usePracticeSessionTracker } from "@/hooks/usePracticeSessionTracker";
 
 interface VideoPlayerProps {
   video: BookVideo | null;
@@ -10,6 +11,7 @@ interface VideoPlayerProps {
 
 export default function VideoPlayer({ video }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const { onPlay, onPause, onFinish } = usePracticeSessionTracker(video, 100);
   const [volume, setVolume] = useState(() => {
     // Initialize from sessionStorage, default to 1.0
     if (typeof window !== 'undefined') {
@@ -75,6 +77,9 @@ export default function VideoPlayer({ video }: VideoPlayerProps) {
           className="max-w-full max-h-full"
           controls
           controlsList="nodownload"
+          onPlay={onPlay}
+          onPause={onPause}
+          onEnded={onFinish}
           onVolumeChange={handleVolumeChange}
           onLoadedMetadata={handleLoadedMetadata}
         >

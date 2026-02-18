@@ -9,7 +9,7 @@ import SpeedProgressionChart from "./metrics/SpeedProgressionChart";
 type Period = "30" | "90" | "365";
 
 interface MetricsSummary {
-  totalSessions: number;
+  todayPracticeTimeSeconds: number;
   totalPracticeTimeSeconds: number;
   uniqueTracksPlayed: number;
   currentStreak: number;
@@ -19,6 +19,7 @@ interface MetricsSummary {
 interface TrackMetric {
   trackId: string | null;
   jamTrackId: string | null;
+  bookVideoId: string | null;
   title: string;
   playCount: number;
   totalPracticeTime: number;
@@ -69,18 +70,19 @@ export default function MetricsView() {
     fetchData();
   }, [fetchData]);
 
-  const handleTrackSelect = async (trackId: string | null, jamTrackId: string | null) => {
-    const id = trackId ?? jamTrackId;
+  const handleTrackSelect = async (trackId: string | null, jamTrackId: string | null, bookVideoId: string | null) => {
+    const id = trackId ?? jamTrackId ?? bookVideoId;
     if (!id) return;
 
     // Toggle off if same track selected
     if (speedData && ((trackId && speedData.title === topTracks.find((t) => t.trackId === trackId)?.title) ||
-        (jamTrackId && speedData.title === topTracks.find((t) => t.jamTrackId === jamTrackId)?.title))) {
+        (jamTrackId && speedData.title === topTracks.find((t) => t.jamTrackId === jamTrackId)?.title) ||
+        (bookVideoId && speedData.title === topTracks.find((t) => t.bookVideoId === bookVideoId)?.title))) {
       setSpeedData(null);
       return;
     }
 
-    const type = jamTrackId ? "jamtrack" : "track";
+    const type = jamTrackId ? "jamtrack" : bookVideoId ? "bookvideo" : "track";
     try {
       const res = await fetch(`/api/metrics/speed-progression/${id}?type=${type}`);
       if (res.ok) {

@@ -77,19 +77,20 @@ model Marker {
 }
 
 model BookVideo {
-  id          String   @id @default(uuid())
-  filename    String
-  title       String?
-  filePath    String   @unique
-  duration    Float?
-  sortOrder   Int      @default(0)
-  trackNumber Int?
-  pdfPage     Int?
-  completed   Boolean  @default(false)
-  bookId      String
-  chapterId   String?
-  book        Book     @relation(fields: [bookId], references: [id], onDelete: Cascade)
-  chapter     Chapter? @relation(fields: [chapterId], references: [id], onDelete: SetNull)
+  id               String            @id @default(uuid())
+  filename         String
+  title            String?
+  filePath         String            @unique
+  duration         Float?
+  sortOrder        Int               @default(0)
+  trackNumber      Int?
+  pdfPage          Int?
+  completed        Boolean           @default(false)
+  bookId           String
+  chapterId        String?
+  book             Book              @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  chapter          Chapter?          @relation(fields: [chapterId], references: [id], onDelete: SetNull)
+  practiceSessions PracticeSession[]
   createdAt   DateTime @default(now())
 
   @@index([bookId])
@@ -166,19 +167,22 @@ model GuitarTab {
 }
 
 model PracticeSession {
-  id               String    @id @default(uuid())
+  id               String     @id @default(uuid())
   trackId          String?
   jamTrackId       String?
-  track            Track?    @relation(fields: [trackId], references: [id], onDelete: Cascade)
-  jamTrack         JamTrack? @relation(fields: [jamTrackId], references: [id], onDelete: Cascade)
-  startTime        DateTime  @default(now())
+  bookVideoId      String?
+  track            Track?     @relation(fields: [trackId], references: [id], onDelete: Cascade)
+  jamTrack         JamTrack?  @relation(fields: [jamTrackId], references: [id], onDelete: Cascade)
+  bookVideo        BookVideo? @relation(fields: [bookVideoId], references: [id], onDelete: Cascade)
+  startTime        DateTime   @default(now())
   durationSeconds  Float
-  playbackSpeed    Int       @default(100)
-  completedSession Boolean   @default(false)
+  playbackSpeed    Int        @default(100)
+  completedSession Boolean    @default(false)
   trackTitle       String
-  createdAt        DateTime  @default(now())
+  createdAt        DateTime   @default(now())
 
   @@index([trackId])
   @@index([jamTrackId])
+  @@index([bookVideoId])
   @@index([startTime])
 }

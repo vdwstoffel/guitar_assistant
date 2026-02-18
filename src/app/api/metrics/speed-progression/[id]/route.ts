@@ -11,7 +11,7 @@ export async function GET(
     const type = searchParams.get("type") ?? "track";
 
     const where =
-      type === "jamtrack" ? { jamTrackId: id } : { trackId: id };
+      type === "jamtrack" ? { jamTrackId: id } : type === "bookvideo" ? { bookVideoId: id } : { trackId: id };
 
     const sessions = await prisma.practiceSession.findMany({
       where,

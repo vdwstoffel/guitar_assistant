@@ -1,20 +1,27 @@
 "use client";
 
 import { useRef, useCallback, useEffect } from "react";
-import { Track, JamTrack } from "@/types";
+import { Track, JamTrack, BookVideo } from "@/types";
 
 const MIN_SESSION_SECONDS = 10;
+
+type TrackableItem = Track | JamTrack | BookVideo;
 
 interface SessionState {
   playStartedAt: number | null; // Date.now() when play started
   accumulatedSeconds: number;
   trackId: string | null;
   jamTrackId: string | null;
+  bookVideoId: string | null;
   trackTitle: string;
 }
 
-function isJamTrack(track: Track | JamTrack): track is JamTrack {
-  return "pdfs" in track;
+function isJamTrack(item: TrackableItem): item is JamTrack {
+  return "pdfs" in item;
+}
+
+function isBookVideo(item: TrackableItem): item is BookVideo {
+  return "filename" in item;
 }
 
 async function saveSession(
@@ -35,6 +42,7 @@ async function saveSession(
       body: JSON.stringify({
         trackId: state.trackId,
         jamTrackId: state.jamTrackId,
+        bookVideoId: state.bookVideoId,
         durationSeconds: Math.round(totalSeconds),
         playbackSpeed,
         completedSession: completed,
@@ -46,7 +54,7 @@ async function saveSession(
 }
 
 export function usePracticeSessionTracker(
-  track: Track | JamTrack | null,
+  track: TrackableItem | null,
   playbackSpeed: number
 ) {
   const stateRef = useRef<SessionState>({
@@ -54,6 +62,7 @@ export function usePracticeSessionTracker(
     accumulatedSeconds: 0,
     trackId: null,
     jamTrackId: null,
+    bookVideoId: null,
     trackTitle: "",
   });
   const speedRef = useRef(playbackSpeed);
@@ -69,9 +78,10 @@ export function usePracticeSessionTracker(
     stateRef.current = {
       playStartedAt: null,
       accumulatedSeconds: 0,
-      trackId: track && !isJamTrack(track) ? track.id : null,
+      trackId: track && !isJamTrack(track) && !isBookVideo(track) ? track.id : null,
       jamTrackId: track && isJamTrack(track) ? track.id : null,
-      trackTitle: track?.title ?? "",
+      bookVideoId: track && isBookVideo(track) ? track.id : null,
+      trackTitle: track ? (isBookVideo(track) ? (track.title || track.filename) : track.title) : "",
     };
   }, [track?.id]);
 
@@ -93,6 +103,20 @@ export function usePracticeSessionTracker(
     // Reset for next play-through
     state.playStartedAt = null;
     state.accumulatedSeconds = 0;
+  }, []);
+
+  // Flush session on section change (fires before component unmounts)
+  useEffect(() => {
+    const handleFlush = () => {
+      const state = stateRef.current;
+      if (state.playStartedAt || state.accumulatedSeconds > 0) {
+        saveSession(state, speedRef.current, false);
+        state.playStartedAt = null;
+        state.accumulatedSeconds = 0;
+      }
+    };
+    window.addEventListener('practiceSessionFlush', handleFlush);
+    return () => window.removeEventListener('practiceSessionFlush', handleFlush);
   }, []);
 
   // Save session on unmount

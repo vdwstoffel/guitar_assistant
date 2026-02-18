@@ -4,10 +4,10 @@ import { prisma } from "@/lib/prisma";
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { trackId, jamTrackId, durationSeconds, playbackSpeed, completedSession } = body;
+    const { trackId, jamTrackId, bookVideoId, durationSeconds, playbackSpeed, completedSession } = body;
 
-    if (!trackId && !jamTrackId) {
-      return NextResponse.json({ error: "trackId or jamTrackId required" }, { status: 400 });
+    if (!trackId && !jamTrackId && !bookVideoId) {
+      return NextResponse.json({ error: "trackId, jamTrackId, or bookVideoId required" }, { status: 400 });
     }
     if (!durationSeconds || durationSeconds < 10) {
       return NextResponse.json({ error: "durationSeconds must be >= 10" }, { status: 400 });
@@ -23,12 +23,17 @@ export async function POST(request: NextRequest) {
       const jamTrack = await prisma.jamTrack.findUnique({ where: { id: jamTrackId }, select: { title: true } });
       if (!jamTrack) return NextResponse.json({ error: "JamTrack not found" }, { status: 404 });
       trackTitle = jamTrack.title;
+    } else if (bookVideoId) {
+      const video = await prisma.bookVideo.findUnique({ where: { id: bookVideoId }, select: { filename: true, title: true } });
+      if (!video) return NextResponse.json({ error: "BookVideo not found" }, { status: 404 });
+      trackTitle = video.title || video.filename;
     }
 
     const session = await prisma.practiceSession.create({
       data: {
         trackId: trackId || null,
         jamTrackId: jamTrackId || null,
+        bookVideoId: bookVideoId || null,
         durationSeconds,
         playbackSpeed: playbackSpeed ?? 100,
         completedSession: completedSession ?? false,

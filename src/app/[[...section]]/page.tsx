@@ -2,10 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import AuthorSidebar from "@/components/AuthorSidebar";
-import MobileSidebar from "@/components/MobileSidebar";
 import BookGrid from "@/components/BookGrid";
-import InProgressGrid from "@/components/InProgressGrid";
 import TrackListView from "@/components/TrackListView";
 import JamTracksView from "@/components/JamTracksView";
 import JamTrackCompactSelector from "@/components/JamTrackCompactSelector";
@@ -75,7 +72,14 @@ export default function Home() {
   const [isUploadingJamTracks, setIsUploadingJamTracks] = useState(false);
   const [isImportingFromYouTube, setIsImportingFromYouTube] = useState(false);
   const [isImportingPsarc, setIsImportingPsarc] = useState(false);
-  const [isInProgressSelected, setIsInProgressSelected] = useState(false);
+
+  // Flatten all books from all authors for the library grid
+  const allBooks = useMemo(() =>
+    authors.flatMap((author) =>
+      author.books.map((book) => ({ book, author }))
+    ),
+    [authors]
+  );
   const [isVideoUploadModalOpen, setIsVideoUploadModalOpen] = useState(false);
   const [selectedVideo, setSelectedVideo] = useState<BookVideo | null>(null);
   const [showVideo, setShowVideo] = useState(false);
@@ -113,14 +117,6 @@ export default function Home() {
     });
   }, []);
 
-  // Compute in-progress books from all authors (memoized to prevent recalculation on every render)
-  const inProgressBooks = useMemo(() =>
-    authors.flatMap((author) =>
-      author.books.filter((book) => book.inProgress).map((book) => ({ book, author }))
-    ),
-    [authors]
-  );
-  const inProgressCount = inProgressBooks.length;
 
   // PDF state
   const [pdfPath, setPdfPath] = useState<string | null>(null);
@@ -141,7 +137,6 @@ export default function Home() {
   const [activePdfPage, setActivePdfPage] = useState(1);
 
   // Mobile responsive state
-  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [mobileView, setMobileView] = useState<'library' | 'player' | 'pdf'>('library');
 
   // Refs for stable BottomPlayer callbacks (avoids new function references every render)
@@ -171,6 +166,7 @@ export default function Home() {
   };
 
   const handleSectionChange = (section: Section) => {
+    window.dispatchEvent(new Event('practiceSessionFlush'));
     if (section !== 'lessons') {
       setCurrentTrack(null);
       setCurrentAuthorId(null);
@@ -224,34 +220,39 @@ export default function Home() {
 
         // Restore state from URL on initial load
         if (restoreFromUrl) {
-          const authorId = searchParams.get('artist');
           const bookId = searchParams.get('album');
           const trackId = searchParams.get('track');
           const jamTrackId = searchParams.get('track'); // For jamtracks section
 
-          // Restore library selection (author/book/track)
-          if (authorId) {
-            const author = authorsData.find((a: AuthorSummary) => a.id === authorId);
-            if (author) {
-              setSelectedAuthorId(authorId);
-              if (bookId) {
-                const book = author.books.find((b: BookSummary) => b.id === bookId);
-                if (book) {
-                  setSelectedBookId(bookId);
-                  if (book.pdfPath) {
-                    setPdfPath(book.pdfPath);
-                  }
-                  const bookDetail = await fetchBookDetail(bookId);
+          // Restore library selection (book/track)
+          if (bookId) {
+            // Find the book and its author across all authors
+            let foundBook: BookSummary | null = null;
+            let foundAuthor: AuthorSummary | null = null;
+            for (const author of authorsData) {
+              const book = author.books.find((b: BookSummary) => b.id === bookId);
+              if (book) {
+                foundBook = book;
+                foundAuthor = author;
+                break;
+              }
+            }
 
-                  // Restore track selection if specified in URL
-                  if (trackId && bookDetail?.tracks) {
-                    const track = bookDetail.tracks.find((t: Track) => t.id === trackId);
-                    if (track) {
-                      setCurrentTrack(track);
-                      setCurrentAuthorId(authorId);
-                      setCurrentBookId(bookId);
-                    }
-                  }
+            if (foundBook && foundAuthor) {
+              setSelectedAuthorId(foundAuthor.id);
+              setSelectedBookId(bookId);
+              if (foundBook.pdfPath) {
+                setPdfPath(foundBook.pdfPath);
+              }
+              const bookDetail = await fetchBookDetail(bookId);
+
+              // Restore track selection if specified in URL
+              if (trackId && bookDetail?.tracks) {
+                const track = bookDetail.tracks.find((t: Track) => t.id === trackId);
+                if (track) {
+                  setCurrentTrack(track);
+                  setCurrentAuthorId(foundAuthor.id);
+                  setCurrentBookId(bookId);
                 }
               }
             }
@@ -287,44 +288,8 @@ export default function Home() {
   }, []);
 
 
-  const handleAuthorSelect = (author: AuthorSummary) => {
-    setIsInProgressSelected(false);
+  const handleBookSelect = (book: BookSummary, author: AuthorSummary) => {
     setSelectedAuthorId(author.id);
-    setSelectedBookId(null);
-    setSelectedBookDetail(null);
-    setCurrentTrack(null);
-    setCurrentAuthorId(null);
-    setCurrentBookId(null);
-    setCurrentJamTrackId(null);
-    updateLibraryUrl(author.id, null);
-  };
-
-  const handleInProgressSelect = () => {
-    setIsInProgressSelected(true);
-    setSelectedAuthorId(null);
-    setSelectedBookId(null);
-    setSelectedBookDetail(null);
-    setCurrentTrack(null);
-    setCurrentAuthorId(null);
-    setCurrentBookId(null);
-    setCurrentJamTrackId(null);
-    updateLibraryUrl(null, null);
-  };
-
-
-  const handleInProgressBookSelect = (book: BookSummary, author: AuthorSummary) => {
-    setSelectedAuthorId(author.id);
-    setSelectedBookId(book.id);
-    setSelectedBookDetail(null);
-    setCurrentJamTrackId(null);
-    if (book.pdfPath) {
-      setPdfPath(book.pdfPath);
-    }
-    updateLibraryUrl(author.id, book.id);
-    fetchBookDetail(book.id);
-  };
-
-  const handleBookSelect = (book: BookSummary) => {
     setSelectedBookId(book.id);
     setSelectedBookDetail(null);
     setCurrentTrack(null);
@@ -334,7 +299,7 @@ export default function Home() {
     if (book.pdfPath) {
       setPdfPath(book.pdfPath);
     }
-    updateLibraryUrl(selectedAuthorId || null, book.id);
+    updateLibraryUrl(author.id, book.id);
     fetchBookDetail(book.id);
   };
 
@@ -1316,125 +1281,65 @@ export default function Home() {
       <TopNav
         activeSection={activeSection}
         onSectionChange={handleSectionChange}
-        onToggleMobileSidebar={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)}
-      />
-
-      {/* Mobile Sidebar Drawer */}
-      <MobileSidebar
-        isOpen={isMobileSidebarOpen}
-        onClose={() => setIsMobileSidebarOpen(false)}
-        authors={authors}
-        selectedAuthor={selectedAuthor}
-        onAuthorSelect={(author) => {
-          handleAuthorSelect(author);
-          setIsMobileSidebarOpen(false);
-        }}
-        onScan={handleScan}
-        onUpload={handleUpload}
-        onVideoUploadClick={() => {
-          setIsVideoUploadModalOpen(true);
-          setIsMobileSidebarOpen(false);
-        }}
-        isScanning={isScanning}
-        isUploading={isUploading}
-        inProgressCount={inProgressCount}
-        isInProgressSelected={isInProgressSelected}
-        onInProgressSelect={() => {
-          handleInProgressSelect();
-          setIsMobileSidebarOpen(false);
-        }}
       />
 
       {/* Section Content */}
       {activeSection === 'lessons' ? (
         <>
           <div className="flex flex-col xl:flex-row flex-1 min-h-0">
-            {/* Left side: Sidebar + Content + Player - Full width on mobile, 50% on xl+ */}
+            {/* Left side: Content + Player - Full width on mobile, 50% on xl+ */}
             <div className="w-full xl:w-1/2 flex flex-col min-w-0 xl:border-r border-gray-700">
               {/* Main Content Area */}
-              <div className="flex flex-1 min-h-0">
-                {/* Author Sidebar - Hidden on mobile, shown in drawer */}
-                <div className="hidden xl:block xl:w-56 border-r border-gray-700 shrink-0">
-                  <AuthorSidebar
-                    authors={authors}
-                    selectedAuthor={selectedAuthor}
-                    onAuthorSelect={handleAuthorSelect}
+              <div className="flex-1 min-h-0">
+                {selectedBookId && !selectedBookDetail ? (
+                  <div className="h-full flex items-center justify-center bg-gray-900">
+                    <div className="w-8 h-8 border-4 border-gray-600 border-t-gray-400 rounded-full animate-spin"></div>
+                  </div>
+                ) : selectedBookDetail && selectedAuthor ? (
+                  <TrackListView
+                    author={selectedAuthor}
+                    book={selectedBookDetail}
+                    currentTrack={currentTrack}
+                    selectedVideo={selectedVideo}
+                    showVideo={showVideo}
+                    onTrackSelect={handleTrackSelect}
+                    onVideoSelect={handleVideoSelect}
+                    onToggleVideo={() => setShowVideo(!showVideo)}
+                    onBack={() => {
+                      setSelectedBookId(null);
+                      setSelectedBookDetail(null);
+                      setCurrentTrack(null);
+                      setCurrentAuthorId(null);
+                      setCurrentBookId(null);
+                      updateLibraryUrl(null, null);
+                    }}
+                    onBookUpdate={handleBookUpdate}
+                    onTrackUpdate={handleMetadataUpdate}
+                    onTrackComplete={handleTrackComplete}
+                    onBookInProgress={handleBookInProgress}
+                    onShowPdf={handleShowPdf}
+                    onPdfUpload={handlePdfUpload}
+                    onPdfDelete={handlePdfDelete}
+                    onPdfConvert={handlePdfConvert}
+                    currentPdfPage={pdfPage}
+                    onAssignPdfPage={handleAssignPdfPage}
+                    onVideoUpload={handleVideoUpload}
+                    onVideoDelete={handleVideoDelete}
+                    onVideoUpdate={handleVideoUpdate}
+                    onVideoComplete={handleVideoComplete}
+                    onLibraryRefresh={fetchLibrary}
+                  />
+                ) : (
+                  <BookGrid
+                    books={allBooks}
+                    onBookSelect={handleBookSelect}
                     onScan={handleScan}
                     onUpload={handleUpload}
                     onVideoUploadClick={() => setIsVideoUploadModalOpen(true)}
                     isScanning={isScanning}
                     isUploading={isUploading}
-                    inProgressCount={inProgressCount}
-                    isInProgressSelected={isInProgressSelected}
-                    onInProgressSelect={handleInProgressSelect}
                   />
-                </div>
-
-                {/* Content: BookGrid OR TrackListView OR InProgressGrid OR JamTracksView */}
-                <div className="flex-1 min-w-0">
-                  {selectedBookId && !selectedBookDetail ? (
-                    <div className="h-full flex items-center justify-center bg-gray-900">
-                      <div className="w-8 h-8 border-4 border-gray-600 border-t-gray-400 rounded-full animate-spin"></div>
-                    </div>
-                  ) : selectedBookDetail && selectedAuthor ? (
-                    <TrackListView
-                      author={selectedAuthor}
-                      book={selectedBookDetail}
-                      currentTrack={currentTrack}
-                      selectedVideo={selectedVideo}
-                      showVideo={showVideo}
-                      onTrackSelect={handleTrackSelect}
-                      onVideoSelect={handleVideoSelect}
-                      onToggleVideo={() => setShowVideo(!showVideo)}
-                      onBack={() => {
-                        setSelectedBookId(null);
-                        setSelectedBookDetail(null);
-                        setCurrentTrack(null);
-                        setCurrentAuthorId(null);
-                        setCurrentBookId(null);
-                        if (isInProgressSelected) {
-                          updateLibraryUrl(null, null);
-                        } else {
-                          updateLibraryUrl(selectedAuthor?.id || null, null);
-                        }
-                      }}
-                      onBookUpdate={handleBookUpdate}
-                      onTrackUpdate={handleMetadataUpdate}
-                      onTrackComplete={handleTrackComplete}
-                      onBookInProgress={handleBookInProgress}
-                      onShowPdf={handleShowPdf}
-                      onPdfUpload={handlePdfUpload}
-                      onPdfDelete={handlePdfDelete}
-                      onPdfConvert={handlePdfConvert}
-                      currentPdfPage={pdfPage}
-                      onAssignPdfPage={handleAssignPdfPage}
-                      onVideoUpload={handleVideoUpload}
-                      onVideoDelete={handleVideoDelete}
-                      onVideoUpdate={handleVideoUpdate}
-                      onVideoComplete={handleVideoComplete}
-                      onLibraryRefresh={fetchLibrary}
-                    />
-                  ) : isInProgressSelected ? (
-                    <InProgressGrid
-                      books={inProgressBooks}
-                      onBookSelect={handleInProgressBookSelect}
-                    />
-                  ) : selectedAuthor ? (
-                    <BookGrid
-                      author={selectedAuthor}
-                      onBookSelect={handleBookSelect}
-                    />
-                  ) : (
-                    <div className="h-full flex items-center justify-center bg-gray-900 text-gray-500">
-                      <div className="text-center">
-                        <svg className="w-16 h-16 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
-                        </svg>
-                        <p className="text-lg">Select an author to view books</p>
-                      </div>
-                    </div>
-                  )}
-                </div>
+                )}
               </div>
 
               {/* Bottom Player - Collapses when no track selected */}

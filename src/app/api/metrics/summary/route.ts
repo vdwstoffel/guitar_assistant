@@ -3,12 +3,16 @@ import { prisma } from "@/lib/prisma";
 
 export async function GET() {
   try {
-    const [totalSessions, totalPracticeTime, uniqueTracks, uniqueJamTracks, lastSession] =
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    const [todayPracticeTime, totalPracticeTime, uniqueTracks, uniqueJamTracks, uniqueVideos, lastSession] =
       await Promise.all([
-        prisma.practiceSession.count(),
+        prisma.practiceSession.aggregate({ _sum: { durationSeconds: true }, where: { startTime: { gte: todayStart } } }),
         prisma.practiceSession.aggregate({ _sum: { durationSeconds: true } }),
         prisma.practiceSession.groupBy({ by: ["trackId"], where: { trackId: { not: null } } }),
         prisma.practiceSession.groupBy({ by: ["jamTrackId"], where: { jamTrackId: { not: null } } }),
+        prisma.practiceSession.groupBy({ by: ["bookVideoId"], where: { bookVideoId: { not: null } } }),
         prisma.practiceSession.findFirst({ orderBy: { startTime: "desc" }, select: { startTime: true } }),
       ]);
 
@@ -54,9 +58,9 @@ export async function GET() {
     }
 
     return NextResponse.json({
-      totalSessions,
+      todayPracticeTimeSeconds: todayPracticeTime._sum.durationSeconds ?? 0,
       totalPracticeTimeSeconds: totalPracticeTime._sum.durationSeconds ?? 0,
-      uniqueTracksPlayed: uniqueTracks.length + uniqueJamTracks.length,
+      uniqueTracksPlayed: uniqueTracks.length + uniqueJamTracks.length + uniqueVideos.length,
       currentStreak,
       lastPracticeDate: lastSession?.startTime ?? null,
     });

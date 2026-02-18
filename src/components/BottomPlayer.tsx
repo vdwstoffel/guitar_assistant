@@ -87,7 +87,7 @@ function BottomPlayer({
     return 100;
   });
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
-  const [showMarkers, setShowMarkers] = useState(false);
+  const [showMarkers, setShowMarkers] = useState(() => (track?.markers?.length ?? 0) > 0);
   const [leadIn, setLeadIn] = useState(2);
   const [editingMarkerId, setEditingMarkerId] = useState<string | null>(null);
   const [editingMarkerName, setEditingMarkerName] = useState("");
@@ -423,6 +423,11 @@ function BottomPlayer({
         wavesurferRef.current = null;
       }
     };
+  }, [track?.id]);
+
+  // Auto-show markers bar when track has markers
+  useEffect(() => {
+    setShowMarkers((track?.markers?.length ?? 0) > 0);
   }, [track?.id]);
 
   // Handle split channels toggle - reinitialize waveform while preserving playback state
