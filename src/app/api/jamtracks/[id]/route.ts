@@ -12,6 +12,7 @@ interface UpdateJamTrackBody {
   completed?: boolean;
   tempo?: number | null;
   timeSignature?: string;
+  playbackSpeed?: number | null;
 }
 
 export async function GET(
@@ -69,6 +70,9 @@ export async function PATCH(
     }
     if (body.timeSignature !== undefined) {
       updateData.timeSignature = body.timeSignature;
+    }
+    if (body.playbackSpeed !== undefined) {
+      updateData.playbackSpeed = body.playbackSpeed;
     }
 
     // If title is being updated, write to audio file metadata

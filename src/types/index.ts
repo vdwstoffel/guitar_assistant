@@ -19,6 +19,7 @@ export interface Track {
   completed: boolean;
   tempo: number | null;
   timeSignature: string;
+  playbackSpeed: number | null;
 }
 
 export interface Chapter {
@@ -116,6 +117,7 @@ export interface JamTrack {
   completed: boolean;
   tempo: number | null;
   timeSignature: string;
+  playbackSpeed: number | null;
   markers: JamTrackMarker[];
   pdfs: JamTrackPdf[];
   createdAt: string;

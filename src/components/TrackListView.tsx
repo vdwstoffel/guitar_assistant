@@ -716,6 +716,7 @@ export default memo(function TrackListView({
               <InProgressIndicator
                 trackId={track.id}
                 completed={track.completed}
+                playbackSpeed={track.playbackSpeed}
               />
 
               {/* Completion circle - Larger touch target on mobile */}

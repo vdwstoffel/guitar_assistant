@@ -219,6 +219,7 @@ export default memo(function ChapterSection({
               <InProgressIndicator
                 trackId={track.id}
                 completed={track.completed}
+                playbackSpeed={track.playbackSpeed}
               />
 
               {/* Completion circle */}

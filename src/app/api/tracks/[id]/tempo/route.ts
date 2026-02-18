@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 interface UpdateTempoBody {
   tempo?: number | null;
   timeSignature?: string;
+  playbackSpeed?: number | null;
 }
 
 export async function PATCH(
@@ -13,7 +14,7 @@ export async function PATCH(
   try {
     const { id } = await params;
     const body: UpdateTempoBody = await request.json();
-    const { tempo, timeSignature } = body;
+    const { tempo, timeSignature, playbackSpeed } = body;
 
     // Validate tempo range if provided
     if (tempo !== null && tempo !== undefined && (tempo < 20 || tempo > 300)) {
@@ -32,12 +33,23 @@ export async function PATCH(
       );
     }
 
-    const updateData: { tempo?: number | null; timeSignature?: string } = {};
+    // Validate playbackSpeed range if provided
+    if (playbackSpeed !== null && playbackSpeed !== undefined && (playbackSpeed < 10 || playbackSpeed > 200)) {
+      return NextResponse.json(
+        { error: "Playback speed must be between 10 and 200%" },
+        { status: 400 }
+      );
+    }
+
+    const updateData: { tempo?: number | null; timeSignature?: string; playbackSpeed?: number | null } = {};
     if (tempo !== undefined) {
       updateData.tempo = tempo;
     }
     if (timeSignature !== undefined) {
       updateData.timeSignature = timeSignature;
+    }
+    if (playbackSpeed !== undefined) {
+      updateData.playbackSpeed = playbackSpeed;
     }
 
     const updatedTrack = await prisma.track.update({

@@ -512,6 +512,8 @@ const JamTracksView = memo(function JamTracksView({
                 <InProgressIndicator
                   trackId={jamTrack.id}
                   completed={jamTrack.completed}
+                  playbackSpeed={jamTrack.playbackSpeed}
+                  isJamTrack
                 />
 
                 {/* Completion circle */}

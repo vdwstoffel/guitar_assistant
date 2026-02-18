@@ -56,6 +56,7 @@ model Track {
   completed     Boolean  @default(false)
   tempo         Int?
   timeSignature String   @default("4/4")
+  playbackSpeed Int?
   markers       Marker[]
   book          Book     @relation(fields: [bookId], references: [id], onDelete: Cascade)
   chapter       Chapter? @relation(fields: [chapterId], references: [id], onDelete: SetNull)
@@ -111,6 +112,7 @@ model JamTrack {
   completed     Boolean          @default(false)
   tempo         Int?
   timeSignature String           @default("4/4")
+  playbackSpeed Int?
   markers       JamTrackMarker[]
   pdfs          JamTrackPdf[]
   createdAt     DateTime         @default(now())

@@ -84,7 +84,7 @@ function BottomPlayer({
   });
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
   const [showMarkers, setShowMarkers] = useState(false);
-  const [leadIn, setLeadIn] = useState(0);
+  const [leadIn, setLeadIn] = useState(2);
   const [editingMarkerId, setEditingMarkerId] = useState<string | null>(null);
   const [editingMarkerName, setEditingMarkerName] = useState("");
   const [showMarkerDialog, setShowMarkerDialog] = useState(false);
@@ -171,15 +171,31 @@ function BottomPlayer({
     });
   }, []);
 
+  const saveSpeedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const handlePlaybackSpeed = (speed: number) => {
     const clampedSpeed = Math.max(10, Math.min(200, speed));
     setPlaybackSpeed(clampedSpeed);
     if (track) {
-      localStorage.setItem(`playbackSpeed_${track.id}`, clampedSpeed.toString());
       // Dispatch custom event to notify InProgressIndicator components
       window.dispatchEvent(new CustomEvent('playbackSpeedChange', {
         detail: { trackId: track.id, speed: clampedSpeed }
       }));
+
+      // Debounced save to DB
+      if (saveSpeedTimeoutRef.current) clearTimeout(saveSpeedTimeoutRef.current);
+      const trackId = track.id;
+      const isJamTrack = !('bookId' in track);
+      saveSpeedTimeoutRef.current = setTimeout(() => {
+        const url = isJamTrack
+          ? `/api/jamtracks/${trackId}`
+          : `/api/tracks/${trackId}/tempo`;
+        fetch(url, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ playbackSpeed: clampedSpeed }),
+        }).catch(err => console.error("Failed to save playback speed:", err));
+      }, 500);
     }
     if (wavesurferRef.current) {
       wavesurferRef.current.setPlaybackRate(clampedSpeed / 100, true);
@@ -238,8 +254,7 @@ function BottomPlayer({
       isLoadingRef.current = false;
 
       // Apply saved playback speed for this track
-      const savedSpeed = localStorage.getItem(`playbackSpeed_${track.id}`);
-      const speed = savedSpeed ? parseInt(savedSpeed, 10) : 100;
+      const speed = track.playbackSpeed ?? 100;
       setPlaybackSpeed(speed);
       ws.setPlaybackRate(speed / 100, true);
 
@@ -306,6 +321,25 @@ function BottomPlayer({
 
     wavesurferRef.current = ws;
   }, [track, showSplitChannels, compact]);
+
+  // Listen for external playback speed changes (e.g., InProgressIndicator clear)
+  useEffect(() => {
+    const handleExternalSpeedChange = (event: Event) => {
+      const customEvent = event as CustomEvent<{ trackId: string; speed: number }>;
+      if (track && customEvent.detail.trackId === track.id) {
+        const newSpeed = customEvent.detail.speed;
+        setPlaybackSpeed(newSpeed);
+        if (wavesurferRef.current) {
+          wavesurferRef.current.setPlaybackRate(newSpeed / 100, true);
+        }
+      }
+    };
+
+    window.addEventListener('playbackSpeedChange', handleExternalSpeedChange);
+    return () => {
+      window.removeEventListener('playbackSpeedChange', handleExternalSpeedChange);
+    };
+  }, [track]);
 
   // Add global error handler to suppress AbortErrors from audio loading
   useEffect(() => {
@@ -750,10 +784,7 @@ function BottomPlayer({
       wavesurferRef.current.seekTo(startTime / duration);
       lastSeekPositionRef.current = startTime; // Guard against false stop triggers
 
-      // Only play if we were playing before, OR always play for jam tracks
-      if (wasPlaying) {
-        wavesurferRef.current.play();
-      }
+      wavesurferRef.current.play();
     }
   }, [duration, leadIn, track?.tempo, track?.timeSignature, volume]);
 
