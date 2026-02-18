@@ -8,6 +8,7 @@ import { playCountIn } from "@/lib/clickGenerator";
 import { VolumeMatcher } from "@/lib/volumeMatcher";
 import KeyboardShortcutsHelp from "./KeyboardShortcutsHelp";
 import MarkerNameDialog from "./MarkerNameDialog";
+import { usePracticeSessionTracker } from "@/hooks/usePracticeSessionTracker";
 
 export interface MarkerBarState {
   showMarkers: boolean;
@@ -74,6 +75,9 @@ function BottomPlayer({
   const [isLoading, setIsLoading] = useState(false);
   const [zoom, setZoom] = useState(1);
   const [playbackSpeed, setPlaybackSpeed] = useState(100);
+  const sessionTracker = usePracticeSessionTracker(track, playbackSpeed);
+  const sessionTrackerRef = useRef(sessionTracker);
+  sessionTrackerRef.current = sessionTracker;
   const [speedInputValue, setSpeedInputValue] = useState("");
   const [volume, setVolume] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -296,11 +300,14 @@ function BottomPlayer({
 
     ws.on("play", () => {
       if (isMountedRef.current) setIsPlaying(true);
+      sessionTrackerRef.current.onPlay();
     });
     ws.on("pause", () => {
       if (isMountedRef.current) setIsPlaying(false);
+      sessionTrackerRef.current.onPause();
     });
     ws.on("finish", () => {
+      sessionTrackerRef.current.onFinish();
       if (isRepeatEnabledRef.current) {
         restartPlaybackRef.current();
       } else {

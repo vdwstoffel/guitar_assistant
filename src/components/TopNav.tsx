@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useState, useEffect, useRef, useCallback, memo } from 'react';
 
-type Section = 'lessons' | 'videos' | 'fretboard' | 'intervals' | 'chords' | 'tools' | 'circle' | 'tabs' | 'jamtracks';
+type Section = 'lessons' | 'videos' | 'fretboard' | 'intervals' | 'chords' | 'tools' | 'circle' | 'tabs' | 'jamtracks' | 'metrics';
 type TimeSignature = '4/4' | '3/4' | '2/4' | '6/8';
 
 interface TopNavProps {
@@ -229,6 +229,21 @@ const TopNav = memo(function TopNav({ activeSection, onSectionChange, onToggleMo
               </svg>
               <span className="hidden sm:inline">Videos</span>
               <span className="sm:hidden">Vid</span>
+            </Link>
+            <Link
+              href="/metrics"
+              onClick={() => onSectionChange('metrics')}
+              className={`px-2 sm:px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-1 ${
+                activeSection === 'metrics'
+                  ? 'bg-gray-700 text-white'
+                  : 'text-gray-400 hover:text-white hover:bg-gray-700/50'
+              }`}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+              </svg>
+              <span className="hidden sm:inline">Metrics</span>
+              <span className="sm:hidden">Stats</span>
             </Link>
 
             {/* Theory dropdown */}

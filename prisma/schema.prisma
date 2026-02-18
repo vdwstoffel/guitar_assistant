@@ -57,9 +57,10 @@ model Track {
   tempo         Int?
   timeSignature String   @default("4/4")
   playbackSpeed Int?
-  markers       Marker[]
-  book          Book     @relation(fields: [bookId], references: [id], onDelete: Cascade)
-  chapter       Chapter? @relation(fields: [chapterId], references: [id], onDelete: SetNull)
+  markers           Marker[]
+  practiceSessions  PracticeSession[]
+  book              Book     @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  chapter           Chapter? @relation(fields: [chapterId], references: [id], onDelete: SetNull)
 
   @@index([bookId])
   @@index([chapterId])
@@ -113,9 +114,10 @@ model JamTrack {
   tempo         Int?
   timeSignature String           @default("4/4")
   playbackSpeed Int?
-  markers       JamTrackMarker[]
-  pdfs          JamTrackPdf[]
-  createdAt     DateTime         @default(now())
+  markers           JamTrackMarker[]
+  pdfs              JamTrackPdf[]
+  practiceSessions  PracticeSession[]
+  createdAt         DateTime         @default(now())
 }
 
 model JamTrackMarker {
@@ -161,4 +163,22 @@ model GuitarTab {
   completed     Boolean  @default(false)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+}
+
+model PracticeSession {
+  id               String    @id @default(uuid())
+  trackId          String?
+  jamTrackId       String?
+  track            Track?    @relation(fields: [trackId], references: [id], onDelete: Cascade)
+  jamTrack         JamTrack? @relation(fields: [jamTrackId], references: [id], onDelete: Cascade)
+  startTime        DateTime  @default(now())
+  durationSeconds  Float
+  playbackSpeed    Int       @default(100)
+  completedSession Boolean   @default(false)
+  trackTitle       String
+  createdAt        DateTime  @default(now())
+
+  @@index([trackId])
+  @@index([jamTrackId])
+  @@index([startTime])
 }

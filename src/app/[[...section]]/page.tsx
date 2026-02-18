@@ -21,17 +21,18 @@ import PdfViewer from "@/components/PdfViewer";
 import Videos from "@/components/Videos";
 import Tools from "@/components/Tools";
 import TabEditor from "@/components/TabEditor";
+import MetricsView from "@/components/MetricsView";
 import PageSyncEditor from "@/components/PageSyncEditor";
 import VideoUploadModal from "@/components/VideoUploadModal";
 import VideoPlayer from "@/components/VideoPlayer";
 import { AuthorSummary, BookSummary, Book, Track, Marker, JamTrack, JamTrackMarker, BookVideo } from "@/types";
 
-type Section = 'lessons' | 'videos' | 'fretboard' | 'intervals' | 'chords' | 'tools' | 'circle' | 'tabs' | 'jamtracks';
+type Section = 'lessons' | 'videos' | 'fretboard' | 'intervals' | 'chords' | 'tools' | 'circle' | 'tabs' | 'jamtracks' | 'metrics';
 
 const getSectionFromPath = (section: string[] | undefined): Section => {
   if (!section || section.length === 0) return 'lessons';
   const first = section[0];
-  if (first === 'videos' || first === 'fretboard' || first === 'intervals' || first === 'chords' || first === 'tools' || first === 'circle' || first === 'tabs' || first === 'jamtracks') {
+  if (first === 'videos' || first === 'fretboard' || first === 'intervals' || first === 'chords' || first === 'tools' || first === 'circle' || first === 'tabs' || first === 'jamtracks' || first === 'metrics') {
     return first;
   }
   return 'lessons';
@@ -1849,6 +1850,8 @@ export default function Home() {
         <ChordBuilder />
       ) : activeSection === 'tabs' ? (
         <TabEditor />
+      ) : activeSection === 'metrics' ? (
+        <MetricsView />
       ) : (
         <Fretboard />
       )}

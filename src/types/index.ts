@@ -142,6 +142,18 @@ export interface AuthorSummary {
   books: BookSummary[];
 }
 
+export interface PracticeSession {
+  id: string;
+  trackId: string | null;
+  jamTrackId: string | null;
+  startTime: string;
+  durationSeconds: number;
+  playbackSpeed: number;
+  completedSession: boolean;
+  trackTitle: string;
+  createdAt: string;
+}
+
 // Backwards compatibility aliases (for gradual migration)
 export type Song = Track;
 export type Album = Book;
