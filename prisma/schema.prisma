@@ -57,6 +57,7 @@ model Track {
   tempo         Int?
   timeSignature String   @default("4/4")
   playbackSpeed Int?
+  lufs          Float?
   markers           Marker[]
   practiceSessions  PracticeSession[]
   book              Book     @relation(fields: [bookId], references: [id], onDelete: Cascade)
@@ -115,6 +116,7 @@ model JamTrack {
   tempo         Int?
   timeSignature String           @default("4/4")
   playbackSpeed Int?
+  lufs          Float?
   markers           JamTrackMarker[]
   pdfs              JamTrackPdf[]
   practiceSessions  PracticeSession[]

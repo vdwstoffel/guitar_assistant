@@ -94,6 +94,9 @@ interface BookGridProps {
   isUploading: boolean;
   showInProgressOnly: boolean;
   onToggleInProgress: () => void;
+  onAnalyzeLoudness: () => void;
+  isAnalyzing: boolean;
+  analyzeProgress: { processed: number; total: number } | null;
 }
 
 type SortOption = "author" | "book" | "completion";
@@ -108,6 +111,9 @@ const BookGrid = memo(function BookGrid({
   isUploading,
   showInProgressOnly,
   onToggleInProgress,
+  onAnalyzeLoudness,
+  isAnalyzing,
+  analyzeProgress,
 }: BookGridProps) {
   const [sortBy, setSortBy] = useState<SortOption>("author");
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -203,6 +209,27 @@ const BookGrid = memo(function BookGrid({
               </svg>
             )}
             Scan
+          </button>
+
+          <button
+            onClick={onAnalyzeLoudness}
+            disabled={isAnalyzing}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium bg-gray-800 text-gray-400 hover:text-white hover:bg-gray-700 transition-colors disabled:opacity-50"
+            title="Analyze track loudness for volume normalization"
+          >
+            {isAnalyzing ? (
+              <>
+                <div className="w-4 h-4 border-2 border-gray-500 border-t-gray-300 rounded-full animate-spin" />
+                {analyzeProgress ? `${analyzeProgress.processed}/${analyzeProgress.total}` : "Analyzing"}
+              </>
+            ) : (
+              <>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2z" />
+                </svg>
+                Analyze
+              </>
+            )}
           </button>
 
           <button

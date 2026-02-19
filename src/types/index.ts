@@ -20,6 +20,7 @@ export interface Track {
   tempo: number | null;
   timeSignature: string;
   playbackSpeed: number | null;
+  lufs: number | null;
 }
 
 export interface Chapter {
@@ -118,6 +119,7 @@ export interface JamTrack {
   tempo: number | null;
   timeSignature: string;
   playbackSpeed: number | null;
+  lufs: number | null;
   markers: JamTrackMarker[];
   pdfs: JamTrackPdf[];
   createdAt: string;

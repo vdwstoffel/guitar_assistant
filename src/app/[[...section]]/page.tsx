@@ -71,6 +71,8 @@ export default function Home() {
   const [isScanning, setIsScanning] = useState(false);
   const [showInProgressOnly, setShowInProgressOnly] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analyzeProgress, setAnalyzeProgress] = useState<{ processed: number; total: number } | null>(null);
   const [isUploadingJamTracks, setIsUploadingJamTracks] = useState(false);
   const [isImportingFromYouTube, setIsImportingFromYouTube] = useState(false);
   const [isImportingPsarc, setIsImportingPsarc] = useState(false);
@@ -317,6 +319,46 @@ export default function Home() {
       console.error("Error scanning library:", error);
     } finally {
       setIsScanning(false);
+    }
+  };
+
+  const handleAnalyzeLoudness = async () => {
+    setIsAnalyzing(true);
+    setAnalyzeProgress(null);
+    try {
+      const response = await fetch("/api/library/analyze-loudness", { method: "POST" });
+      if (!response.body) return;
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        // Process complete SSE messages
+        const lines = buffer.split("\n\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          const match = line.match(/^data: (.+)$/m);
+          if (match) {
+            try {
+              const data = JSON.parse(match[1]);
+              if (data.type === "progress" || data.type === "done") {
+                setAnalyzeProgress({ processed: data.processed, total: data.total });
+              }
+            } catch { /* skip malformed */ }
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Error analyzing loudness:", error);
+    } finally {
+      setIsAnalyzing(false);
+      setAnalyzeProgress(null);
     }
   };
 
@@ -1286,6 +1328,16 @@ export default function Home() {
         onSectionChange={handleSectionChange}
       />
 
+      {/* Loudness Analysis Progress Banner */}
+      {isAnalyzing && (
+        <div className="flex items-center gap-3 px-4 py-2 bg-purple-900/50 border-b border-purple-700/50 text-sm text-purple-200">
+          <div className="w-4 h-4 border-2 border-purple-400 border-t-purple-200 rounded-full animate-spin shrink-0" />
+          <span>
+            Analyzing loudness{analyzeProgress ? ` — ${analyzeProgress.processed} / ${analyzeProgress.total} tracks` : '...'}
+          </span>
+        </div>
+      )}
+
       {/* Section Content */}
       {activeSection === 'lessons' ? (
         <>
@@ -1346,6 +1398,9 @@ export default function Home() {
                     isUploading={isUploading}
                     showInProgressOnly={showInProgressOnly}
                     onToggleInProgress={() => setShowInProgressOnly(v => !v)}
+                    onAnalyzeLoudness={handleAnalyzeLoudness}
+                    isAnalyzing={isAnalyzing}
+                    analyzeProgress={analyzeProgress}
                   />
                 )}
               </div>

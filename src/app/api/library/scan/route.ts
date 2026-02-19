@@ -56,12 +56,14 @@ interface ScannedTrack {
   filePath: string;
   author: string;
   book: string;
+  lufs: number | null;
 }
 
 interface ScannedJamTrack {
   title: string;
   duration: number;
   filePath: string;
+  lufs: number | null;
   pdfFiles: { name: string; filePath: string }[];
 }
 
@@ -87,6 +89,33 @@ function getMediaDuration(filePath: string): Promise<number> {
         resolve(duration);
       }
     });
+  });
+}
+
+// Helper to measure integrated loudness (LUFS) via ffmpeg's loudnorm filter
+function getLufs(filePath: string): Promise<number | null> {
+  return new Promise((resolve) => {
+    const { execFile } = require("child_process");
+    execFile(
+      "ffmpeg",
+      ["-i", filePath, "-af", "loudnorm=print_format=json", "-f", "null", "-"],
+      { timeout: 60000, maxBuffer: 10 * 1024 * 1024 },
+      (error: Error | null, _stdout: string, stderr: string) => {
+        if (error) {
+          console.error(`LUFS analysis failed for ${filePath}:`, error.message);
+          resolve(null);
+          return;
+        }
+        // Parse input_i (integrated loudness) from loudnorm JSON output in stderr
+        const match = stderr.match(/"input_i"\s*:\s*"([-\d.]+)"/);
+        if (match) {
+          const lufs = parseFloat(match[1]);
+          resolve(isFinite(lufs) ? lufs : null);
+        } else {
+          resolve(null);
+        }
+      }
+    );
   });
 }
 
@@ -182,6 +211,7 @@ async function scanJamTracksFolder(): Promise<ScannedJamTrack[]> {
         title,
         duration,
         filePath: path.relative(musicPath, audioFile),
+        lufs: null,
         pdfFiles: pdfFiles.map(pdf => ({
           name: pdf.name,
           filePath: path.relative(musicPath, pdf.path),
@@ -287,6 +317,7 @@ async function scanMusicFolder(): Promise<ScannedTrack[]> {
           filePath: path.relative(musicPath, filePath),
           author,
           book,
+          lufs: null,
         });
       } catch (err) {
         console.error(`Error parsing ${filePath}:`, err);
