@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { AuthorSummary } from "@/types";
 
 interface VideoUploadModalProps {
@@ -8,6 +8,7 @@ interface VideoUploadModalProps {
   onClose: () => void;
   onUpload: (files: File[], authorName: string, bookName: string) => Promise<void>;
   authors: AuthorSummary[];
+  initialFiles?: File[];
 }
 
 export default function VideoUploadModal({
@@ -15,8 +16,16 @@ export default function VideoUploadModal({
   onClose,
   onUpload,
   authors,
+  initialFiles,
 }: VideoUploadModalProps) {
-  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>(initialFiles ?? []);
+
+  useEffect(() => {
+    if (initialFiles && initialFiles.length > 0) {
+      setSelectedFiles(initialFiles);
+    }
+  }, [initialFiles]);
+
   const [authorName, setAuthorName] = useState("");
   const [bookName, setBookName] = useState("");
   const [isUploading, setIsUploading] = useState(false);

@@ -18,7 +18,7 @@ const BookCard = memo(function BookCard({ book, authorName, onClick }: { book: B
   return (
     <button
       onClick={onClick}
-      className="flex flex-col items-center p-4 bg-gray-800/50 hover:bg-gray-700/50 rounded-lg transition-colors group text-left w-full"
+      className="flex flex-col items-center p-3 bg-gray-800/50 hover:bg-gray-700/50 rounded-lg transition-colors group text-left w-full"
     >
       {/* Book Cover */}
       {artUrl && !hasError ? (
@@ -82,32 +82,52 @@ const BookCard = memo(function BookCard({ book, authorName, onClick }: { book: B
   );
 });
 
+const VIDEO_EXTENSIONS = [".mp4", ".mov", ".webm", ".m4v"];
+
 interface BookGridProps {
   books: { book: BookSummary; author: AuthorSummary }[];
   onBookSelect: (book: BookSummary, author: AuthorSummary) => void;
   onScan: () => void;
   onUpload: (files: FileList) => void;
-  onVideoUploadClick: () => void;
+  onVideoUpload: (files: File[]) => void;
   isScanning: boolean;
   isUploading: boolean;
+  showInProgressOnly: boolean;
+  onToggleInProgress: () => void;
 }
+
+type SortOption = "author" | "book" | "completion";
 
 const BookGrid = memo(function BookGrid({
   books,
   onBookSelect,
   onScan,
   onUpload,
-  onVideoUploadClick,
+  onVideoUpload,
   isScanning,
   isUploading,
+  showInProgressOnly,
+  onToggleInProgress,
 }: BookGridProps) {
-  const [showInProgressOnly, setShowInProgressOnly] = useState(false);
+  const [sortBy, setSortBy] = useState<SortOption>("author");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const displayedBooks = useMemo(() =>
-    showInProgressOnly ? books.filter(({ book }) => book.inProgress) : books,
-    [books, showInProgressOnly]
-  );
+  const displayedBooks = useMemo(() => {
+    const filtered = showInProgressOnly ? books.filter(({ book }) => book.inProgress) : books;
+    return [...filtered].sort((a, b) => {
+      switch (sortBy) {
+        case "author":
+          return a.author.name.localeCompare(b.author.name) || a.book.name.localeCompare(b.book.name);
+        case "book":
+          return a.book.name.localeCompare(b.book.name);
+        case "completion": {
+          const aPct = a.book.totalCount ? (a.book.completedCount || 0) / a.book.totalCount : 0;
+          const bPct = b.book.totalCount ? (b.book.completedCount || 0) / b.book.totalCount : 0;
+          return bPct - aPct || a.book.name.localeCompare(b.book.name);
+        }
+      }
+    });
+  }, [books, showInProgressOnly, sortBy]);
 
   const inProgressCount = useMemo(() =>
     books.filter(({ book }) => book.inProgress).length,
@@ -132,10 +152,31 @@ const BookGrid = memo(function BookGrid({
 
         {/* Actions toolbar */}
         <div className="flex items-center gap-2 flex-wrap">
+          {/* Sort options */}
+          <div className="flex gap-0.5 bg-gray-800 rounded-lg p-0.5">
+            {([
+              { value: "author" as SortOption, label: "Author" },
+              { value: "book" as SortOption, label: "Book" },
+              { value: "completion" as SortOption, label: "Completion" },
+            ]).map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => setSortBy(opt.value)}
+                className={`px-2.5 py-1 text-xs rounded-md transition-colors ${
+                  sortBy === opt.value
+                    ? "bg-gray-700 text-white"
+                    : "text-gray-400 hover:text-white"
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+
           {/* In Progress filter */}
           {inProgressCount > 0 && (
             <button
-              onClick={() => setShowInProgressOnly(!showInProgressOnly)}
+              onClick={onToggleInProgress}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
                 showInProgressOnly
                   ? "bg-yellow-600 text-white"
@@ -182,25 +223,26 @@ const BookGrid = memo(function BookGrid({
             ref={fileInputRef}
             type="file"
             multiple
-            accept="audio/*,.pdf,.psarc"
+            accept="audio/*,.pdf,.psarc,.mp4,.mov,.webm,.m4v"
             className="hidden"
             onChange={(e) => {
               if (e.target.files && e.target.files.length > 0) {
-                onUpload(e.target.files);
+                const allFiles = Array.from(e.target.files);
+                const videoFiles = allFiles.filter(f => VIDEO_EXTENSIONS.some(ext => f.name.toLowerCase().endsWith(ext)));
+                const otherFiles = allFiles.filter(f => !VIDEO_EXTENSIONS.some(ext => f.name.toLowerCase().endsWith(ext)));
+                if (otherFiles.length > 0) {
+                  const dt = new DataTransfer();
+                  otherFiles.forEach(f => dt.items.add(f));
+                  onUpload(dt.files);
+                }
+                if (videoFiles.length > 0) {
+                  onVideoUpload(videoFiles);
+                }
                 e.target.value = "";
               }
             }}
           />
 
-          <button
-            onClick={onVideoUploadClick}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium bg-gray-800 text-gray-400 hover:text-white hover:bg-gray-700 transition-colors"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-            </svg>
-            Videos
-          </button>
         </div>
       </div>
 
@@ -226,7 +268,7 @@ const BookGrid = memo(function BookGrid({
           )}
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-2 sm:gap-3">
           {displayedBooks.map(({ book, author }) => (
             <BookCard
               key={book.id}

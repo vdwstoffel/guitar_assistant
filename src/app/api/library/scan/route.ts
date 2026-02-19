@@ -76,8 +76,8 @@ interface ScannedVideo {
 
 const JAM_TRACKS_FOLDER = "JamTracks";
 
-// Helper function to get video duration
-function getVideoDuration(filePath: string): Promise<number> {
+// Helper function to get audio/video duration via ffprobe
+function getMediaDuration(filePath: string): Promise<number> {
   return new Promise((resolve, reject) => {
     ffmpeg.ffprobe(filePath, (err, metadata) => {
       if (err) {
@@ -220,7 +220,7 @@ async function scanBookVideos(bookId: string, bookFolderPath: string): Promise<S
       let duration: number | null = null;
 
       try {
-        duration = await getVideoDuration(videoFullPath);
+        duration = await getMediaDuration(videoFullPath);
       } catch (err) {
         console.error(`Error getting video duration for ${videoFullPath}:`, err);
       }
@@ -704,9 +704,9 @@ export async function POST() {
           }
         }
 
-        // Remove PDFs that no longer exist on disk
+        // Remove PDFs that no longer exist on disk (only check actual PDF files, not alphatex)
         const scannedPdfPaths = new Set(jamTrack.pdfFiles.map(p => p.filePath));
-        const pdfsToDelete = existingPdfs.filter(p => !scannedPdfPaths.has(p.filePath));
+        const pdfsToDelete = existingPdfs.filter(p => p.fileType === "pdf" && !scannedPdfPaths.has(p.filePath));
         for (const pdf of pdfsToDelete) {
           await tx.jamTrackPdf.delete({ where: { id: pdf.id } });
         }

@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import type { JamTrack } from '@/types';
+import { sortPdfs, getPdfAbbreviation } from '@/lib/formatting';
 
 interface JamTrackCompactSelectorProps {
   jamTracks: JamTrack[];
@@ -103,14 +104,22 @@ export default function JamTrackCompactSelector({
             {currentJamTrack.title}
           </span>
 
-          {/* PDF/Tab Count */}
+          {/* PDF/Tab abbreviations */}
           {currentJamTrack.pdfs.length > 0 && (
-            <span className={`text-xs flex-shrink-0 ${
-              currentJamTrack.pdfs.some((p: any) => p.fileType === "alphatex") ? "text-orange-400" : "text-blue-400"
-            }`}>
-              {currentJamTrack.pdfs.some((p: any) => p.fileType === "alphatex")
-                ? `${currentJamTrack.pdfs.length} Tab${currentJamTrack.pdfs.length !== 1 ? "s" : ""}`
-                : currentJamTrack.pdfs.length === 1 ? "PDF" : `${currentJamTrack.pdfs.length} PDFs`}
+            <span className="flex gap-1 shrink-0">
+              {sortPdfs(currentJamTrack.pdfs).map((pdf) => (
+                <span
+                  key={pdf.id}
+                  className={`text-[10px] font-bold w-4 h-4 rounded flex items-center justify-center ${
+                    pdf.fileType === "alphatex"
+                      ? "bg-orange-500/20 text-orange-400"
+                      : "bg-blue-500/20 text-blue-400"
+                  }`}
+                  title={pdf.name}
+                >
+                  {getPdfAbbreviation(pdf.name)}
+                </span>
+              ))}
             </span>
           )}
 
@@ -271,14 +280,22 @@ export default function JamTrackCompactSelector({
                     {jamTrack.title}
                   </span>
 
-                  {/* PDF/Tab Count */}
+                  {/* PDF/Tab abbreviations */}
                   {jamTrack.pdfs.length > 0 && (
-                    <span className={`text-xs flex-shrink-0 ${
-                      jamTrack.pdfs.some((p: any) => p.fileType === "alphatex") ? "text-orange-400" : "text-blue-400"
-                    }`}>
-                      {jamTrack.pdfs.some((p: any) => p.fileType === "alphatex")
-                        ? `${jamTrack.pdfs.length} Tab${jamTrack.pdfs.length !== 1 ? "s" : ""}`
-                        : jamTrack.pdfs.length === 1 ? "PDF" : `${jamTrack.pdfs.length} PDFs`}
+                    <span className="flex gap-1 shrink-0">
+                      {sortPdfs(jamTrack.pdfs).map((pdf) => (
+                        <span
+                          key={pdf.id}
+                          className={`text-[10px] font-bold w-4 h-4 rounded flex items-center justify-center ${
+                            pdf.fileType === "alphatex"
+                              ? "bg-orange-500/20 text-orange-400"
+                              : "bg-blue-500/20 text-blue-400"
+                          }`}
+                          title={pdf.name}
+                        >
+                          {getPdfAbbreviation(pdf.name)}
+                        </span>
+                      ))}
                     </span>
                   )}
 

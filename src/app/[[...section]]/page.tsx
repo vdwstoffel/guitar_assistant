@@ -14,6 +14,7 @@ import CircleOfFifths from "@/components/CircleOfFifths";
 import IntervalExplorer from "@/components/IntervalExplorer";
 import ChordBuilder from "@/components/ChordBuilder";
 
+import { sortPdfs } from "@/lib/formatting";
 import PdfViewer from "@/components/PdfViewer";
 import Videos from "@/components/Videos";
 import Tools from "@/components/Tools";
@@ -68,6 +69,7 @@ export default function Home() {
     [jamTracks, currentJamTrackId]
   );
   const [isScanning, setIsScanning] = useState(false);
+  const [showInProgressOnly, setShowInProgressOnly] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isUploadingJamTracks, setIsUploadingJamTracks] = useState(false);
   const [isImportingFromYouTube, setIsImportingFromYouTube] = useState(false);
@@ -81,6 +83,7 @@ export default function Home() {
     [authors]
   );
   const [isVideoUploadModalOpen, setIsVideoUploadModalOpen] = useState(false);
+  const [pendingVideoFiles, setPendingVideoFiles] = useState<File[]>([]);
   const [selectedVideo, setSelectedVideo] = useState<BookVideo | null>(null);
   const [showVideo, setShowVideo] = useState(false);
 
@@ -1287,8 +1290,8 @@ export default function Home() {
       {activeSection === 'lessons' ? (
         <>
           <div className="flex flex-col xl:flex-row flex-1 min-h-0">
-            {/* Left side: Content + Player - Full width on mobile, 50% on xl+ */}
-            <div className="w-full xl:w-1/2 flex flex-col min-w-0 xl:border-r border-gray-700">
+            {/* Left side: Content + Player - Full width when no book selected, 50% on xl+ when book open */}
+            <div className={`w-full ${selectedBookId ? 'xl:w-1/2 xl:border-r border-gray-700' : ''} flex flex-col min-w-0`}>
               {/* Main Content Area */}
               <div className="flex-1 min-h-0">
                 {selectedBookId && !selectedBookDetail ? (
@@ -1335,9 +1338,14 @@ export default function Home() {
                     onBookSelect={handleBookSelect}
                     onScan={handleScan}
                     onUpload={handleUpload}
-                    onVideoUploadClick={() => setIsVideoUploadModalOpen(true)}
+                    onVideoUpload={(files) => {
+                      setPendingVideoFiles(files);
+                      setIsVideoUploadModalOpen(true);
+                    }}
                     isScanning={isScanning}
                     isUploading={isUploading}
+                    showInProgressOnly={showInProgressOnly}
+                    onToggleInProgress={() => setShowInProgressOnly(v => !v)}
                   />
                 )}
               </div>
@@ -1365,8 +1373,8 @@ export default function Home() {
               </div>
             </div>
 
-            {/* PDF/Video Panel - Hidden on mobile, visible on xl+ */}
-            <div className="hidden xl:flex xl:w-1/2 flex-col">
+            {/* PDF/Video Panel - Hidden on mobile and when no book selected, visible on xl+ */}
+            <div className={`${selectedBookId ? 'hidden xl:flex xl:w-1/2' : 'hidden'} flex-col`}>
               {selectedVideo && showVideo ? (
                 /* Video Player - Full Height */
                 <div className="flex-1 overflow-hidden">
@@ -1393,7 +1401,7 @@ export default function Home() {
                   })()}
                   <div className="flex-1 overflow-hidden">
                     <PdfViewer
-                      pdfs={currentJamTrack.pdfs}
+                      pdfs={sortPdfs(currentJamTrack.pdfs)}
                       currentAudioTime={currentAudioTime}
                       audioIsPlaying={audioIsPlaying}
                       onActivePdfChange={handleActivePdfChange}
@@ -1616,7 +1624,7 @@ export default function Home() {
                       })()}
                       <div className="flex-1 overflow-hidden">
                         <PdfViewer
-                          pdfs={currentJamTrack.pdfs}
+                          pdfs={sortPdfs(currentJamTrack.pdfs)}
                           currentAudioTime={currentAudioTime}
                           audioIsPlaying={audioIsPlaying}
                           onActivePdfChange={handleActivePdfChange}
@@ -1764,9 +1772,13 @@ export default function Home() {
       {/* Video Upload Modal */}
       <VideoUploadModal
         isOpen={isVideoUploadModalOpen}
-        onClose={() => setIsVideoUploadModalOpen(false)}
+        onClose={() => {
+          setIsVideoUploadModalOpen(false);
+          setPendingVideoFiles([]);
+        }}
         onUpload={handleBulkVideoUpload}
         authors={authors}
+        initialFiles={pendingVideoFiles}
       />
     </div>
   );

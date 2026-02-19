@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, memo } from "react";
 import { JamTrack } from "@/types";
 import InProgressIndicator from "./InProgressIndicator";
-import { formatDuration } from "@/lib/formatting";
+import { formatDuration, sortPdfs, getPdfAbbreviation } from "@/lib/formatting";
 
 interface JamTrackEditModalProps {
   jamTrack: JamTrack;
@@ -460,7 +460,7 @@ const JamTracksView = memo(function JamTracksView({
           <p className="mt-2">Use the upload button to add jam tracks</p>
         </div>
       ) : (
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-1">
           {jamTracks.map((jamTrack) => (
             <div
               key={jamTrack.id}
@@ -475,16 +475,16 @@ const JamTracksView = memo(function JamTracksView({
                 onKeyDown={(e) => e.key === "Enter" && onJamTrackSelect(jamTrack)}
                 role="button"
                 tabIndex={0}
-                className="flex items-center gap-3 px-4 py-3 cursor-pointer group"
+                className="flex items-center gap-2 px-3 py-2 cursor-pointer group"
               >
                 {/* Play Icon */}
-                <span className="w-8 text-center flex-shrink-0">
+                <span className="shrink-0">
                   {currentJamTrack?.id === jamTrack.id ? (
-                    <svg className="w-5 h-5 mx-auto text-purple-400" fill="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-4 h-4 text-purple-400" fill="currentColor" viewBox="0 0 24 24">
                       <path d="M8 5v14l11-7z" />
                     </svg>
                   ) : (
-                    <svg className="w-5 h-5 mx-auto text-gray-500 group-hover:text-white" fill="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-4 h-4 text-gray-500 group-hover:text-white" fill="currentColor" viewBox="0 0 24 24">
                       <path d="M8 5v14l11-7z" />
                     </svg>
                   )}
@@ -497,14 +497,22 @@ const JamTracksView = memo(function JamTracksView({
                   {jamTrack.title}
                 </span>
 
-                {/* PDF/Tab count indicator */}
+                {/* PDF/Tab abbreviations */}
                 {jamTrack.pdfs.length > 0 && (
-                  <span className={`text-xs flex-shrink-0 ${
-                    jamTrack.pdfs.some((p: any) => p.fileType === "alphatex") ? "text-orange-400" : "text-blue-400"
-                  }`}>
-                    {jamTrack.pdfs.some((p: any) => p.fileType === "alphatex")
-                      ? `${jamTrack.pdfs.length} Tab${jamTrack.pdfs.length !== 1 ? "s" : ""}`
-                      : jamTrack.pdfs.length === 1 ? "PDF" : `${jamTrack.pdfs.length} PDFs`}
+                  <span className="flex gap-1 shrink-0">
+                    {sortPdfs(jamTrack.pdfs).map((pdf) => (
+                      <span
+                        key={pdf.id}
+                        className={`text-[10px] font-bold w-4 h-4 rounded flex items-center justify-center ${
+                          pdf.fileType === "alphatex"
+                            ? "bg-orange-500/20 text-orange-400"
+                            : "bg-blue-500/20 text-blue-400"
+                        }`}
+                        title={pdf.name}
+                      >
+                        {getPdfAbbreviation(pdf.name)}
+                      </span>
+                    ))}
                   </span>
                 )}
 
@@ -558,56 +566,55 @@ const JamTracksView = memo(function JamTracksView({
                 )}
               </div>
 
-              {/* Actions row */}
-              <div className="flex items-center gap-2 px-4 pb-3 pt-0 flex-wrap">
-                {/* PDF list */}
-                {jamTrack.pdfs.map((pdf) => (
-                  <div key={pdf.id} className="flex items-center gap-1 px-2 py-1 bg-blue-600/20 rounded text-xs text-blue-300">
-                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
-                    <span>{pdf.name}</span>
-                    {onPdfDelete && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onPdfDelete(jamTrack.id, pdf.id);
-                        }}
-                        className="text-red-400 hover:text-red-300 ml-1"
-                        title="Remove PDF"
-                      >
-                        &times;
-                      </button>
-                    )}
-                  </div>
-                ))}
+              {/* Actions row - only for selected track */}
+              {currentJamTrack?.id === jamTrack.id && (
+                <div className="flex items-center gap-2 px-4 pb-2 pt-0 flex-wrap">
+                  {/* PDF list */}
+                  {jamTrack.pdfs.map((pdf) => (
+                    <div key={pdf.id} className="flex items-center gap-1 px-2 py-0.5 bg-blue-600/20 rounded text-xs text-blue-300">
+                      <span>{pdf.name}</span>
+                      {onPdfDelete && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onPdfDelete(jamTrack.id, pdf.id);
+                          }}
+                          className="text-red-400 hover:text-red-300 ml-1"
+                          title="Remove PDF"
+                        >
+                          &times;
+                        </button>
+                      )}
+                    </div>
+                  ))}
 
-                {/* Add PDF button */}
-                {onPdfUpload && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handlePdfUploadClick(jamTrack.id);
-                    }}
-                    className="flex items-center gap-1 px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded text-xs text-gray-300 transition-colors"
-                  >
-                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                    </svg>
-                    Add PDF
-                  </button>
-                )}
+                  {/* Add PDF button */}
+                  {onPdfUpload && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handlePdfUploadClick(jamTrack.id);
+                      }}
+                      className="flex items-center gap-1 px-2 py-0.5 bg-gray-700 hover:bg-gray-600 rounded text-xs text-gray-300 transition-colors"
+                    >
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                      </svg>
+                      Add PDF
+                    </button>
+                  )}
 
-                {onJamTrackDelete && (
-                  <button
-                    onClick={() => handleDelete(jamTrack.id)}
-                    disabled={deletingId === jamTrack.id}
-                    className="ml-auto text-xs text-red-400 hover:text-red-300 disabled:text-gray-500"
-                  >
-                    {deletingId === jamTrack.id ? "Deleting..." : "Delete"}
-                  </button>
-                )}
-              </div>
+                  {onJamTrackDelete && (
+                    <button
+                      onClick={() => handleDelete(jamTrack.id)}
+                      disabled={deletingId === jamTrack.id}
+                      className="ml-auto text-xs text-red-400 hover:text-red-300 disabled:text-gray-500"
+                    >
+                      {deletingId === jamTrack.id ? "Deleting..." : "Delete"}
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           ))}
         </div>
