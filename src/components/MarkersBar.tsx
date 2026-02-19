@@ -246,7 +246,7 @@ const MarkersBar = memo(function MarkersBar({
                 }`}
               >
                 {shortcutKey && (
-                  <span className="text-gray-500 font-mono text-[10px] min-w-[14px]">[{shortcutKey}]</span>
+                  <span className="text-gray-300 font-mono text-[10px] min-w-[14px]">[{shortcutKey}]</span>
                 )}
                 <button
                   onClick={() => onJumpToMarker(marker.timestamp)}

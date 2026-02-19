@@ -53,7 +53,7 @@ export default function MetricsView() {
     try {
       const [summaryRes, tracksRes, historyRes] = await Promise.all([
         fetch("/api/metrics/summary"),
-        fetch("/api/metrics/top-tracks?limit=20&sortBy=playCount"),
+        fetch("/api/metrics/top-tracks?limit=20&sortBy=totalTime"),
         fetch(`/api/metrics/history?days=${period}`),
       ]);
 

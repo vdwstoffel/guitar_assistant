@@ -722,6 +722,9 @@ function BottomPlayer({
   const jumpToMarker = useCallback(async (timestamp: number) => {
     if (!wavesurferRef.current || !duration) return;
 
+    // Clear stop marker if jumping to the marker that is currently the stop point
+    setStopMarker((prev) => (prev === timestamp ? null : prev));
+
     // Remember if we were playing
     const wasPlaying = wavesurferRef.current.isPlaying();
 

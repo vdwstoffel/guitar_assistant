@@ -50,7 +50,7 @@ interface Props {
 }
 
 export default function TopTracksTable({ tracks, isLoading, onTrackSelect }: Props) {
-  const [sortField, setSortField] = useState<SortField>("playCount");
+  const [sortField, setSortField] = useState<SortField>("totalPracticeTime");
   const [sortDesc, setSortDesc] = useState(true);
 
   const handleSort = (field: SortField) => {
