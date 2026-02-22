@@ -522,6 +522,14 @@ export default function Home() {
       params.set('album', bookId);
       params.set('track', trackId);
       router.push(`/lessons?${params.toString()}`);
+      return;
+    }
+
+    if (bookId) {
+      const params = new URLSearchParams();
+      if (authorId) params.set('artist', authorId);
+      params.set('album', bookId);
+      router.push(`/lessons?${params.toString()}`);
     }
   };
 
@@ -1410,7 +1418,7 @@ export default function Home() {
 
       {/* Section Content */}
       {activeSection === 'home' ? (
-        <HomeView onGoToTrack={handleGoToTrackFromMetrics} />
+        <HomeView onGoToTrack={handleGoToTrackFromMetrics} authors={authors} />
       ) : activeSection === 'lessons' ? (
         <>
           <div className="flex flex-col xl:flex-row flex-1 min-h-0">
