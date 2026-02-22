@@ -61,6 +61,7 @@ export async function GET(
       ...book,
       trackCount: totalTrackCount,
       coverTrackPath: firstTrack?.filePath ?? null,
+      customCoverPath: book.coverPath ?? null,
     });
   } catch (error) {
     console.error("Error fetching book detail:", error);

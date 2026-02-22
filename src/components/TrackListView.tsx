@@ -6,6 +6,7 @@ import ChapterSection from "./ChapterSection";
 import InProgressIndicator from "./InProgressIndicator";
 import { formatDuration } from "@/lib/formatting";
 import BookEditModal from "./modals/BookEditModal";
+import { getBookCoverUrl } from "@/lib/covers";
 import TrackEditModal from "./modals/TrackEditModal";
 import VideoEditModal from "./modals/VideoEditModal";
 import ChapterEditModal from "./modals/ChapterEditModal";
@@ -14,7 +15,7 @@ const BookCover = memo(function BookCover({ book }: { book: Book }) {
   const [hasError, setHasError] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
 
-  const artUrl = book.coverTrackPath ? `/api/albumart/${encodeURIComponent(book.coverTrackPath)}` : null;
+  const artUrl = getBookCoverUrl(book);
 
   if (!artUrl || hasError) {
     return (
@@ -61,6 +62,8 @@ interface TrackListViewProps {
   onTrackFavorite?: (trackId: string, favorite: boolean) => Promise<void>;
   onBookInProgress?: (bookId: string, inProgress: boolean) => Promise<void>;
   onShowPdf?: (pdfPath: string, page?: number) => void;
+  onCoverUpload?: (bookId: string, file: File) => Promise<void>;
+  onCoverDelete?: (bookId: string) => Promise<void>;
   onPdfUpload?: (bookId: string, file: File) => Promise<void>;
   onPdfDelete?: (bookId: string) => Promise<void>;
   onPdfConvert?: (bookId: string) => Promise<void>;
@@ -89,6 +92,8 @@ export default memo(function TrackListView({
   onTrackFavorite,
   onBookInProgress,
   onShowPdf,
+  onCoverUpload,
+  onCoverDelete,
   onPdfUpload,
   onPdfDelete,
   onPdfConvert,
@@ -305,6 +310,8 @@ export default memo(function TrackListView({
           authorName={author.name}
           onClose={() => setEditingBook(false)}
           onSave={onBookUpdate}
+          onCoverUpload={onCoverUpload}
+          onCoverDelete={onCoverDelete}
         />
       )}
 

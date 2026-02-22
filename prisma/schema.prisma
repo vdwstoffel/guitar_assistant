@@ -20,6 +20,7 @@ model Book {
   name       String
   authorId   String
   pdfPath    String?
+  coverPath  String?
   inProgress Boolean     @default(false)
   author     Author      @relation(fields: [authorId], references: [id], onDelete: Cascade)
   tracks     Track[]

@@ -2,6 +2,7 @@
 
 import { useState, memo } from "react";
 import { AuthorSummary, BookSummary } from "@/types";
+import { getBookCoverUrl } from "@/lib/covers";
 
 interface InProgressBookCardProps {
   book: BookSummary;
@@ -12,7 +13,7 @@ interface InProgressBookCardProps {
 function InProgressBookCard({ book, author, onClick }: InProgressBookCardProps) {
   const [hasError, setHasError] = useState(false);
 
-  const artUrl = book.coverTrackPath ? `/api/albumart/${encodeURIComponent(book.coverTrackPath)}` : null;
+  const artUrl = getBookCoverUrl(book);
 
   // Calculate progress percentage
   const progressPercentage = book.totalCount && book.totalCount > 0

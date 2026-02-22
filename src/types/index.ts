@@ -44,6 +44,7 @@ export interface Book {
   inProgress: boolean;
   trackCount: number;
   coverTrackPath: string | null;
+  customCoverPath: string | null;
   tracks: Track[];
   videos?: BookVideo[];
   chapters?: Chapter[];
@@ -137,6 +138,7 @@ export interface BookSummary {
   inProgress: boolean;
   trackCount: number;
   coverTrackPath: string | null;
+  customCoverPath: string | null;
   completedCount?: number; // Number of completed tracks/videos
   totalCount?: number; // Total tracks + videos
 }

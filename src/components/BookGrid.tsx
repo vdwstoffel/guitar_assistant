@@ -2,13 +2,13 @@
 
 import { useState, useMemo, useRef, memo } from "react";
 import { AuthorSummary, BookSummary } from "@/types";
+import { getBookCoverUrl } from "@/lib/covers";
 
 const BookCard = memo(function BookCard({ book, authorName, onClick }: { book: BookSummary; authorName: string; onClick: () => void }) {
   const [hasError, setHasError] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
 
-  // Use coverTrackPath for book cover art
-  const artUrl = book.coverTrackPath ? `/api/albumart/${encodeURIComponent(book.coverTrackPath)}` : null;
+  const artUrl = getBookCoverUrl(book);
 
   // Calculate progress percentage
   const progressPercentage = book.totalCount && book.totalCount > 0

@@ -592,7 +592,7 @@ export default function Home() {
     const authorSummary: AuthorSummary = { id: result.authorId, name: result.author.name, books: [] };
     const bookSummary: BookSummary = {
       id: result.id, name: result.name, authorId: result.authorId,
-      pdfPath: result.pdfPath, inProgress: false, trackCount: 0, coverTrackPath: null,
+      pdfPath: result.pdfPath, inProgress: false, trackCount: 0, coverTrackPath: null, customCoverPath: null,
     };
     handleBookSelect(bookSummary, authorSummary);
     router.push("/lessons");
@@ -778,6 +778,42 @@ export default function Home() {
     }
 
     await fetchLibrary();
+  };
+
+  const handleCoverUpload = async (bookId: string, file: File) => {
+    const formData = new FormData();
+    formData.append("cover", file);
+    const response = await fetch(`/api/books/${bookId}/cover`, {
+      method: "POST",
+      body: formData,
+    });
+    if (!response.ok) {
+      throw new Error("Failed to upload cover");
+    }
+    await fetchLibrary();
+    // Refresh book detail if currently viewing this book
+    if (selectedBookId === bookId) {
+      const detailRes = await fetch(`/api/books/${bookId}/detail`);
+      if (detailRes.ok) {
+        setSelectedBookDetail(await detailRes.json());
+      }
+    }
+  };
+
+  const handleCoverDelete = async (bookId: string) => {
+    const response = await fetch(`/api/books/${bookId}/cover`, {
+      method: "DELETE",
+    });
+    if (!response.ok) {
+      throw new Error("Failed to delete cover");
+    }
+    await fetchLibrary();
+    if (selectedBookId === bookId) {
+      const detailRes = await fetch(`/api/books/${bookId}/detail`);
+      if (detailRes.ok) {
+        setSelectedBookDetail(await detailRes.json());
+      }
+    }
   };
 
   const handleBookInProgress = async (bookId: string, inProgress: boolean) => {
@@ -1541,6 +1577,8 @@ export default function Home() {
                       updateLibraryUrl(null, null);
                     }}
                     onBookUpdate={handleBookUpdate}
+                    onCoverUpload={handleCoverUpload}
+                    onCoverDelete={handleCoverDelete}
                     onTrackUpdate={handleMetadataUpdate}
                     onTrackComplete={handleTrackComplete}
                     onTrackFavorite={handleTrackFavorite}

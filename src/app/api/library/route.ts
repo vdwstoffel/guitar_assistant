@@ -72,6 +72,7 @@ export async function GET() {
           inProgress: book.inProgress,
           trackCount: book._count.tracks,
           coverTrackPath: book.tracks[0]?.filePath ?? null,
+          customCoverPath: book.coverPath ?? null,
           completedCount,
           totalCount,
         };

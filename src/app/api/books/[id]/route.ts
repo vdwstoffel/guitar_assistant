@@ -281,6 +281,27 @@ export async function PUT(
         }
       }
 
+      // Move cover image
+      if (targetBook.coverPath) {
+        const oldCoverFullPath = path.join(musicPath, targetBook.coverPath);
+        const coverFilename = path.basename(targetBook.coverPath);
+        const newCoverRelativePath = path.join(newAuthorDir, newBookDir, coverFilename);
+        const newCoverFullPath = path.join(musicPath, newCoverRelativePath);
+
+        try {
+          await fsp.access(oldCoverFullPath);
+          if (oldCoverFullPath !== newCoverFullPath) {
+            await fsp.rename(oldCoverFullPath, newCoverFullPath);
+            await prisma.book.update({
+              where: { id: targetBook.id },
+              data: { coverPath: newCoverRelativePath },
+            });
+          }
+        } catch (err) {
+          console.error(`Failed to move cover ${targetBook.coverPath}:`, err);
+        }
+      }
+
       // Clean up empty old directories (start from deepest: videos/, then book, then author)
       const dirsToClean = [
         path.join(oldDir, "videos"),

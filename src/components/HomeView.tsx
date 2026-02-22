@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { AuthorSummary } from "@/types";
+import { getBookCoverUrl } from "@/lib/covers";
 
 interface FavoriteTrack {
   trackId: string;
@@ -94,7 +95,7 @@ export default function HomeView({ onGoToTrack, authors }: Props) {
   );
 
   const inProgressBooks = useMemo(() => {
-    const books: { id: string; name: string; authorId: string; authorName: string; completedCount: number; totalCount: number; coverTrackPath: string | null }[] = [];
+    const books: { id: string; name: string; authorId: string; authorName: string; completedCount: number; totalCount: number; coverTrackPath: string | null; customCoverPath: string | null }[] = [];
     for (const author of authors) {
       for (const book of author.books) {
         if (book.inProgress) {
@@ -106,6 +107,7 @@ export default function HomeView({ onGoToTrack, authors }: Props) {
             completedCount: book.completedCount ?? 0,
             totalCount: book.totalCount ?? 0,
             coverTrackPath: book.coverTrackPath ?? null,
+            customCoverPath: book.customCoverPath ?? null,
           });
         }
       }
@@ -191,7 +193,7 @@ export default function HomeView({ onGoToTrack, authors }: Props) {
               </h2>
               <div className="flex flex-wrap gap-3 overflow-y-auto min-h-0 flex-1 content-start">
                 {inProgressBooks.map((book) => {
-                  const artUrl = book.coverTrackPath ? `/api/albumart/${encodeURIComponent(book.coverTrackPath)}` : null;
+                  const artUrl = getBookCoverUrl(book);
                   const progressPct = book.totalCount > 0 ? Math.round((book.completedCount / book.totalCount) * 100) : 0;
                   return (
                     <button
