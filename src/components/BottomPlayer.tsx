@@ -105,9 +105,10 @@ function BottomPlayer({
   const restartPlaybackRef = useRef<() => void>(() => {});
   const [showSplitChannels, setShowSplitChannels] = useState(false);
 
-  // Web Audio API refs for LUFS normalization (GainNode allows volume > 1.0)
+  // Web Audio API refs for LUFS normalization and volume control
   const audioContextRef = useRef<AudioContext | null>(null);
   const gainNodeRef = useRef<GainNode | null>(null);
+  const volumeGainNodeRef = useRef<GainNode | null>(null);
   const sourceNodeRef = useRef<MediaElementAudioSourceNode | null>(null);
 
   // Volume normalization state (LUFS-based)
@@ -230,6 +231,11 @@ function BottomPlayer({
     if (wavesurferRef.current) {
       wavesurferRef.current.setVolume(clampedVolume / 100);
     }
+    // Also update the Web Audio volume gain node (handles browsers where
+    // createMediaElementSource bypasses HTMLMediaElement.volume)
+    if (volumeGainNodeRef.current) {
+      volumeGainNodeRef.current.gain.value = clampedVolume / 100;
+    }
   };
 
   const initWaveSurfer = useCallback(() => {
@@ -295,9 +301,13 @@ function BottomPlayer({
           const ctx = audioContextRef.current;
           if (ctx.state === 'suspended') ctx.resume();
           gainNodeRef.current = ctx.createGain();
+          volumeGainNodeRef.current = ctx.createGain();
+          volumeGainNodeRef.current.gain.value = vol / 100;
           sourceNodeRef.current = ctx.createMediaElementSource(mediaEl);
+          // Chain: source → normalization gain → volume gain → destination
           sourceNodeRef.current.connect(gainNodeRef.current);
-          gainNodeRef.current.connect(ctx.destination);
+          gainNodeRef.current.connect(volumeGainNodeRef.current);
+          volumeGainNodeRef.current.connect(ctx.destination);
         }
         applyNormGain();
       } catch (e) {
@@ -413,7 +423,7 @@ function BottomPlayer({
     return () => {
       isMountedRef.current = false;
 
-      // Disconnect audio normalization nodes (new ones created per track)
+      // Disconnect audio nodes (new ones created per track)
       if (sourceNodeRef.current) {
         try { sourceNodeRef.current.disconnect(); } catch { /* ignore */ }
         sourceNodeRef.current = null;
@@ -421,6 +431,10 @@ function BottomPlayer({
       if (gainNodeRef.current) {
         try { gainNodeRef.current.disconnect(); } catch { /* ignore */ }
         gainNodeRef.current = null;
+      }
+      if (volumeGainNodeRef.current) {
+        try { volumeGainNodeRef.current.disconnect(); } catch { /* ignore */ }
+        volumeGainNodeRef.current = null;
       }
 
       if (wavesurferRef.current) {
@@ -514,6 +528,9 @@ function BottomPlayer({
   useEffect(() => {
     if (wavesurferRef.current && !isLoading) {
       wavesurferRef.current.setVolume(volume / 100);
+    }
+    if (volumeGainNodeRef.current) {
+      volumeGainNodeRef.current.gain.value = volume / 100;
     }
   }, [volume, isLoading]);
 
@@ -725,14 +742,9 @@ function BottomPlayer({
     // Clear stop marker if jumping to the marker that is currently the stop point
     setStopMarker((prev) => (prev === timestamp ? null : prev));
 
-    // Remember if we were playing
-    const wasPlaying = wavesurferRef.current.isPlaying();
-
-    // IMPORTANT: Use stop() instead of pause() to fully stop the audio element
-    // This prevents duplicate audio instances when clicking markers during playback
-    if (wasPlaying) {
-      wavesurferRef.current.stop();
-    }
+    // IMPORTANT: Always stop() before seeking to a marker to fully reset the audio element.
+    // This prevents duplicate audio instances regardless of current play/pause state.
+    wavesurferRef.current.stop();
 
     // If track has tempo, use beat-based count-in
     if (track?.tempo && track.tempo > 0) {
@@ -761,7 +773,7 @@ function BottomPlayer({
       setIsCountingIn(false);
       setCurrentCountInBeat(0);
 
-      // Only start playback if we were playing before (or always play after count-in)
+      // Start playback after count-in
       wavesurferRef.current?.play();
     } else {
       // Fallback to seconds-based lead-in
