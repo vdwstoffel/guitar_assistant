@@ -17,6 +17,7 @@ export interface Track {
   pdfPage: number | null;
   markers: Marker[];
   completed: boolean;
+  favorite: boolean;
   tempo: number | null;
   timeSignature: string;
   playbackSpeed: number | null;
@@ -116,6 +117,7 @@ export interface JamTrack {
   filePath: string;
   duration: number;
   completed: boolean;
+  favorite: boolean;
   tempo: number | null;
   timeSignature: string;
   playbackSpeed: number | null;

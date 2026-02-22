@@ -12,7 +12,7 @@ export async function GET() {
               _count: { select: { tracks: true } },
               tracks: {
                 orderBy: { trackNumber: "asc" },
-                select: { filePath: true, completed: true },
+                select: { filePath: true, completed: true, favorite: true },
               },
               videos: {
                 select: { completed: true },

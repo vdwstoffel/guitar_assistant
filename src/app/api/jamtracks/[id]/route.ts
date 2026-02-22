@@ -10,6 +10,7 @@ const MUSIC_DIR = process.env.MUSIC_DIR || "./music";
 interface UpdateJamTrackBody {
   title?: string;
   completed?: boolean;
+  favorite?: boolean;
   tempo?: number | null;
   timeSignature?: string;
   playbackSpeed?: number | null;
@@ -64,6 +65,9 @@ export async function PATCH(
     }
     if (body.completed !== undefined) {
       updateData.completed = body.completed;
+    }
+    if (body.favorite !== undefined) {
+      updateData.favorite = body.favorite;
     }
     if (body.tempo !== undefined) {
       updateData.tempo = body.tempo;

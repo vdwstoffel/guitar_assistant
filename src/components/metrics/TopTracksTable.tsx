@@ -8,7 +8,8 @@ interface TrackMetric {
   bookVideoId: string | null;
   title: string;
   bookName: string | null;
-  playCount: number;
+  authorId: string | null;
+  bookId: string | null;
   totalPracticeTime: number;
   averageSpeed: number;
   lastPracticed: string;
@@ -41,15 +42,16 @@ function speedColor(speed: number): string {
   return "text-orange-400";
 }
 
-type SortField = "playCount" | "totalPracticeTime" | "averageSpeed" | "lastPracticed";
+type SortField = "totalPracticeTime" | "averageSpeed" | "lastPracticed";
 
 interface Props {
   tracks: TrackMetric[];
   isLoading: boolean;
   onTrackSelect: (trackId: string | null, jamTrackId: string | null, bookVideoId: string | null) => void;
+  onGoToTrack: (trackId: string | null, jamTrackId: string | null, authorId: string | null, bookId: string | null, bookVideoId?: string | null) => void;
 }
 
-export default function TopTracksTable({ tracks, isLoading, onTrackSelect }: Props) {
+export default function TopTracksTable({ tracks, isLoading, onTrackSelect, onGoToTrack }: Props) {
   const [sortField, setSortField] = useState<SortField>("totalPracticeTime");
   const [sortDesc, setSortDesc] = useState(true);
 
@@ -108,10 +110,7 @@ export default function TopTracksTable({ tracks, isLoading, onTrackSelect }: Pro
           <thead>
             <tr className="text-gray-400 border-b border-gray-700">
               <th className="text-left py-2 pr-4">Title</th>
-              <th className="text-right py-2 px-2 cursor-pointer hover:text-white" onClick={() => handleSort("playCount")}>
-                Plays<SortIcon field="playCount" />
-              </th>
-              <th className="text-right py-2 px-2 cursor-pointer hover:text-white hidden sm:table-cell" onClick={() => handleSort("totalPracticeTime")}>
+              <th className="text-right py-2 px-2 cursor-pointer hover:text-white" onClick={() => handleSort("totalPracticeTime")}>
                 Time<SortIcon field="totalPracticeTime" />
               </th>
               <th className="text-right py-2 px-2 cursor-pointer hover:text-white" onClick={() => handleSort("averageSpeed")}>
@@ -120,6 +119,7 @@ export default function TopTracksTable({ tracks, isLoading, onTrackSelect }: Pro
               <th className="text-right py-2 pl-2 cursor-pointer hover:text-white hidden sm:table-cell" onClick={() => handleSort("lastPracticed")}>
                 Last<SortIcon field="lastPracticed" />
               </th>
+              <th className="w-8"></th>
             </tr>
           </thead>
           <tbody>
@@ -143,10 +143,23 @@ export default function TopTracksTable({ tracks, isLoading, onTrackSelect }: Pro
                     )}
                   </div>
                 </td>
-                <td className="py-2 px-2 text-right text-gray-300">{track.playCount}</td>
-                <td className="py-2 px-2 text-right text-gray-300 hidden sm:table-cell">{formatDuration(track.totalPracticeTime)}</td>
+                <td className="py-2 px-2 text-right text-gray-300">{formatDuration(track.totalPracticeTime)}</td>
                 <td className={`py-2 px-2 text-right ${speedColor(track.averageSpeed)}`}>{track.averageSpeed}%</td>
                 <td className="py-2 pl-2 text-right text-gray-400 hidden sm:table-cell">{formatRelativeDate(track.lastPracticed)}</td>
+                <td className="py-2 pl-1">
+                  <button
+                    title="Go to track"
+                    className="p-1 text-gray-500 hover:text-white transition-colors"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onGoToTrack(track.trackId, track.jamTrackId, track.authorId, track.bookId, track.bookVideoId);
+                    }}
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                    </svg>
+                  </button>
+                </td>
               </tr>
             ))}
           </tbody>

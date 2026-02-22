@@ -22,7 +22,8 @@ interface TrackMetric {
   bookVideoId: string | null;
   title: string;
   bookName: string | null;
-  playCount: number;
+  authorId: string | null;
+  bookId: string | null;
   totalPracticeTime: number;
   averageSpeed: number;
   lastPracticed: string;
@@ -40,7 +41,11 @@ interface SpeedData {
   sessions: { date: string; speed: number; durationSeconds: number; completed: boolean }[];
 }
 
-export default function MetricsView() {
+interface Props {
+  onGoToTrack: (trackId: string | null, jamTrackId: string | null, authorId: string | null, bookId: string | null, bookVideoId?: string | null) => void;
+}
+
+export default function MetricsView({ onGoToTrack }: Props) {
   const [period, setPeriod] = useState<Period>("30");
   const [summary, setSummary] = useState<MetricsSummary | null>(null);
   const [topTracks, setTopTracks] = useState<TrackMetric[]>([]);
@@ -148,6 +153,7 @@ export default function MetricsView() {
           tracks={topTracks}
           isLoading={isLoading}
           onTrackSelect={handleTrackSelect}
+          onGoToTrack={onGoToTrack}
         />
       </div>
     </div>

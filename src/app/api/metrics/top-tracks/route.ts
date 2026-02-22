@@ -6,9 +6,19 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const limit = parseInt(searchParams.get("limit") ?? "20");
     const sortBy = searchParams.get("sortBy") ?? "playCount";
+    const days = searchParams.get("days");
+
+    // Optional time filter
+    const where: Record<string, unknown> = {};
+    if (days) {
+      const since = new Date();
+      since.setDate(since.getDate() - parseInt(days));
+      where.startTime = { gte: since };
+    }
 
     // Get all sessions grouped by track
     const sessions = await prisma.practiceSession.findMany({
+      where,
       select: {
         trackId: true,
         jamTrackId: true,
@@ -18,7 +28,8 @@ export async function GET(request: NextRequest) {
         playbackSpeed: true,
         startTime: true,
         completedSession: true,
-        track: { select: { book: { select: { name: true } } } },
+        track: { select: { bookId: true, book: { select: { name: true, authorId: true } } } },
+        bookVideo: { select: { bookId: true, book: { select: { name: true, authorId: true } } } },
       },
       orderBy: { startTime: "desc" },
     });
@@ -32,6 +43,8 @@ export async function GET(request: NextRequest) {
         bookVideoId: string | null;
         title: string;
         bookName: string | null;
+        authorId: string | null;
+        bookId: string | null;
         playCount: number;
         totalPracticeTime: number;
         totalSpeed: number;
@@ -58,7 +71,9 @@ export async function GET(request: NextRequest) {
           jamTrackId: s.jamTrackId,
           bookVideoId: s.bookVideoId,
           title: s.trackTitle,
-          bookName: s.track?.book?.name ?? null,
+          bookName: s.track?.book?.name ?? s.bookVideo?.book?.name ?? null,
+          authorId: s.track?.book?.authorId ?? s.bookVideo?.book?.authorId ?? null,
+          bookId: s.track?.bookId ?? s.bookVideo?.bookId ?? null,
           playCount: 1,
           totalPracticeTime: s.durationSeconds,
           totalSpeed: s.playbackSpeed,
@@ -74,6 +89,8 @@ export async function GET(request: NextRequest) {
       bookVideoId: t.bookVideoId,
       title: t.title,
       bookName: t.bookName,
+      authorId: t.authorId,
+      bookId: t.bookId,
       playCount: t.playCount,
       totalPracticeTime: Math.round(t.totalPracticeTime),
       averageSpeed: Math.round(t.totalSpeed / t.playCount),

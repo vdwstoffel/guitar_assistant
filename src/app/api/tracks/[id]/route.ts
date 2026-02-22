@@ -50,6 +50,7 @@ interface UpdateMetadataBody {
 
 interface PatchBody {
   completed?: boolean;
+  favorite?: boolean;
   pdfPage?: number | null;
   chapterId?: string | null;
   sortOrder?: number;
@@ -65,12 +66,16 @@ export async function PATCH(
 
     const data: {
       completed?: boolean;
+      favorite?: boolean;
       pdfPage?: number | null;
       chapterId?: string | null;
       sortOrder?: number;
     } = {};
     if (body.completed !== undefined) {
       data.completed = body.completed;
+    }
+    if (body.favorite !== undefined) {
+      data.favorite = body.favorite;
     }
     if (body.pdfPage !== undefined) {
       data.pdfPage = body.pdfPage;

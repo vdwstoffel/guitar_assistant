@@ -58,6 +58,7 @@ interface TrackListViewProps {
   onBookUpdate?: (bookId: string, bookName: string, authorName: string) => Promise<void>;
   onTrackUpdate?: (trackId: string, title: string, author: string, book: string, trackNumber: number, pdfPage?: number | null, tempo?: number | null, timeSignature?: string, chapterId?: string | null) => Promise<void>;
   onTrackComplete?: (trackId: string, completed: boolean) => Promise<void>;
+  onTrackFavorite?: (trackId: string, favorite: boolean) => Promise<void>;
   onBookInProgress?: (bookId: string, inProgress: boolean) => Promise<void>;
   onShowPdf?: (pdfPath: string, page?: number) => void;
   onPdfUpload?: (bookId: string, file: File) => Promise<void>;
@@ -85,6 +86,7 @@ export default memo(function TrackListView({
   onBookUpdate,
   onTrackUpdate,
   onTrackComplete,
+  onTrackFavorite,
   onBookInProgress,
   onShowPdf,
   onPdfUpload,
@@ -124,6 +126,15 @@ export default memo(function TrackListView({
       setExpandedChapters(firstChapter ? new Set([firstChapter.id]) : new Set());
     }
   }, [book.id, book.chapters]);
+
+  // Auto-expand chapter containing the current track
+  useEffect(() => {
+    if (!currentTrack || !book.chapters) return;
+    const chapter = book.chapters.find(ch => ch.tracks.some(t => t.id === currentTrack.id));
+    if (chapter && !expandedChapters.has(chapter.id)) {
+      setExpandedChapters(prev => new Set([...prev, chapter.id]));
+    }
+  }, [currentTrack, book.chapters]);
 
   // Save expanded state to localStorage
   useEffect(() => {
@@ -642,6 +653,7 @@ export default memo(function TrackListView({
                 onTrackSelect={onTrackSelect}
                 onVideoSelect={onVideoSelect}
                 onTrackComplete={onTrackComplete}
+                onTrackFavorite={onTrackFavorite}
                 onVideoComplete={onVideoComplete}
                 onAssignPdfPage={onAssignPdfPage}
                 onTrackUpdate={(track) => setEditingTrack(track)}
@@ -718,6 +730,24 @@ export default memo(function TrackListView({
                 completed={track.completed}
                 playbackSpeed={track.playbackSpeed}
               />
+
+              {/* Favorite star */}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onTrackFavorite?.(track.id, !track.favorite);
+                }}
+                className={`w-5 h-5 flex-shrink-0 transition-colors ${
+                  track.favorite
+                    ? "text-yellow-400"
+                    : "text-gray-600 hover:text-yellow-400"
+                }`}
+                title={track.favorite ? "Remove from favorites" : "Add to favorites"}
+              >
+                <svg className="w-full h-full" fill={track.favorite ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                </svg>
+              </button>
 
               {/* Completion circle - Larger touch target on mobile */}
               <button

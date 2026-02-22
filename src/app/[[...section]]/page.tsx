@@ -20,20 +20,21 @@ import Videos from "@/components/Videos";
 import Tools from "@/components/Tools";
 import TabEditor from "@/components/TabEditor";
 import MetricsView from "@/components/MetricsView";
+import HomeView from "@/components/HomeView";
 import PageSyncEditor from "@/components/PageSyncEditor";
 import VideoUploadModal from "@/components/VideoUploadModal";
 import VideoPlayer from "@/components/VideoPlayer";
 import { AuthorSummary, BookSummary, Book, Track, Marker, JamTrack, JamTrackMarker, BookVideo } from "@/types";
 
-type Section = 'lessons' | 'videos' | 'fretboard' | 'intervals' | 'chords' | 'tools' | 'circle' | 'tabs' | 'jamtracks' | 'metrics';
+type Section = 'home' | 'lessons' | 'videos' | 'fretboard' | 'intervals' | 'chords' | 'tools' | 'circle' | 'tabs' | 'jamtracks' | 'metrics';
 
 const getSectionFromPath = (section: string[] | undefined): Section => {
-  if (!section || section.length === 0) return 'lessons';
+  if (!section || section.length === 0) return 'home';
   const first = section[0];
-  if (first === 'videos' || first === 'fretboard' || first === 'intervals' || first === 'chords' || first === 'tools' || first === 'circle' || first === 'tabs' || first === 'jamtracks' || first === 'metrics') {
+  if (first === 'home' || first === 'lessons' || first === 'videos' || first === 'fretboard' || first === 'intervals' || first === 'chords' || first === 'tools' || first === 'circle' || first === 'tabs' || first === 'jamtracks' || first === 'metrics') {
     return first;
   }
-  return 'lessons';
+  return 'home';
 };
 
 export default function Home() {
@@ -161,7 +162,7 @@ export default function Home() {
     if (artistId) params.set('artist', artistId);
     if (albumId) params.set('album', albumId);
     if (trackId) params.set('track', trackId);
-    const newUrl = params.toString() ? `/?${params.toString()}` : '/';
+    const newUrl = params.toString() ? `/lessons?${params.toString()}` : '/lessons';
     window.history.replaceState({}, '', newUrl);
   };
 
@@ -180,11 +181,7 @@ export default function Home() {
     if (section !== 'jamtracks') {
       setCurrentJamTrackId(null);
     }
-    if (section === 'lessons') {
-      router.push('/');
-    } else {
-      router.push(`/${section}`);
-    }
+    router.push(`/${section}`);
   };
 
   const fetchBookDetail = useCallback(async (bookId: string): Promise<Book | null> => {
@@ -227,9 +224,10 @@ export default function Home() {
         if (restoreFromUrl) {
           const bookId = searchParams.get('album');
           const trackId = searchParams.get('track');
+          const videoId = searchParams.get('video');
           const jamTrackId = searchParams.get('track'); // For jamtracks section
 
-          // Restore library selection (book/track)
+          // Restore library selection (book/track/video)
           if (bookId) {
             // Find the book and its author across all authors
             let foundBook: BookSummary | null = null;
@@ -251,9 +249,18 @@ export default function Home() {
               }
               const bookDetail = await fetchBookDetail(bookId);
 
+              // Restore video selection if specified in URL
+              if (videoId && bookDetail) {
+                const video = bookDetail.videos?.find((v: BookVideo) => v.id === videoId)
+                  ?? bookDetail.chapters?.flatMap((ch: { videos: BookVideo[] }) => ch.videos).find((v: BookVideo) => v.id === videoId);
+                if (video) {
+                  setTimeout(() => handleVideoSelect(video), 0);
+                }
+              }
               // Restore track selection if specified in URL
-              if (trackId && bookDetail?.tracks) {
-                const track = bookDetail.tracks.find((t: Track) => t.id === trackId);
+              else if (trackId && bookDetail) {
+                const track = bookDetail.tracks?.find((t: Track) => t.id === trackId)
+                  ?? bookDetail.chapters?.flatMap((ch: { tracks: Track[] }) => ch.tracks).find((t: Track) => t.id === trackId);
                 if (track) {
                   setCurrentTrack(track);
                   setCurrentAuthorId(foundAuthor.id);
@@ -485,6 +492,36 @@ export default function Home() {
     if (video.pdfPage && selectedBookDetail?.pdfPath) {
       setPdfPath(selectedBookDetail.pdfPath);
       setPdfPage(video.pdfPage);
+    }
+  };
+
+  const handleGoToTrackFromMetrics = (
+    trackId: string | null,
+    jamTrackId: string | null,
+    authorId: string | null,
+    bookId: string | null,
+    bookVideoId?: string | null,
+  ) => {
+    if (jamTrackId) {
+      router.push(`/jamtracks?track=${jamTrackId}`);
+      return;
+    }
+
+    if (bookVideoId && bookId) {
+      const params = new URLSearchParams();
+      if (authorId) params.set('artist', authorId);
+      params.set('album', bookId);
+      params.set('video', bookVideoId);
+      router.push(`/lessons?${params.toString()}`);
+      return;
+    }
+
+    if (trackId && bookId) {
+      const params = new URLSearchParams();
+      if (authorId) params.set('artist', authorId);
+      params.set('album', bookId);
+      params.set('track', trackId);
+      router.push(`/lessons?${params.toString()}`);
     }
   };
 
@@ -729,6 +766,23 @@ export default function Home() {
     updateTrackInBookDetail(trackId, t => ({ ...t, completed }));
   };
 
+  const handleTrackFavorite = async (trackId: string, favorite: boolean) => {
+    const response = await fetch(`/api/tracks/${trackId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ favorite }),
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to update track favorite status");
+    }
+
+    setCurrentTrack(prev =>
+      prev?.id === trackId ? { ...prev, favorite } : prev
+    );
+    updateTrackInBookDetail(trackId, t => ({ ...t, favorite }));
+  };
+
   const handleAssignPdfPage = async (trackId: string, page: number) => {
     const response = await fetch(`/api/tracks/${trackId}`, {
       method: "PATCH",
@@ -952,6 +1006,22 @@ export default function Home() {
     // Update local state
     setJamTracks((prev) =>
       prev.map((jt) => (jt.id === jamTrackId ? { ...jt, completed } : jt))
+    );
+  };
+
+  const handleJamTrackFavorite = async (jamTrackId: string, favorite: boolean) => {
+    const response = await fetch(`/api/jamtracks/${jamTrackId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ favorite }),
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to update jam track favorite status");
+    }
+
+    setJamTracks((prev) =>
+      prev.map((jt) => (jt.id === jamTrackId ? { ...jt, favorite } : jt))
     );
   };
 
@@ -1339,7 +1409,9 @@ export default function Home() {
       )}
 
       {/* Section Content */}
-      {activeSection === 'lessons' ? (
+      {activeSection === 'home' ? (
+        <HomeView onGoToTrack={handleGoToTrackFromMetrics} />
+      ) : activeSection === 'lessons' ? (
         <>
           <div className="flex flex-col xl:flex-row flex-1 min-h-0">
             {/* Left side: Content + Player - Full width when no book selected, 50% on xl+ when book open */}
@@ -1371,6 +1443,7 @@ export default function Home() {
                     onBookUpdate={handleBookUpdate}
                     onTrackUpdate={handleMetadataUpdate}
                     onTrackComplete={handleTrackComplete}
+                    onTrackFavorite={handleTrackFavorite}
                     onBookInProgress={handleBookInProgress}
                     onShowPdf={handleShowPdf}
                     onPdfUpload={handlePdfUpload}
@@ -1548,7 +1621,7 @@ export default function Home() {
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7h18M3 12h18M3 17h18" />
                 </svg>
-                <span className="text-xs">Library</span>
+                <span className="text-xs">Lessons</span>
               </button>
               <button
                 className={`flex-1 flex flex-col items-center justify-center py-3 gap-1 ${
@@ -1592,6 +1665,7 @@ export default function Home() {
                     onJamTrackSelect={handleJamTrackSelect}
                     onJamTrackUpdate={handleJamTrackUpdate}
                     onJamTrackComplete={handleJamTrackComplete}
+                    onJamTrackFavorite={handleJamTrackFavorite}
                     onJamTrackDelete={handleJamTrackDelete}
                     onPdfUpload={handleJamTrackPdfUpload}
                     onPdfDelete={handleJamTrackPdfDelete}
@@ -1819,7 +1893,7 @@ export default function Home() {
       ) : activeSection === 'tabs' ? (
         <TabEditor />
       ) : activeSection === 'metrics' ? (
-        <MetricsView />
+        <MetricsView onGoToTrack={handleGoToTrackFromMetrics} />
       ) : (
         <Fretboard />
       )}

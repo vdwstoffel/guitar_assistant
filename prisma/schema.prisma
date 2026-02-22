@@ -54,6 +54,7 @@ model Track {
   sortOrder     Int      @default(0)
   pdfPage       Int?
   completed     Boolean  @default(false)
+  favorite      Boolean  @default(false)
   tempo         Int?
   timeSignature String   @default("4/4")
   playbackSpeed Int?
@@ -113,6 +114,7 @@ model JamTrack {
   filePath      String           @unique
   duration      Float
   completed     Boolean          @default(false)
+  favorite      Boolean          @default(false)
   tempo         Int?
   timeSignature String           @default("4/4")
   playbackSpeed Int?
