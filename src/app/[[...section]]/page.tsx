@@ -24,7 +24,7 @@ import HomeView from "@/components/HomeView";
 import PageSyncEditor from "@/components/PageSyncEditor";
 import VideoUploadModal from "@/components/VideoUploadModal";
 import VideoPlayer from "@/components/VideoPlayer";
-import { AuthorSummary, BookSummary, Book, Track, Marker, JamTrack, JamTrackMarker, BookVideo } from "@/types";
+import { AuthorSummary, BookSummary, Book, Track, Marker, JamTrack, JamTrackMarker, BookVideo, SearchResultTrack, SearchResultBook, SearchResultJamTrack } from "@/types";
 
 type Section = 'home' | 'lessons' | 'videos' | 'fretboard' | 'intervals' | 'chords' | 'tools' | 'circle' | 'tabs' | 'jamtracks' | 'metrics';
 
@@ -567,6 +567,43 @@ export default function Home() {
     } catch (err) {
       console.error("Failed to fetch jam track details:", err);
     }
+  };
+
+  // Search result handlers
+  const handleSearchTrackSelect = async (result: SearchResultTrack) => {
+    // Set selection state before navigating (handleTrackSelect reads these)
+    setSelectedAuthorId(result.book.authorId);
+    setSelectedBookId(result.book.id);
+    updateLibraryUrl(result.book.authorId, result.book.id, result.id);
+    router.push("/lessons");
+
+    // Fetch book detail, then select the track
+    const bookDetail = await fetchBookDetail(result.book.id);
+    if (bookDetail) {
+      const track = bookDetail.tracks.find(t => t.id === result.id)
+        || bookDetail.chapters?.flatMap(ch => ch.tracks).find(t => t.id === result.id);
+      if (track) {
+        handleTrackSelect(track);
+      }
+    }
+  };
+
+  const handleSearchBookSelect = (result: SearchResultBook) => {
+    const authorSummary: AuthorSummary = { id: result.authorId, name: result.author.name, books: [] };
+    const bookSummary: BookSummary = {
+      id: result.id, name: result.name, authorId: result.authorId,
+      pdfPath: result.pdfPath, inProgress: false, trackCount: 0, coverTrackPath: null,
+    };
+    handleBookSelect(bookSummary, authorSummary);
+    router.push("/lessons");
+  };
+
+  const handleSearchJamTrackSelect = (result: SearchResultJamTrack) => {
+    const jamTrack = jamTracks.find(jt => jt.id === result.id);
+    if (jamTrack) {
+      handleJamTrackSelect(jamTrack);
+    }
+    router.push("/jamtracks");
   };
 
   const handleMarkerAdd = async (
@@ -1456,6 +1493,9 @@ export default function Home() {
       <TopNav
         activeSection={activeSection}
         onSectionChange={handleSectionChange}
+        onSearchTrackSelect={handleSearchTrackSelect}
+        onSearchBookSelect={handleSearchBookSelect}
+        onSearchJamTrackSelect={handleSearchJamTrackSelect}
       />
 
       {/* Loudness Analysis Progress Banner */}

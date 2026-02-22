@@ -2,6 +2,8 @@
 
 import Link from 'next/link';
 import { useState, useEffect, useRef, useCallback, memo } from 'react';
+import GlobalSearch from './GlobalSearch';
+import { SearchResultTrack, SearchResultBook, SearchResultJamTrack } from '@/types';
 
 type Section = 'home' | 'lessons' | 'videos' | 'fretboard' | 'intervals' | 'chords' | 'tools' | 'circle' | 'tabs' | 'jamtracks' | 'metrics';
 type TimeSignature = '4/4' | '3/4' | '2/4' | '6/8';
@@ -9,11 +11,15 @@ type TimeSignature = '4/4' | '3/4' | '2/4' | '6/8';
 interface TopNavProps {
   activeSection: Section;
   onSectionChange: (section: Section) => void;
+  onSearchTrackSelect: (result: SearchResultTrack) => void;
+  onSearchBookSelect: (result: SearchResultBook) => void;
+  onSearchJamTrackSelect: (result: SearchResultJamTrack) => void;
 }
 
-const TopNav = memo(function TopNav({ activeSection, onSectionChange }: TopNavProps) {
+const TopNav = memo(function TopNav({ activeSection, onSectionChange, onSearchTrackSelect, onSearchBookSelect, onSearchJamTrackSelect }: TopNavProps) {
   const [showMetronome, setShowMetronome] = useState(false);
   const [showTheory, setShowTheory] = useState(false);
+  const [showMobileSearch, setShowMobileSearch] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [bpm, setBpm] = useState(120);
   const [timeSignature, setTimeSignature] = useState<TimeSignature>('4/4');
@@ -322,10 +328,49 @@ const TopNav = memo(function TopNav({ activeSection, onSectionChange }: TopNavPr
             </Link>
           </div>
 
-          {/* Spacer to balance the left side - Hide on mobile */}
-          <div className="hidden xl:block xl:w-[120px]" />
+          {/* Search - mobile icon */}
+          <button
+            onClick={() => setShowMobileSearch(true)}
+            className="xl:hidden p-2 text-gray-400 hover:text-white hover:bg-gray-700/50 rounded-md transition-colors"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+          </button>
+
+          {/* Search - desktop inline */}
+          <div className="hidden xl:block xl:w-[300px]">
+            <GlobalSearch
+              onTrackSelect={onSearchTrackSelect}
+              onBookSelect={onSearchBookSelect}
+              onJamTrackSelect={onSearchJamTrackSelect}
+            />
+          </div>
         </div>
       </nav>
+
+      {/* Mobile Search Overlay */}
+      {showMobileSearch && (
+        <div className="xl:hidden bg-gray-800 border-b border-gray-700 px-3 py-2">
+          <div className="flex items-center gap-2">
+            <div className="flex-1">
+              <GlobalSearch
+                onTrackSelect={(r) => { onSearchTrackSelect(r); setShowMobileSearch(false); }}
+                onBookSelect={(r) => { onSearchBookSelect(r); setShowMobileSearch(false); }}
+                onJamTrackSelect={(r) => { onSearchJamTrackSelect(r); setShowMobileSearch(false); }}
+              />
+            </div>
+            <button
+              onClick={() => setShowMobileSearch(false)}
+              className="p-2 text-gray-400 hover:text-white"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Mini Metronome Panel */}
       {showMetronome && (

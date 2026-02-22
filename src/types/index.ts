@@ -160,6 +160,41 @@ export interface PracticeSession {
   createdAt: string;
 }
 
+// Search result types (lightweight, only fields returned by /api/search)
+export interface SearchResultTrack {
+  id: string;
+  title: string;
+  trackNumber: number;
+  bookId: string;
+  book: {
+    id: string;
+    name: string;
+    authorId: string;
+    pdfPath: string | null;
+    author: { id: string; name: string };
+  };
+}
+
+export interface SearchResultBook {
+  id: string;
+  name: string;
+  authorId: string;
+  pdfPath: string | null;
+  author: { id: string; name: string };
+}
+
+export interface SearchResultJamTrack {
+  id: string;
+  title: string;
+  duration: number;
+}
+
+export interface SearchResults {
+  tracks: SearchResultTrack[];
+  books: SearchResultBook[];
+  jamTracks: SearchResultJamTrack[];
+}
+
 // Backwards compatibility aliases (for gradual migration)
 export type Song = Track;
 export type Album = Book;
