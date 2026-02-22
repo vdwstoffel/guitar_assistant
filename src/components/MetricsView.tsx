@@ -20,6 +20,7 @@ interface TrackMetric {
   trackId: string | null;
   jamTrackId: string | null;
   bookVideoId: string | null;
+  videoId: string | null;
   title: string;
   bookName: string | null;
   authorId: string | null;
@@ -42,7 +43,7 @@ interface SpeedData {
 }
 
 interface Props {
-  onGoToTrack: (trackId: string | null, jamTrackId: string | null, authorId: string | null, bookId: string | null, bookVideoId?: string | null) => void;
+  onGoToTrack: (trackId: string | null, jamTrackId: string | null, authorId: string | null, bookId: string | null, bookVideoId?: string | null, videoId?: string | null) => void;
 }
 
 export default function MetricsView({ onGoToTrack }: Props) {

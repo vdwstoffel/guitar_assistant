@@ -52,12 +52,12 @@ const AlphaTabRenderer = forwardRef<AlphaTabRendererRef, AlphaTabRendererProps>(
 
       const initAlphaTab = async () => {
         try {
-          const { AlphaTabApi, Settings } = await import('@coderline/alphatab');
+          const { AlphaTabApi, Settings, LayoutMode } = await import('@coderline/alphatab');
 
           const settings = new Settings();
           settings.core.fontDirectory = '/font/';
           settings.core.useWorkers = false;
-          settings.display.layoutMode = 'page';
+          settings.display.layoutMode = LayoutMode.Page;
           settings.display.stretchForce = 0.95;
           settings.display.scale = 0.98;
 

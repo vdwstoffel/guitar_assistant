@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { Video } from "@/types";
+import { usePracticeSessionTracker } from "@/hooks/usePracticeSessionTracker";
 
 // CategorySection component (mirrors ChapterSection pattern)
 interface CategorySectionProps {
@@ -202,7 +203,11 @@ function CategorySection({
   );
 }
 
-export default function Videos() {
+interface VideosProps {
+  initialVideoId?: string | null;
+}
+
+export default function Videos({ initialVideoId }: VideosProps) {
   const [videos, setVideos] = useState<Video[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showAddForm, setShowAddForm] = useState(false);
@@ -222,6 +227,10 @@ export default function Videos() {
   const dragCategory = useRef<string | null>(null);
   const dragCategoryIndex = useRef<number | null>(null);
   const dragOverCategoryIndex = useRef<number | null>(null);
+  const playerRef = useRef<YT.Player | null>(null);
+  const playerContainerRef = useRef<HTMLDivElement | null>(null);
+  const ytApiReady = useRef(false);
+  const pendingVideoId = useRef<string | null>(null);
 
   // Get unique categories from existing videos for suggestions
   const existingCategories = useMemo(() => {
@@ -514,6 +523,97 @@ export default function Videos() {
 
   const activeVideo = videos.find((v) => v.id === activeVideoId);
 
+  // Practice session tracking
+  const { onPlay, onPause, onFinish } = usePracticeSessionTracker(activeVideo ?? null, 100);
+  const trackerRef = useRef({ onPlay, onPause, onFinish });
+  trackerRef.current = { onPlay, onPause, onFinish };
+
+  // Load YouTube IFrame API
+  useEffect(() => {
+    if (window.YT?.Player) {
+      ytApiReady.current = true;
+      return;
+    }
+    // Check if script is already being loaded
+    if (document.querySelector('script[src="https://www.youtube.com/iframe_api"]')) return;
+
+    const tag = document.createElement("script");
+    tag.src = "https://www.youtube.com/iframe_api";
+    document.head.appendChild(tag);
+
+    window.onYouTubeIframeAPIReady = () => {
+      ytApiReady.current = true;
+      // If we have a pending video, create the player now
+      if (pendingVideoId.current) {
+        createPlayer(pendingVideoId.current);
+        pendingVideoId.current = null;
+      }
+    };
+  }, []);
+
+  const createPlayer = useCallback((youtubeId: string) => {
+    if (playerRef.current) {
+      playerRef.current.destroy();
+      playerRef.current = null;
+    }
+
+    if (!playerContainerRef.current) return;
+
+    playerRef.current = new window.YT!.Player(playerContainerRef.current, {
+      videoId: youtubeId,
+      width: "100%",
+      height: "100%",
+      events: {
+        onStateChange: (event: YT.OnStateChangeEvent) => {
+          if (event.data === 1) { // PLAYING
+            trackerRef.current.onPlay();
+          } else if (event.data === 2) { // PAUSED
+            trackerRef.current.onPause();
+          } else if (event.data === 0) { // ENDED
+            trackerRef.current.onFinish();
+          }
+        },
+      },
+    });
+  }, []);
+
+  // Create/update player when active video changes
+  useEffect(() => {
+    if (!activeVideo) {
+      if (playerRef.current) {
+        playerRef.current.destroy();
+        playerRef.current = null;
+      }
+      return;
+    }
+
+    if (ytApiReady.current) {
+      createPlayer(activeVideo.youtubeId);
+    } else {
+      pendingVideoId.current = activeVideo.youtubeId;
+    }
+
+    return () => {
+      if (playerRef.current) {
+        playerRef.current.destroy();
+        playerRef.current = null;
+      }
+    };
+  }, [activeVideo?.id, createPlayer]);
+
+  // Handle initialVideoId from URL
+  useEffect(() => {
+    if (initialVideoId && videos.length > 0) {
+      const video = videos.find((v) => v.id === initialVideoId);
+      if (video) {
+        setActiveVideoId(video.id);
+        // Expand the category containing this video
+        const cat = video.category || "Uncategorized";
+        setExpandedCategories(new Set([cat]));
+      }
+    }
+  }, [initialVideoId, videos]);
+
   if (isLoading) {
     return (
       <div className="h-full flex items-center justify-center bg-gray-900">
@@ -632,13 +732,7 @@ export default function Videos() {
           <div className="w-full max-h-[calc(100vh-180px)]" style={{ maxWidth: 'calc((100vh - 180px) * 16 / 9)' }}>
             <h2 className="text-xl font-semibold text-white mb-4">{activeVideo.title}</h2>
             <div className="aspect-video rounded-lg overflow-hidden bg-black">
-              <iframe
-                src={`https://www.youtube.com/embed/${activeVideo.youtubeId}`}
-                title={activeVideo.title}
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowFullScreen
-                className="w-full h-full"
-              />
+              <div ref={playerContainerRef} className="w-full h-full" />
             </div>
           </div>
         ) : (

@@ -6,8 +6,13 @@ interface MarkerNameDialogProps {
   isOpen: boolean;
   timestamp: number;
   formatTime: (seconds: number) => string;
-  onSave: (name: string) => void;
+  onSave: (name: string, pdfPage: number | null) => void;
   onCancel: () => void;
+  currentPdfPage?: number | null;
+  hasPdf?: boolean;
+  // Edit mode: pre-fill with existing values
+  initialName?: string;
+  initialPdfPage?: number | null;
 }
 
 export default function MarkerNameDialog({
@@ -16,23 +21,37 @@ export default function MarkerNameDialog({
   formatTime,
   onSave,
   onCancel,
+  currentPdfPage,
+  hasPdf = false,
+  initialName,
+  initialPdfPage,
 }: MarkerNameDialogProps) {
   const [markerName, setMarkerName] = useState("");
+  const [pageNumber, setPageNumber] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+  const isEditMode = initialName !== undefined;
 
   useEffect(() => {
     if (isOpen) {
-      setMarkerName("");
-      // Focus input after dialog opens
+      setMarkerName(initialName ?? "");
+      if (initialPdfPage != null) {
+        setPageNumber(String(initialPdfPage));
+      } else if (!isEditMode && currentPdfPage) {
+        setPageNumber(String(currentPdfPage));
+      } else {
+        setPageNumber("");
+      }
       setTimeout(() => inputRef.current?.focus(), 50);
     }
-  }, [isOpen]);
+  }, [isOpen, currentPdfPage, initialName, initialPdfPage, isEditMode]);
 
   const handleSave = () => {
     const trimmed = markerName.trim();
     if (trimmed) {
-      onSave(trimmed);
+      const page = pageNumber ? parseInt(pageNumber, 10) : null;
+      onSave(trimmed, Number.isNaN(page) ? null : page);
       setMarkerName("");
+      setPageNumber("");
     }
   };
 
@@ -49,7 +68,9 @@ export default function MarkerNameDialog({
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
       <div className="bg-gray-800 border border-gray-700 rounded-lg p-6 shadow-xl max-w-md w-full mx-4">
-        <h3 className="text-lg font-semibold text-white mb-4">Add Marker</h3>
+        <h3 className="text-lg font-semibold text-white mb-4">
+          {isEditMode ? "Edit Marker" : "Add Marker"}
+        </h3>
 
         <div className="mb-4">
           <label className="block text-sm text-gray-400 mb-2">
@@ -65,6 +86,23 @@ export default function MarkerNameDialog({
             className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm focus:outline-none focus:border-green-500"
           />
         </div>
+
+        {hasPdf && (
+          <div className="mb-4">
+            <label className="block text-sm text-gray-400 mb-2">
+              PDF Page <span className="text-gray-500">(optional - triggers page turn)</span>
+            </label>
+            <input
+              type="number"
+              min={1}
+              value={pageNumber}
+              onChange={(e) => setPageNumber(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Page number..."
+              className="w-24 px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm focus:outline-none focus:border-green-500"
+            />
+          </div>
+        )}
 
         <div className="flex justify-end gap-2">
           <button

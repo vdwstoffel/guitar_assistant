@@ -6,6 +6,7 @@ interface TrackMetric {
   trackId: string | null;
   jamTrackId: string | null;
   bookVideoId: string | null;
+  videoId: string | null;
   title: string;
   bookName: string | null;
   authorId: string | null;
@@ -48,7 +49,7 @@ interface Props {
   tracks: TrackMetric[];
   isLoading: boolean;
   onTrackSelect: (trackId: string | null, jamTrackId: string | null, bookVideoId: string | null) => void;
-  onGoToTrack: (trackId: string | null, jamTrackId: string | null, authorId: string | null, bookId: string | null, bookVideoId?: string | null) => void;
+  onGoToTrack: (trackId: string | null, jamTrackId: string | null, authorId: string | null, bookId: string | null, bookVideoId?: string | null, videoId?: string | null) => void;
 }
 
 export default function TopTracksTable({ tracks, isLoading, onTrackSelect, onGoToTrack }: Props) {
@@ -152,7 +153,7 @@ export default function TopTracksTable({ tracks, isLoading, onTrackSelect, onGoT
                     className="p-1 text-gray-500 hover:text-white transition-colors"
                     onClick={(e) => {
                       e.stopPropagation();
-                      onGoToTrack(track.trackId, track.jamTrackId, track.authorId, track.bookId, track.bookVideoId);
+                      onGoToTrack(track.trackId, track.jamTrackId, track.authorId, track.bookId, track.bookVideoId, track.videoId);
                     }}
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

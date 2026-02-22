@@ -13,11 +13,11 @@ interface MarkersBarProps {
   editingMarkerName: string;
   currentTime: number;
   onLeadInChange: (value: number) => void;
-  onAddMarker: (name: string, timestamp: number) => void;
+  onAddMarker: (name: string, timestamp: number, pdfPage?: number | null) => void;
   onJumpToMarker: (timestamp: number) => void;
   onStartEdit: (markerId: string, name: string) => void;
   onEditNameChange: (value: string) => void;
-  onSaveEdit: (markerId: string, name: string) => void;
+  onSaveEdit: (markerId: string, name: string, pdfPage?: number | null) => void;
   onCancelEdit: () => void;
   onDelete: (markerId: string) => void;
   onClearAll: () => void;
@@ -29,22 +29,20 @@ interface MarkersBarProps {
   trackTempo?: number | null;
   trackTimeSignature?: string;
   onTempoChange?: (tempo: number | null, timeSignature: string) => void;
+  // PDF page props
+  currentPdfPage?: number | null;
+  hasPdf?: boolean;
 }
 
 const MarkersBar = memo(function MarkersBar({
   markers,
   visible,
   leadIn,
-  editingMarkerId,
-  editingMarkerName,
   currentTime,
   onLeadInChange,
   onAddMarker,
   onJumpToMarker,
-  onStartEdit,
-  onEditNameChange,
   onSaveEdit,
-  onCancelEdit,
   onDelete,
   onClearAll,
   formatTime,
@@ -54,12 +52,17 @@ const MarkersBar = memo(function MarkersBar({
   trackTempo = null,
   trackTimeSignature = "4/4",
   onTempoChange,
+  currentPdfPage,
+  hasPdf = false,
 }: MarkersBarProps) {
   const [tapBpm, setTapBpm] = useState<number | null>(null);
   const [tapCount, setTapCount] = useState(0);
   const tapTempoRef = useRef(createTapTempo());
+
+  // Dialog state - used for both add and edit
   const [showDialog, setShowDialog] = useState(false);
   const [pendingMarkerTimestamp, setPendingMarkerTimestamp] = useState(0);
+  const [editingMarker, setEditingMarker] = useState<(Marker | JamTrackMarker) | null>(null);
 
   const handleTap = useCallback(() => {
     const bpm = tapTempoRef.current.tap();
@@ -91,19 +94,37 @@ const MarkersBar = memo(function MarkersBar({
     }
   }, [onTempoChange, trackTempo]);
 
-  const handleOpenDialog = useCallback(() => {
+  // Open dialog for adding a new marker
+  const handleOpenAddDialog = useCallback(() => {
+    setEditingMarker(null);
     setPendingMarkerTimestamp(currentTime);
     setShowDialog(true);
   }, [currentTime]);
 
-  const handleSaveMarker = useCallback((name: string) => {
-    onAddMarker(name, pendingMarkerTimestamp);
-    setShowDialog(false);
-  }, [onAddMarker, pendingMarkerTimestamp]);
-
-  const handleCancelDialog = useCallback(() => {
-    setShowDialog(false);
+  // Open dialog for editing an existing marker
+  const handleOpenEditDialog = useCallback((marker: Marker | JamTrackMarker) => {
+    setEditingMarker(marker);
+    setPendingMarkerTimestamp(marker.timestamp);
+    setShowDialog(true);
   }, []);
+
+  const handleDialogSave = useCallback((name: string, pdfPage: number | null) => {
+    if (editingMarker) {
+      // Edit mode
+      onSaveEdit(editingMarker.id, name, pdfPage);
+    } else {
+      // Add mode
+      onAddMarker(name, pendingMarkerTimestamp, pdfPage);
+    }
+    setShowDialog(false);
+    setEditingMarker(null);
+  }, [editingMarker, onSaveEdit, onAddMarker, pendingMarkerTimestamp]);
+
+  const handleDialogCancel = useCallback(() => {
+    setShowDialog(false);
+    setEditingMarker(null);
+  }, []);
+
   // Keyboard shortcuts: 1-9 jump to marker 1-9, 0 jumps to marker 10
   useEffect(() => {
     if (!visible) return;
@@ -215,7 +236,7 @@ const MarkersBar = memo(function MarkersBar({
         )}
 
         <button
-          onClick={handleOpenDialog}
+          onClick={handleOpenAddDialog}
           className="px-3 py-1 bg-green-600 hover:bg-green-700 rounded text-xs"
         >
           Add Marker
@@ -238,6 +259,7 @@ const MarkersBar = memo(function MarkersBar({
               const isPassed = marker.timestamp <= currentTime;
               // Show shortcut key: 1-9 for first 9, 0 for 10th
               const shortcutKey = index < 9 ? String(index + 1) : index === 9 ? '0' : null;
+              const markerPdfPage = 'pdfPage' in marker ? (marker as Marker).pdfPage : null;
               return (
               <div
                 key={marker.id}
@@ -254,40 +276,25 @@ const MarkersBar = memo(function MarkersBar({
                 >
                   {formatTime(marker.timestamp)}
                 </button>
-                {editingMarkerId === marker.id ? (
-                  <input
-                    type="text"
-                    value={editingMarkerName}
-                    onChange={(e) => onEditNameChange(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && editingMarkerName.trim()) {
-                        onSaveEdit(marker.id, editingMarkerName.trim());
-                      } else if (e.key === "Escape") {
-                        onCancelEdit();
-                      }
-                    }}
-                    onBlur={onCancelEdit}
-                    autoFocus
-                    className="w-20 px-1 bg-gray-600 rounded text-xs"
-                  />
-                ) : (
-                  <>
-                    <button
-                      onClick={() => onJumpToMarker(marker.timestamp)}
-                    >
-                      {marker.name}
-                    </button>
-                    <button
-                      onClick={() => onStartEdit(marker.id, marker.name)}
-                      className="p-0.5 text-gray-500 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity"
-                      title="Edit marker name"
-                    >
-                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                      </svg>
-                    </button>
-                  </>
+                <button
+                  onClick={() => onJumpToMarker(marker.timestamp)}
+                >
+                  {marker.name}
+                </button>
+                {markerPdfPage != null && (
+                  <span className="text-[10px] text-blue-400 font-mono" title={`PDF page ${markerPdfPage}`}>
+                    p.{markerPdfPage}
+                  </span>
                 )}
+                <button
+                  onClick={() => handleOpenEditDialog(marker)}
+                  className="p-0.5 text-gray-500 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                  title="Edit marker"
+                >
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                  </svg>
+                </button>
                 <button
                   onClick={() => onDelete(marker.id)}
                   className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-300"
@@ -304,8 +311,12 @@ const MarkersBar = memo(function MarkersBar({
         isOpen={showDialog}
         timestamp={pendingMarkerTimestamp}
         formatTime={formatTime}
-        onSave={handleSaveMarker}
-        onCancel={handleCancelDialog}
+        onSave={handleDialogSave}
+        onCancel={handleDialogCancel}
+        currentPdfPage={currentPdfPage}
+        hasPdf={hasPdf}
+        initialName={editingMarker?.name}
+        initialPdfPage={editingMarker && 'pdfPage' in editingMarker ? (editingMarker as Marker).pdfPage : undefined}
       />
     </div>
   );

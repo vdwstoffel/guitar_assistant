@@ -2,6 +2,7 @@ export interface Marker {
   id: string;
   name: string;
   timestamp: number;
+  pdfPage: number | null;
   trackId: string;
 }
 

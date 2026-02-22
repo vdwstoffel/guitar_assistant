@@ -21,6 +21,7 @@ interface RecentTrack {
   trackId: string | null;
   jamTrackId: string | null;
   bookVideoId: string | null;
+  videoId: string | null;
   title: string;
   bookName: string | null;
   authorId: string | null;
@@ -48,7 +49,7 @@ function isToday(iso: string): boolean {
 }
 
 interface Props {
-  onGoToTrack: (trackId: string | null, jamTrackId: string | null, authorId: string | null, bookId: string | null, bookVideoId?: string | null) => void;
+  onGoToTrack: (trackId: string | null, jamTrackId: string | null, authorId: string | null, bookId: string | null, bookVideoId?: string | null, videoId?: string | null) => void;
   authors: AuthorSummary[];
 }
 
@@ -143,14 +144,16 @@ export default function HomeView({ onGoToTrack, authors }: Props) {
                   const doneToday = isToday(rt.lastPracticed);
                   return (
                     <button
-                      key={rt.trackId ?? rt.jamTrackId ?? rt.bookVideoId}
-                      onClick={() => onGoToTrack(rt.trackId, rt.jamTrackId, rt.authorId, rt.bookId, rt.bookVideoId)}
+                      key={rt.trackId ?? rt.jamTrackId ?? rt.bookVideoId ?? rt.videoId}
+                      onClick={() => onGoToTrack(rt.trackId, rt.jamTrackId, rt.authorId, rt.bookId, rt.bookVideoId, rt.videoId)}
                       className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-md hover:bg-gray-700/50 transition-colors text-left group ${doneToday ? 'opacity-50' : ''}`}
                     >
                       {doneToday ? (
                         <svg className="w-4 h-4 text-green-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                         </svg>
+                      ) : rt.videoId ? (
+                        <span className="text-xs bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded shrink-0">YouTube</span>
                       ) : rt.jamTrackId ? (
                         <span className="text-xs bg-purple-500/20 text-purple-400 px-1.5 py-0.5 rounded shrink-0">Jam</span>
                       ) : rt.bookVideoId ? (

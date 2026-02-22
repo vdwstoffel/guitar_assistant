@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { trackId, name, timestamp } = body;
+    const { trackId, name, timestamp, pdfPage } = body;
 
     if (!trackId || !name || timestamp === undefined) {
       return NextResponse.json(
@@ -18,6 +18,7 @@ export async function POST(request: NextRequest) {
         trackId,
         name,
         timestamp,
+        ...(pdfPage != null && { pdfPage }),
       },
     });
 

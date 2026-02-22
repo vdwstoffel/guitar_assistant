@@ -1,11 +1,11 @@
 "use client";
 
 import { useRef, useCallback, useEffect } from "react";
-import { Track, JamTrack, BookVideo } from "@/types";
+import { Track, JamTrack, BookVideo, Video } from "@/types";
 
-const MIN_SESSION_SECONDS = 10;
+const MIN_SESSION_SECONDS = 4;
 
-type TrackableItem = Track | JamTrack | BookVideo;
+type TrackableItem = Track | JamTrack | BookVideo | Video;
 
 interface SessionState {
   playStartedAt: number | null; // Date.now() when play started
@@ -13,6 +13,7 @@ interface SessionState {
   trackId: string | null;
   jamTrackId: string | null;
   bookVideoId: string | null;
+  videoId: string | null;
   trackTitle: string;
 }
 
@@ -22,6 +23,10 @@ function isJamTrack(item: TrackableItem): item is JamTrack {
 
 function isBookVideo(item: TrackableItem): item is BookVideo {
   return "filename" in item;
+}
+
+function isVideo(item: TrackableItem): item is Video {
+  return "youtubeId" in item;
 }
 
 async function saveSession(
@@ -43,6 +48,7 @@ async function saveSession(
         trackId: state.trackId,
         jamTrackId: state.jamTrackId,
         bookVideoId: state.bookVideoId,
+        videoId: state.videoId,
         durationSeconds: Math.round(totalSeconds),
         playbackSpeed,
         completedSession: completed,
@@ -63,6 +69,7 @@ export function usePracticeSessionTracker(
     trackId: null,
     jamTrackId: null,
     bookVideoId: null,
+    videoId: null,
     trackTitle: "",
   });
   const speedRef = useRef(playbackSpeed);
@@ -78,9 +85,10 @@ export function usePracticeSessionTracker(
     stateRef.current = {
       playStartedAt: null,
       accumulatedSeconds: 0,
-      trackId: track && !isJamTrack(track) && !isBookVideo(track) ? track.id : null,
+      trackId: track && !isJamTrack(track) && !isBookVideo(track) && !isVideo(track) ? track.id : null,
       jamTrackId: track && isJamTrack(track) ? track.id : null,
       bookVideoId: track && isBookVideo(track) ? track.id : null,
+      videoId: track && isVideo(track) ? track.id : null,
       trackTitle: track ? (isBookVideo(track) ? (track.title || track.filename) : track.title) : "",
     };
   }, [track?.id]);

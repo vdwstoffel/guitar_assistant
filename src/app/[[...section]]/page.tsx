@@ -136,6 +136,7 @@ export default function Home() {
   const [currentAudioTime, setCurrentAudioTime] = useState(0);
   const [audioIsPlaying, setAudioIsPlaying] = useState(false);
   const seekFnRef = useRef<((time: number) => void) | null>(null);
+  const lastTrackAutoFlipPage = useRef<number>(0);
 
   // Page sync state for jam track PDFs
   const [pageSyncEditMode, setPageSyncEditMode] = useState(false);
@@ -475,6 +476,11 @@ export default function Home() {
     if (selectedBookDetail?.pdfPath) {
       setPdfPath(selectedBookDetail.pdfPath);
     }
+    // Always reset to track's initial PDF page on selection (including re-select)
+    if (track.pdfPage) {
+      lastTrackAutoFlipPage.current = track.pdfPage;
+      setPdfPage(track.pdfPage);
+    }
     // Update URL with track selection
     updateLibraryUrl(selectedAuthorId, selectedBookId, track.id);
   };
@@ -501,7 +507,13 @@ export default function Home() {
     authorId: string | null,
     bookId: string | null,
     bookVideoId?: string | null,
+    videoId?: string | null,
   ) => {
+    if (videoId) {
+      router.push(`/videos?video=${videoId}`);
+      return;
+    }
+
     if (jamTrackId) {
       router.push(`/jamtracks?track=${jamTrackId}`);
       return;
@@ -560,13 +572,14 @@ export default function Home() {
   const handleMarkerAdd = async (
     trackId: string,
     name: string,
-    timestamp: number
+    timestamp: number,
+    pdfPage?: number | null
   ) => {
     try {
       const response = await fetch("/api/markers", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ trackId, name, timestamp }),
+        body: JSON.stringify({ trackId, name, timestamp, pdfPage }),
       });
       if (response.ok) {
         const newMarker: Marker = await response.json();
@@ -600,16 +613,18 @@ export default function Home() {
     }
   };
 
-  const handleMarkerRename = async (markerId: string, name: string) => {
+  const handleMarkerRename = async (markerId: string, name: string, pdfPage?: number | null) => {
     try {
+      const body: Record<string, unknown> = { name };
+      if (pdfPage !== undefined) body.pdfPage = pdfPage;
       const response = await fetch(`/api/markers/${markerId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name }),
+        body: JSON.stringify(body),
       });
       if (response.ok) {
         const updateMarkers = (markers: Marker[]) =>
-          markers.map(m => m.id === markerId ? { ...m, name } : m);
+          markers.map(m => m.id === markerId ? { ...m, name, ...(pdfPage !== undefined ? { pdfPage } : {}) } : m);
         setCurrentTrack(prev =>
           prev ? { ...prev, markers: updateMarkers(prev.markers) } : prev
         );
@@ -1328,11 +1343,11 @@ export default function Home() {
   handleJamTrackMarkersClearRef.current = handleJamTrackMarkersClear;
 
   // Stable callbacks for BottomPlayer (never change reference, read from refs)
-  const stableOnMarkerAdd = useCallback((trackId: string, name: string, timestamp: number) => {
+  const stableOnMarkerAdd = useCallback((trackId: string, name: string, timestamp: number, pdfPage?: number | null) => {
     if (currentJamTrackRef.current) {
       handleJamTrackMarkerAddRef.current(trackId, name, timestamp);
     } else {
-      handleMarkerAddRef.current(trackId, name, timestamp);
+      handleMarkerAddRef.current(trackId, name, timestamp, pdfPage);
     }
   }, []);
 
@@ -1344,11 +1359,11 @@ export default function Home() {
     }
   }, []);
 
-  const stableOnMarkerRename = useCallback((markerId: string, name: string) => {
+  const stableOnMarkerRename = useCallback((markerId: string, name: string, pdfPage?: number | null) => {
     if (currentJamTrackRef.current) {
       handleJamTrackMarkerRenameRef.current(currentJamTrackRef.current.id, markerId, name);
     } else {
-      handleMarkerRenameRef.current(markerId, name);
+      handleMarkerRenameRef.current(markerId, name, pdfPage);
     }
   }, []);
 
@@ -1377,12 +1392,49 @@ export default function Home() {
     seekFnRef.current = seekFn;
   }, []);
 
-  // Auto-navigate to track's PDF page when track changes
+  // Reset page flip tracking when track changes
+  const prevTrackIdRef = useRef<string | null>(null);
   useEffect(() => {
-    if (currentTrack?.pdfPage) {
-      setPdfPage(currentTrack.pdfPage);
+    if (currentTrack?.id !== prevTrackIdRef.current) {
+      lastTrackAutoFlipPage.current = 0;
+      prevTrackIdRef.current = currentTrack?.id ?? null;
+      // Immediately navigate to track's initial pdfPage on selection
+      if (currentTrack?.pdfPage) {
+        setPdfPage(currentTrack.pdfPage);
+        lastTrackAutoFlipPage.current = currentTrack.pdfPage;
+      }
     }
   }, [currentTrack?.id, currentTrack?.pdfPage]);
+
+  // Auto-flip PDF page based on marker pdfPages during playback
+  useEffect(() => {
+    if (!currentTrack) return;
+
+    // Markers with pdfPage, sorted by timestamp
+    const pageMarkers = currentTrack.markers
+      .filter((m): m is Marker & { pdfPage: number } => m.pdfPage != null)
+      .sort((a, b) => a.timestamp - b.timestamp);
+
+    if (pageMarkers.length === 0) return;
+
+    let targetPage: number | null = null;
+    for (let i = pageMarkers.length - 1; i >= 0; i--) {
+      if (currentAudioTime >= pageMarkers[i].timestamp) {
+        targetPage = pageMarkers[i].pdfPage;
+        break;
+      }
+    }
+
+    // Before any marker is reached, fall back to track's initial pdfPage
+    if (targetPage === null && currentTrack.pdfPage) {
+      targetPage = currentTrack.pdfPage;
+    }
+
+    if (targetPage !== null && targetPage !== lastTrackAutoFlipPage.current) {
+      lastTrackAutoFlipPage.current = targetPage;
+      setPdfPage(targetPage);
+    }
+  }, [currentTrack?.id, currentTrack?.markers, currentAudioTime]);
 
   // Auto-navigate to video's PDF page when video changes
   useEffect(() => {
@@ -1581,11 +1633,11 @@ export default function Home() {
                 markerBarState.setEditingMarkerName(name);
               }}
               onEditNameChange={markerBarState.setEditingMarkerName}
-              onSaveEdit={(markerId, name) => {
+              onSaveEdit={(markerId, name, markerPdfPage) => {
                 if (currentJamTrack) {
                   handleJamTrackMarkerRename(currentJamTrack.id, markerId, name);
                 } else {
-                  handleMarkerRename(markerId, name);
+                  handleMarkerRename(markerId, name, markerPdfPage);
                 }
                 markerBarState.setEditingMarkerId(null);
               }}
@@ -1614,6 +1666,8 @@ export default function Home() {
               trackTempo={markerBarState.trackTempo}
               trackTimeSignature={markerBarState.trackTimeSignature}
               onTempoChange={handleTempoChange}
+              currentPdfPage={pdfPage}
+              hasPdf={!!pdfPath && !currentJamTrack}
             />
           )}
 
@@ -1812,6 +1866,7 @@ export default function Home() {
                       trackTempo={markerBarState.trackTempo}
                       trackTimeSignature={markerBarState.trackTimeSignature}
                       onTempoChange={handleTempoChange}
+                      hasPdf={false}
                     />
                   </div>
                 )}
@@ -1889,7 +1944,7 @@ export default function Home() {
           </div>
         </>
       ) : activeSection === 'videos' ? (
-        <Videos />
+        <Videos initialVideoId={searchParams.get('video')} />
       ) : activeSection === 'tools' ? (
         <Tools />
       ) : activeSection === 'circle' ? (

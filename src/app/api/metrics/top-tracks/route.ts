@@ -23,6 +23,7 @@ export async function GET(request: NextRequest) {
         trackId: true,
         jamTrackId: true,
         bookVideoId: true,
+        videoId: true,
         trackTitle: true,
         durationSeconds: true,
         playbackSpeed: true,
@@ -41,6 +42,7 @@ export async function GET(request: NextRequest) {
         trackId: string | null;
         jamTrackId: string | null;
         bookVideoId: string | null;
+        videoId: string | null;
         title: string;
         bookName: string | null;
         authorId: string | null;
@@ -54,7 +56,7 @@ export async function GET(request: NextRequest) {
     >();
 
     for (const s of sessions) {
-      const key = s.trackId ?? s.jamTrackId ?? s.bookVideoId ?? "unknown";
+      const key = s.trackId ?? s.jamTrackId ?? s.bookVideoId ?? s.videoId ?? "unknown";
       const existing = trackMap.get(key);
       if (existing) {
         existing.playCount++;
@@ -70,6 +72,7 @@ export async function GET(request: NextRequest) {
           trackId: s.trackId,
           jamTrackId: s.jamTrackId,
           bookVideoId: s.bookVideoId,
+          videoId: s.videoId,
           title: s.trackTitle,
           bookName: s.track?.book?.name ?? s.bookVideo?.book?.name ?? null,
           authorId: s.track?.book?.authorId ?? s.bookVideo?.book?.authorId ?? null,
@@ -87,6 +90,7 @@ export async function GET(request: NextRequest) {
       trackId: t.trackId,
       jamTrackId: t.jamTrackId,
       bookVideoId: t.bookVideoId,
+      videoId: t.videoId,
       title: t.title,
       bookName: t.bookName,
       authorId: t.authorId,

@@ -72,6 +72,7 @@ model Marker {
   id        String @id @default(uuid())
   name      String
   timestamp Float
+  pdfPage   Int?
   trackId   String
   track     Track  @relation(fields: [trackId], references: [id], onDelete: Cascade)
 
@@ -100,12 +101,13 @@ model BookVideo {
 }
 
 model Video {
-  id        String   @id @default(uuid())
-  title     String
-  youtubeId String
-  sortOrder Int      @default(0)
-  category  String?
-  createdAt DateTime @default(now())
+  id               String            @id @default(uuid())
+  title            String
+  youtubeId        String
+  sortOrder        Int               @default(0)
+  category         String?
+  createdAt        DateTime          @default(now())
+  practiceSessions PracticeSession[]
 }
 
 model JamTrack {
@@ -175,9 +177,11 @@ model PracticeSession {
   trackId          String?
   jamTrackId       String?
   bookVideoId      String?
+  videoId          String?
   track            Track?     @relation(fields: [trackId], references: [id], onDelete: Cascade)
   jamTrack         JamTrack?  @relation(fields: [jamTrackId], references: [id], onDelete: Cascade)
   bookVideo        BookVideo? @relation(fields: [bookVideoId], references: [id], onDelete: Cascade)
+  video            Video?     @relation(fields: [videoId], references: [id], onDelete: Cascade)
   startTime        DateTime   @default(now())
   durationSeconds  Float
   playbackSpeed    Int        @default(100)
@@ -188,5 +192,6 @@ model PracticeSession {
   @@index([trackId])
   @@index([jamTrackId])
   @@index([bookVideoId])
+  @@index([videoId])
   @@index([startTime])
 }

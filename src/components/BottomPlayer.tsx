@@ -21,7 +21,7 @@ export interface MarkerBarState {
   setEditingMarkerName: (value: string) => void;
   currentTime: number;
   jumpToMarker: (timestamp: number) => void;
-  addMarker: (name: string, timestamp: number) => void;
+  addMarker: (name: string, timestamp: number, pdfPage?: number | null) => void;
   formatTime: (seconds: number) => string;
   // Count-in state
   isCountingIn: boolean;
@@ -34,7 +34,7 @@ export interface MarkerBarState {
 
 interface BottomPlayerProps {
   track: Track | JamTrack | null;
-  onMarkerAdd: (trackId: string, name: string, timestamp: number) => void;
+  onMarkerAdd: (trackId: string, name: string, timestamp: number, pdfPage?: number | null) => void;
   onMarkerUpdate: (markerId: string, timestamp: number) => void;
   onMarkerRename: (markerId: string, name: string) => void;
   onMarkerDelete: (markerId: string) => void;
@@ -790,9 +790,9 @@ function BottomPlayer({
     setShowMarkerDialog(true);
   }, []);
 
-  const addMarker = useCallback((name: string, timestamp: number) => {
+  const addMarker = useCallback((name: string, timestamp: number, pdfPage?: number | null) => {
     if (!track || !name.trim()) return;
-    onMarkerAdd(track.id, name.trim(), timestamp);
+    onMarkerAdd(track.id, name.trim(), timestamp, pdfPage);
     setShowMarkerDialog(false);
   }, [track, onMarkerAdd]);
 
@@ -1275,7 +1275,7 @@ function BottomPlayer({
           isOpen={showMarkerDialog}
           timestamp={pendingMarkerTimestamp}
           formatTime={formatTime}
-          onSave={(name) => addMarker(name, pendingMarkerTimestamp)}
+          onSave={(name, pdfPage) => addMarker(name, pendingMarkerTimestamp, pdfPage)}
           onCancel={handleCancelMarkerDialog}
         />
     </div>
