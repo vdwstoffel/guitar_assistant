@@ -79,13 +79,7 @@ function BottomPlayer({
   const sessionTrackerRef = useRef(sessionTracker);
   sessionTrackerRef.current = sessionTracker;
   const [speedInputValue, setSpeedInputValue] = useState("");
-  const [volume, setVolume] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('globalVolume');
-      return saved ? parseInt(saved, 10) : 100;
-    }
-    return 100;
-  });
+  const [volume, setVolume] = useState(50);
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
   const [showMarkers, setShowMarkers] = useState(() => (track?.markers?.length ?? 0) > 0);
   const [leadIn, setLeadIn] = useState(2);
@@ -180,6 +174,7 @@ function BottomPlayer({
   }, []);
 
   const saveSpeedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const saveVolumeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handlePlaybackSpeed = (speed: number) => {
     const clampedSpeed = Math.max(10, Math.min(200, speed));
@@ -227,7 +222,6 @@ function BottomPlayer({
   const handleVolume = (newVolume: number) => {
     const clampedVolume = Math.max(0, Math.min(100, newVolume));
     setVolume(clampedVolume);
-    localStorage.setItem('globalVolume', clampedVolume.toString());
     if (wavesurferRef.current) {
       wavesurferRef.current.setVolume(clampedVolume / 100);
     }
@@ -235,6 +229,22 @@ function BottomPlayer({
     // createMediaElementSource bypasses HTMLMediaElement.volume)
     if (volumeGainNodeRef.current) {
       volumeGainNodeRef.current.gain.value = clampedVolume / 100;
+    }
+    // Debounced save to DB
+    if (track) {
+      if (saveVolumeTimeoutRef.current) clearTimeout(saveVolumeTimeoutRef.current);
+      const trackId = track.id;
+      const isJamTrack = !('bookId' in track);
+      saveVolumeTimeoutRef.current = setTimeout(() => {
+        const url = isJamTrack
+          ? `/api/jamtracks/${trackId}`
+          : `/api/tracks/${trackId}/tempo`;
+        fetch(url, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ volume: clampedVolume }),
+        }).catch(err => console.error("Failed to save volume:", err));
+      }, 500);
     }
   };
 
@@ -285,9 +295,8 @@ function BottomPlayer({
       setPlaybackSpeed(speed);
       ws.setPlaybackRate(speed / 100, true);
 
-      // Apply global volume
-      const savedVolume = localStorage.getItem('globalVolume');
-      const vol = savedVolume ? parseInt(savedVolume, 10) : 100;
+      // Apply per-track volume (default 50%)
+      const vol = track.volume ?? 50;
       setVolume(vol);
       ws.setVolume(vol / 100);
 

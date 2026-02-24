@@ -5,6 +5,7 @@ interface UpdateTempoBody {
   tempo?: number | null;
   timeSignature?: string;
   playbackSpeed?: number | null;
+  volume?: number | null;
 }
 
 export async function PATCH(
@@ -14,7 +15,7 @@ export async function PATCH(
   try {
     const { id } = await params;
     const body: UpdateTempoBody = await request.json();
-    const { tempo, timeSignature, playbackSpeed } = body;
+    const { tempo, timeSignature, playbackSpeed, volume } = body;
 
     // Validate tempo range if provided
     if (tempo !== null && tempo !== undefined && (tempo < 20 || tempo > 300)) {
@@ -41,7 +42,15 @@ export async function PATCH(
       );
     }
 
-    const updateData: { tempo?: number | null; timeSignature?: string; playbackSpeed?: number | null } = {};
+    // Validate volume range if provided
+    if (volume !== null && volume !== undefined && (volume < 0 || volume > 100)) {
+      return NextResponse.json(
+        { error: "Volume must be between 0 and 100" },
+        { status: 400 }
+      );
+    }
+
+    const updateData: { tempo?: number | null; timeSignature?: string; playbackSpeed?: number | null; volume?: number | null } = {};
     if (tempo !== undefined) {
       updateData.tempo = tempo;
     }
@@ -50,6 +59,9 @@ export async function PATCH(
     }
     if (playbackSpeed !== undefined) {
       updateData.playbackSpeed = playbackSpeed;
+    }
+    if (volume !== undefined) {
+      updateData.volume = volume;
     }
 
     const updatedTrack = await prisma.track.update({

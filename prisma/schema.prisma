@@ -59,6 +59,7 @@ model Track {
   tempo         Int?
   timeSignature String   @default("4/4")
   playbackSpeed Int?
+  volume        Int?
   lufs          Float?
   markers           Marker[]
   practiceSessions  PracticeSession[]
@@ -121,6 +122,7 @@ model JamTrack {
   tempo         Int?
   timeSignature String           @default("4/4")
   playbackSpeed Int?
+  volume        Int?
   lufs          Float?
   markers           JamTrackMarker[]
   pdfs              JamTrackPdf[]

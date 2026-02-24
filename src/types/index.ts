@@ -22,6 +22,7 @@ export interface Track {
   tempo: number | null;
   timeSignature: string;
   playbackSpeed: number | null;
+  volume: number | null;
   lufs: number | null;
 }
 
@@ -123,6 +124,7 @@ export interface JamTrack {
   tempo: number | null;
   timeSignature: string;
   playbackSpeed: number | null;
+  volume: number | null;
   lufs: number | null;
   markers: JamTrackMarker[];
   pdfs: JamTrackPdf[];

@@ -29,10 +29,19 @@ export async function GET(request: NextRequest) {
         playbackSpeed: true,
         startTime: true,
         completedSession: true,
-        track: { select: { bookId: true, book: { select: { name: true, authorId: true } } } },
-        bookVideo: { select: { bookId: true, book: { select: { name: true, authorId: true } } } },
+        track: { select: { completed: true, bookId: true, book: { select: { name: true, authorId: true } } } },
+        jamTrack: { select: { completed: true } },
+        bookVideo: { select: { completed: true, bookId: true, book: { select: { name: true, authorId: true } } } },
       },
       orderBy: { startTime: "desc" },
+    });
+
+    // Filter out tracks/jamTracks/bookVideos marked as completed
+    const filtered = sessions.filter((s) => {
+      if (s.track?.completed) return false;
+      if (s.jamTrack?.completed) return false;
+      if (s.bookVideo?.completed) return false;
+      return true;
     });
 
     // Aggregate per track
@@ -55,7 +64,7 @@ export async function GET(request: NextRequest) {
       }
     >();
 
-    for (const s of sessions) {
+    for (const s of filtered) {
       const key = s.trackId ?? s.jamTrackId ?? s.bookVideoId ?? s.videoId ?? "unknown";
       const existing = trackMap.get(key);
       if (existing) {
