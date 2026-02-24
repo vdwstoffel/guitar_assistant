@@ -32,6 +32,8 @@ interface MarkersBarProps {
   // PDF page props
   currentPdfPage?: number | null;
   hasPdf?: boolean;
+  // Layout mode
+  layout?: "horizontal" | "vertical";
 }
 
 const MarkersBar = memo(function MarkersBar({
@@ -54,6 +56,7 @@ const MarkersBar = memo(function MarkersBar({
   onTempoChange,
   currentPdfPage,
   hasPdf = false,
+  layout = "horizontal",
 }: MarkersBarProps) {
   const [tapBpm, setTapBpm] = useState<number | null>(null);
   const [tapCount, setTapCount] = useState(0);
@@ -160,14 +163,21 @@ const MarkersBar = memo(function MarkersBar({
 
   if (!visible) return null;
 
+  const isVertical = layout === "vertical";
+
   return (
-    <div className="w-full border-t border-gray-700 bg-gray-800 text-white pt-2 pb-2 px-2 sm:px-4">
-      {/* Controls Row - Centered */}
-      <div className="flex items-center justify-center gap-2 sm:gap-4 flex-wrap">
+    <div className={isVertical
+      ? "h-full flex flex-col bg-gray-800 text-white p-2 overflow-hidden"
+      : "w-full border-t border-gray-700 bg-gray-800 text-white pt-2 pb-2 px-2 sm:px-4"
+    }>
+      {/* Controls */}
+      <div className={isVertical
+        ? "flex flex-col gap-2 shrink-0 pb-2 border-b border-gray-700"
+        : "flex items-center justify-center gap-2 sm:gap-4 flex-wrap"
+      }>
         {/* Count-in / Lead-in Controls */}
         {trackTempo && trackTempo > 0 ? (
           <div className="flex items-center gap-2">
-            {/* Count-in indicator */}
             {isCountingIn ? (
               <div className="flex items-center gap-1 text-yellow-400 text-xs animate-pulse">
                 <span className="font-bold">{currentCountInBeat}/{totalCountInBeats}</span>
@@ -235,29 +245,33 @@ const MarkersBar = memo(function MarkersBar({
           </div>
         )}
 
-        <button
-          onClick={handleOpenAddDialog}
-          className="px-3 py-1 bg-green-600 hover:bg-green-700 rounded text-xs"
-        >
-          Add Marker
-        </button>
-
-        {markers.length > 0 && (
+        <div className="flex items-center gap-2">
           <button
-            onClick={onClearAll}
-            className="text-xs text-red-400 hover:text-red-300"
+            onClick={handleOpenAddDialog}
+            className="px-3 py-1 bg-green-600 hover:bg-green-700 rounded text-xs"
           >
-            Clear all
+            Add Marker
           </button>
-        )}
+
+          {markers.length > 0 && (
+            <button
+              onClick={onClearAll}
+              className="text-xs text-red-400 hover:text-red-300"
+            >
+              Clear all
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* Markers List - Spread across full width and centered */}
+      {/* Markers List */}
       {markers.length > 0 && (
-        <div className="flex flex-wrap justify-evenly items-center gap-2 mt-2 w-full">
+        <div className={isVertical
+          ? "flex flex-col gap-1 mt-2 overflow-y-auto flex-1 min-h-0"
+          : "flex flex-wrap justify-evenly items-center gap-2 mt-2 w-full"
+        }>
           {sortedMarkers.map((marker, index) => {
               const isPassed = marker.timestamp <= currentTime;
-              // Show shortcut key: 1-9 for first 9, 0 for 10th
               const shortcutKey = index < 9 ? String(index + 1) : index === 9 ? '0' : null;
               const markerPdfPage = 'pdfPage' in marker ? (marker as Marker).pdfPage : null;
               return (
@@ -278,6 +292,7 @@ const MarkersBar = memo(function MarkersBar({
                 </button>
                 <button
                   onClick={() => onJumpToMarker(marker.timestamp)}
+                  className="truncate"
                 >
                   {marker.name}
                 </button>
@@ -288,7 +303,7 @@ const MarkersBar = memo(function MarkersBar({
                 )}
                 <button
                   onClick={() => handleOpenEditDialog(marker)}
-                  className="p-0.5 text-gray-500 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                  className="p-0.5 text-gray-500 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity ml-auto"
                   title="Edit marker"
                 >
                   <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">

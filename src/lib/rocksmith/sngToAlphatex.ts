@@ -4,10 +4,12 @@
  * AlphaTex reference: https://alphatab.net/docs/alphatex/introduction
  * SNG data comes from sngParser.ts
  */
-import { SongData, Note, Beat, ChordTemplate } from "./sngParser";
+import { SongData, Note, Beat, BendValue, ChordTemplate } from "./sngParser";
 
 // Standard tuning MIDI notes for each string (high to low): E4 B3 G3 D3 A2 E2
 const STANDARD_TUNING = [64, 59, 55, 50, 45, 40];
+// Standard bass tuning MIDI notes (high to low): G2 D2 A1 E1
+const STANDARD_BASS_TUNING = [43, 38, 33, 28];
 const NOTE_NAMES = [
   "C",
   "C#",
@@ -29,14 +31,17 @@ function midiToNoteName(midi: number): string {
   return `${note}${octave}`;
 }
 
-function getTuningString(tuningOffsets: number[]): string {
+function getTuningString(tuningOffsets: number[], isBass: boolean): string {
   // tuningOffsets: semitone offsets from standard tuning per string
   // SNG strings: 0=low E, 1=A, 2=D, 3=G, 4=B, 5=high E
   // AlphaTex tuning: high to low (string 1 = high E)
+  const numStrings = isBass ? 4 : 6;
+  const baseTuning = isBass ? STANDARD_BASS_TUNING : STANDARD_TUNING;
   return tuningOffsets
+    .slice(0, numStrings)
     .map((offset, sngString) => {
-      const standardIdx = 5 - sngString; // reverse: SNG string 0 = AlphaTex string 6
-      return midiToNoteName(STANDARD_TUNING[standardIdx] + offset);
+      const standardIdx = (numStrings - 1) - sngString;
+      return midiToNoteName(baseTuning[standardIdx] + offset);
     })
     .reverse() // AlphaTex expects high to low
     .join(" ");
@@ -62,17 +67,69 @@ function getFullArrangementNotes(song: SongData): Note[] {
   return allNotes;
 }
 
-/** Find the closest note duration for a given time in seconds at a given tempo */
-function quantizeDuration(durationSec: number, bpm: number): number {
+interface Duration {
+  value: number;
+  dotted: boolean;
+}
+
+/** Find the closest note duration (with dotted support) for a given time */
+function quantizeDuration(durationSec: number, bpm: number): Duration {
   const beatDuration = 60 / bpm; // seconds per quarter note
   const ratio = durationSec / beatDuration;
 
-  if (ratio >= 3) return 1; // whole
-  if (ratio >= 1.5) return 2; // half
-  if (ratio >= 0.75) return 4; // quarter
-  if (ratio >= 0.375) return 8; // eighth
-  if (ratio >= 0.1875) return 16; // sixteenth
-  return 32; // thirty-second
+  // Candidates ordered from longest to shortest, interleaving dotted values
+  const candidates: { value: number; dotted: boolean; beats: number }[] = [
+    { value: 1, dotted: true, beats: 6 },    // dotted whole
+    { value: 1, dotted: false, beats: 4 },    // whole
+    { value: 2, dotted: true, beats: 3 },     // dotted half
+    { value: 2, dotted: false, beats: 2 },    // half
+    { value: 4, dotted: true, beats: 1.5 },   // dotted quarter
+    { value: 4, dotted: false, beats: 1 },    // quarter
+    { value: 8, dotted: true, beats: 0.75 },  // dotted eighth
+    { value: 8, dotted: false, beats: 0.5 },  // eighth
+    { value: 16, dotted: true, beats: 0.375 }, // dotted sixteenth
+    { value: 16, dotted: false, beats: 0.25 }, // sixteenth
+    { value: 32, dotted: false, beats: 0.125 }, // thirty-second
+  ];
+
+  let best = candidates[candidates.length - 1];
+  let bestDiff = Infinity;
+  for (const c of candidates) {
+    const diff = Math.abs(ratio - c.beats);
+    if (diff < bestDiff) {
+      bestDiff = diff;
+      best = c;
+    }
+  }
+  return { value: best.value, dotted: best.dotted };
+}
+
+/** Format a duration as an AlphaTex string (just the number, e.g., "4") */
+function formatDuration(dur: Duration): string {
+  return `${dur.value}`;
+}
+
+/**
+ * Combine dotted flag with existing beat effects into a single {...} block.
+ * AlphaTex dotted is a beat effect `d`, so `{d v}` for dotted + vibrato.
+ * @param dur - duration (checked for dotted flag)
+ * @param beatEfx - existing beat effects string like `{ch "A5" v}` or empty
+ */
+function combineBeatEffects(dur: Duration, beatEfx: string): string {
+  if (!dur.dotted && !beatEfx) return "";
+  const parts: string[] = [];
+  if (dur.dotted) parts.push("d");
+  if (beatEfx) {
+    // Strip outer braces from existing beat effects and add contents
+    parts.push(beatEfx.slice(1, -1).trim());
+  }
+  return `{${parts.join(" ")}}`;
+}
+
+/** Get the beat count for a duration */
+function durationToBeats(dur: Duration): number {
+  const base = 4 / dur.value;
+  return dur.dotted ? base * 1.5 : base;
 }
 
 /** Get note-level effects (go on individual notes, before duration) */
@@ -83,23 +140,43 @@ function getNoteEffects(note: Note): string {
   if (note.mask & 0x2) effects.push("h");
   // Palm mute: mask bit 9 = 0x200
   if (note.mask & 0x200) effects.push("pm");
-  // Slide
-  if (note.slideTo > 0) effects.push("sl");
+  // Slide (pitched or unpitched — AlphaTex only has generic slide)
+  if (note.slideTo > 0 || note.slideUnpitchTo !== 0) effects.push("sl");
   // Tap
   if (note.tap > 0) effects.push("t");
-  // Bend
+  // Bend - use full curve from bendValues when available
   if (note.maxBend > 0) {
-    const bendQuarters = Math.round(note.maxBend * 4);
-    effects.push(`b (0 ${bendQuarters} ${bendQuarters} 0)`);
+    effects.push(formatBend(note.bendValues, note.maxBend));
   }
 
   if (effects.length === 0) return "";
   return `{${effects.join(" ")}}`;
 }
 
+/** Format bend effect from bend values array */
+function formatBend(bendValues: BendValue[], maxBend: number): string {
+  const peakQ = Math.round(maxBend * 4);
+  if (bendValues.length === 0) {
+    return `b (0 ${peakQ} ${peakQ} 0)`;
+  }
+  // Use actual start/end from the bend curve
+  const startQ = Math.round(bendValues[0].step * 4);
+  const endQ = Math.round(bendValues[bendValues.length - 1].step * 4);
+  return `b (${startQ} ${peakQ} ${peakQ} ${endQ})`;
+}
+
 /** Get beat-level effects (go after duration) */
-function getBeatEffects(note: Note): string {
+function getBeatEffects(
+  note: Note,
+  chordTemplates: ChordTemplate[]
+): string {
   const effects: string[] = [];
+
+  // Chord name
+  if (note.chordId >= 0 && chordTemplates[note.chordId]?.name) {
+    const name = chordTemplates[note.chordId].name.trim();
+    if (name) effects.push(`ch "${name}"`);
+  }
 
   if (note.vibrato > 0) effects.push("v");
   if (note.slap > 0) effects.push("ds");
@@ -111,16 +188,17 @@ function getBeatEffects(note: Note): string {
 function formatChord(
   note: Note,
   chordTemplates: ChordTemplate[],
-  noteEffects: string
+  noteEffects: string,
+  numStrings: number
 ): string | null {
   if (note.chordId < 0 || !chordTemplates[note.chordId]) return null;
 
   const ct = chordTemplates[note.chordId];
   const chordNotes: string[] = [];
-  for (let s = 0; s < 6; s++) {
+  for (let s = 0; s < numStrings; s++) {
     if (ct.frets[s] !== 255) {
-      // SNG string 0=lowE → AlphaTex string 6, SNG string 5=highE → AlphaTex string 1
-      chordNotes.push(`${ct.frets[s]}.${6 - s}${noteEffects}`);
+      // SNG string 0=lowest → AlphaTex string N, SNG string N-1=highest → AlphaTex string 1
+      chordNotes.push(`${ct.frets[s]}.${numStrings - s}${noteEffects}`);
     }
   }
   if (chordNotes.length > 1) {
@@ -129,6 +207,69 @@ function formatChord(
     return chordNotes[0];
   }
   return null;
+}
+
+/** Format a section name for display (clean up SNG naming conventions) */
+function formatSectionName(name: string): string {
+  // Skip non-musical sections
+  if (name === "noguitar" || name === "empty") return "";
+  // Insert space before capitals: "preChorus" -> "pre Chorus"
+  const spaced = name.replace(/([a-z])([A-Z])/g, "$1 $2");
+  // Capitalize first letter
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
+/**
+ * Group beats into measures using the SNG beat grid's native measure field.
+ * Returns measures with their beats, start/end times, and beats-per-bar.
+ */
+function groupBeatsIntoMeasures(
+  beats: Beat[],
+  startIdx: number
+): { startTime: number; endTime: number; beats: Beat[]; beatsPerBar: number }[] {
+  const measures: { startTime: number; endTime: number; beats: Beat[]; beatsPerBar: number }[] = [];
+  let currentMeasure = beats[startIdx]?.measure ?? 0;
+  let currentBeats: Beat[] = [];
+
+  for (let i = startIdx; i < beats.length; i++) {
+    if (beats[i].measure !== currentMeasure) {
+      if (currentBeats.length > 0) {
+        measures.push({
+          startTime: currentBeats[0].time,
+          endTime: beats[i].time,
+          beats: currentBeats,
+          beatsPerBar: currentBeats.length,
+        });
+      }
+      currentMeasure = beats[i].measure;
+      currentBeats = [beats[i]];
+    } else {
+      currentBeats.push(beats[i]);
+    }
+  }
+  // Last measure
+  if (currentBeats.length > 0) {
+    const lastBeat = currentBeats[currentBeats.length - 1];
+    const estimatedBeatDur = currentBeats.length > 1
+      ? currentBeats[1].time - currentBeats[0].time
+      : 60 / 120;
+    measures.push({
+      startTime: currentBeats[0].time,
+      endTime: lastBeat.time + estimatedBeatDur,
+      beats: currentBeats,
+      beatsPerBar: currentBeats.length,
+    });
+  }
+  return measures;
+}
+
+/** Compute local BPM from a measure's beats */
+function measureBpm(measureBeats: Beat[]): number {
+  if (measureBeats.length < 2) return 120;
+  // Average beat duration across the measure for stability
+  const totalTime = measureBeats[measureBeats.length - 1].time - measureBeats[0].time;
+  const intervals = measureBeats.length - 1;
+  return Math.round(60 / (totalTime / intervals));
 }
 
 export interface AlphaTexOptions {
@@ -149,32 +290,27 @@ export function generateAlphaTex(
 ): string {
   const { maxMeasures = 0 } = options;
   const notes = getFullArrangementNotes(song);
-  const tuning = getTuningString(song.metadata.tuning);
+  const isBass = arrangementName.toLowerCase() === "bass";
+  const numStrings = isBass ? 4 : 6;
+  const tuning = getTuningString(song.metadata.tuning, isBass);
 
-  // Estimate BPM from beat grid (beats are quarter notes)
-  const firstBeat = song.beats[0];
-  const secondBeat = song.beats[1];
-  const bpm = secondBeat
-    ? Math.round(60 / (secondBeat.time - firstBeat.time))
-    : 120;
-  const BEATS_PER_BAR = 4; // Assume 4/4 time
+  // Initial BPM from first beats
+  const initialBpm = getBPM(song);
 
   const lines: string[] = [];
   lines.push(`\\title "${songTitle}"`);
   lines.push(`\\subtitle "${arrangementName}"`);
   lines.push(`\\artist "${artistName}"`);
-  lines.push(`\\tempo ${bpm}`);
-  lines.push(`\\ts ${BEATS_PER_BAR} 4`);
+  lines.push(`\\tempo ${initialBpm}`);
+  lines.push(`\\ts 4 4`);
   lines.push(`\\tuning ${tuning}`);
-  lines.push(`\\instrument 25`); // Steel guitar
+  lines.push(`\\instrument ${isBass ? 34 : 25}`);
   lines.push(`\\staff{score tabs}`);
   lines.push(`.`); // End of metadata
 
   // Find the beat where the first note falls so we can align measure
-  // boundaries to where the music actually starts. Without this, if the
-  // beat grid starts 1 beat before the first note, every bar is offset.
-  const barDuration = (BEATS_PER_BAR * 60) / bpm;
-  const firstNoteTime = notes.length > 0 ? notes[0].time : firstBeat.time;
+  // boundaries to where the music actually starts.
+  const firstNoteTime = notes.length > 0 ? notes[0].time : song.beats[0]?.time ?? 0;
   let beatOffset = 0;
   for (let i = 0; i < song.beats.length; i++) {
     if (song.beats[i].time >= firstNoteTime - 0.02) {
@@ -183,32 +319,33 @@ export function generateAlphaTex(
     }
   }
 
-  // Calculate rest bars from the beat where notes start
-  const groupStartTime = song.beats[beatOffset].time;
+  // Calculate rest bars before the first note
+  const groupStartTime = song.beats[beatOffset]?.time ?? 0;
+  // Use initial BPM for rest bar estimation
+  const barDuration = (4 * 60) / initialBpm;
   const restBars = Math.round(groupStartTime / barDuration);
   for (let i = 0; i < restBars; i++) {
     lines.push(`r.1 |`);
   }
 
-  // Group SNG beats into musical measures (4 beats each in 4/4),
-  // starting from the beat aligned to the first note
-  const musicalMeasures: {
-    startTime: number;
-    endTime: number;
-    beats: Beat[];
-  }[] = [];
-  for (let i = beatOffset; i < song.beats.length; i += BEATS_PER_BAR) {
-    const barBeats = song.beats.slice(i, i + BEATS_PER_BAR);
-    const endTime =
-      i + BEATS_PER_BAR < song.beats.length
-        ? song.beats[i + BEATS_PER_BAR].time
-        : barBeats[barBeats.length - 1].time + 60 / bpm;
-    musicalMeasures.push({
-      startTime: barBeats[0].time,
-      endTime,
-      beats: barBeats,
-    });
+  // Group beats into measures using the SNG beat grid's native measure field
+  const musicalMeasures = groupBeatsIntoMeasures(song.beats, beatOffset);
+
+  // Build section-to-measure map from SNG sections
+  const sectionAtMeasure = new Map<number, string>();
+  for (const section of song.sections) {
+    const mi = musicalMeasures.findIndex(
+      (m) => section.startTime >= m.startTime - 0.02 && section.startTime < m.endTime
+    );
+    if (mi >= 0) {
+      const name = formatSectionName(section.name);
+      if (name) sectionAtMeasure.set(mi, name);
+    }
   }
+
+  // Track time signature and tempo for change detection
+  let currentBeatsPerBar = 4;
+  let currentBpm = initialBpm;
 
   // For each musical measure, generate AlphaTex
   let noteIdx = 0;
@@ -219,6 +356,29 @@ export function generateAlphaTex(
 
   for (let mi = 0; mi < measureLimit; mi++) {
     const measure = musicalMeasures[mi];
+    const localBpm = measureBpm(measure.beats);
+    const barMetadata: string[] = [];
+
+    // Emit section marker
+    if (sectionAtMeasure.has(mi)) {
+      barMetadata.push(`\\section "${sectionAtMeasure.get(mi)}"`);
+    }
+
+    // Emit time signature change
+    if (measure.beatsPerBar !== currentBeatsPerBar) {
+      currentBeatsPerBar = measure.beatsPerBar;
+      barMetadata.push(`\\ts ${currentBeatsPerBar} 4`);
+    }
+
+    // Emit tempo change (> 2 BPM threshold)
+    if (Math.abs(localBpm - currentBpm) > 2) {
+      currentBpm = localBpm;
+      barMetadata.push(`\\tempo ${currentBpm}`);
+    }
+
+    if (barMetadata.length > 0) {
+      lines.push(barMetadata.join(" "));
+    }
 
     // Collect notes in this measure
     const measureNotes: Note[] = [];
@@ -230,7 +390,11 @@ export function generateAlphaTex(
     }
 
     if (measureNotes.length === 0) {
-      lines.push(`r.1 |`);
+      // Use a rest that matches the current time signature
+      const fullBarSec = (currentBeatsPerBar * 60) / localBpm;
+      const fullBarDur = quantizeDuration(fullBarSec, localBpm);
+      const fullBarEfx = fullBarDur.dotted ? "{d}" : "";
+      lines.push(`r.${formatDuration(fullBarDur)}${fullBarEfx} |`);
       continue;
     }
 
@@ -250,38 +414,65 @@ export function generateAlphaTex(
     }
     if (currentGroup.length > 0) beatGroups.push(currentGroup);
 
-    // Generate AlphaTex for each beat group
+    // Generate AlphaTex for each beat group with sustain-based durations and rests
     const beatStrings: string[] = [];
+    let totalBeats = 0;
 
     for (let i = 0; i < beatGroups.length; i++) {
       const group = beatGroups[i];
+      const noteStartTime = group[0].time;
       const nextTime = beatGroups[i + 1]?.[0]?.time ?? measure.endTime;
-      const duration = nextTime - group[0].time;
-      const alphaDuration = quantizeDuration(duration, bpm);
+      const maxAvailable = nextTime - noteStartTime;
+
+      // Use sustain if available, otherwise fall back to gap-based
+      const sustainSec = group[0].sustain > 0 ? group[0].sustain : maxAvailable;
+      const noteDurSec = Math.min(sustainSec, maxAvailable);
+      const dur = quantizeDuration(noteDurSec, localBpm);
+      const durBeats = durationToBeats(dur);
+
+      // Don't exceed the measure budget
+      if (totalBeats + durBeats > currentBeatsPerBar + 0.01) break;
 
       const noteEfx = getNoteEffects(group[0]);
-      const beatEfx = getBeatEffects(group[0]);
+      const beatEfx = getBeatEffects(group[0], song.chordTemplates);
+      const durStr = formatDuration(dur);
+      const allBeatEfx = combineBeatEffects(dur, beatEfx);
 
       const formatNote = (n: Note): string => {
-        const chord = formatChord(n, song.chordTemplates, noteEfx);
+        const chord = formatChord(n, song.chordTemplates, noteEfx, numStrings);
         if (chord) return chord;
-        // Single note: fret.string{noteEffects}
-        return `${n.fret}.${6 - n.string}${noteEfx}`;
+        return `${n.fret}.${numStrings - n.string}${noteEfx}`;
       };
 
       if (group.length === 1) {
-        beatStrings.push(
-          `${formatNote(group[0])}.${alphaDuration}${beatEfx}`
-        );
+        beatStrings.push(`${formatNote(group[0])}.${durStr}${allBeatEfx}`);
       } else {
-        // For chords, apply note effects to each note
         const chordNotes = group.map(
-          (n) => `${n.fret}.${6 - n.string}${getNoteEffects(n)}`
+          (n) => `${n.fret}.${numStrings - n.string}${getNoteEffects(n)}`
         );
-        beatStrings.push(
-          `(${chordNotes.join(" ")}).${alphaDuration}${beatEfx}`
-        );
+        beatStrings.push(`(${chordNotes.join(" ")}).${durStr}${allBeatEfx}`);
       }
+      totalBeats += durBeats;
+
+      // Insert rest if there's a gap between this note's sustain and the next note
+      if (noteDurSec < maxAvailable - 0.03 && i < beatGroups.length - 1) {
+        const gapSec = maxAvailable - noteDurSec;
+        const restDur = quantizeDuration(gapSec, localBpm);
+        const restBeats = durationToBeats(restDur);
+        if (totalBeats + restBeats <= currentBeatsPerBar + 0.01) {
+          const restEfx = restDur.dotted ? "{d}" : "";
+          beatStrings.push(`r.${formatDuration(restDur)}${restEfx}`);
+          totalBeats += restBeats;
+        }
+      }
+    }
+
+    // Reconcile: if under-budget, pad with a rest
+    if (totalBeats < currentBeatsPerBar - 0.01 && beatStrings.length > 0) {
+      const remaining = currentBeatsPerBar - totalBeats;
+      const padDur = quantizeDuration((remaining * 60) / localBpm, localBpm);
+      const padEfx = padDur.dotted ? "{d}" : "";
+      beatStrings.push(`r.${formatDuration(padDur)}${padEfx}`);
     }
 
     lines.push(beatStrings.join(" ") + " |");
@@ -303,8 +494,8 @@ export function getBPM(song: SongData): number {
  * The SNG beat grid has exact timing for every beat, which is more accurate
  * than relying on a fixed BPM (which causes cumulative drift).
  *
- * Returns an array of [audioTimeSeconds, alphaTabTimeMs] pairs.
- * The viewer interpolates between these to get accurate cursor positioning.
+ * Uses per-beat local BPM for accurate MIDI time accumulation, matching
+ * the tempo changes emitted in the AlphaTex output.
  */
 export function generateSyncData(song: SongData): {
   bpm: number;
@@ -313,9 +504,7 @@ export function generateSyncData(song: SongData): {
   points: [number, number][];
 } {
   const bpm = getBPM(song);
-  const beatDurationMs = 60000 / bpm;
-  const BEATS_PER_BAR = 4;
-  const barDuration = (BEATS_PER_BAR * 60) / bpm;
+  const INITIAL_BEAT_DUR_MS = 60000 / bpm;
 
   // Find the beat offset aligned to the first note (same logic as generateAlphaTex)
   const notes = getFullArrangementNotes(song);
@@ -328,17 +517,29 @@ export function generateSyncData(song: SongData): {
     }
   }
 
+  // Calculate rest bars (must match generateAlphaTex logic)
   const groupStartTime = song.beats[beatOffset]?.time ?? 0;
+  const barDuration = (4 * 60) / bpm;
   const restBars = Math.round(groupStartTime / barDuration);
-  const restBarsMs = restBars * BEATS_PER_BAR * beatDurationMs;
+  const restBarsMs = restBars * 4 * INITIAL_BEAT_DUR_MS;
 
-  // Sample every beat from the offset onwards. alphaTab MIDI time starts at
-  // restBarsMs for the first musical beat (beatOffset).
+  // Accumulate MIDI time per beat using local tempo.
+  // Each beat's MIDI duration matches what alphaTab expects based on the
+  // tempo markings emitted in the AlphaTex.
   const points: [number, number][] = [];
+  let midiTimeMs = restBarsMs;
+
   for (let i = beatOffset; i < song.beats.length; i++) {
     const audioTime = song.beats[i].time;
-    const alphaTabTime = restBarsMs + (i - beatOffset) * beatDurationMs;
-    points.push([audioTime, alphaTabTime]);
+    points.push([audioTime, midiTimeMs]);
+
+    // Compute local beat duration for the next interval
+    if (i + 1 < song.beats.length) {
+      const localBeatSec = song.beats[i + 1].time - song.beats[i].time;
+      const localBpm = Math.round(60 / localBeatSec);
+      // MIDI time advances by the nominal beat duration at the local tempo
+      midiTimeMs += 60000 / localBpm;
+    }
   }
 
   return { bpm, restBars, points };

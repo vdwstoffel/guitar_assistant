@@ -806,6 +806,10 @@ function BottomPlayer({
     return `${mins}:${secs.toString().padStart(2, "0")}`;
   }, []);
 
+  // Keep togglePlay accessible via ref to avoid re-registering keyboard handler
+  const togglePlayRef = useRef(togglePlay);
+  togglePlayRef.current = togglePlay;
+
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -815,9 +819,7 @@ function BottomPlayer({
 
       if (e.code === "Space") {
         e.preventDefault();
-        if (wavesurferRef.current) {
-          wavesurferRef.current.playPause();
-        }
+        togglePlayRef.current();
       }
 
       if (e.code === "KeyM" && track) {
@@ -856,46 +858,31 @@ function BottomPlayer({
   // Store callback in ref to avoid dependency issues
   const onMarkerBarStateChangeRef = useRef(onMarkerBarStateChange);
   onMarkerBarStateChangeRef.current = onMarkerBarStateChange;
-  const stateCallbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Expose marker bar state to parent for external rendering (debounced)
+  // Expose marker bar state to parent for external rendering
   useEffect(() => {
-    if (stateCallbackTimeoutRef.current) {
-      clearTimeout(stateCallbackTimeoutRef.current);
+    if (onMarkerBarStateChangeRef.current) {
+      onMarkerBarStateChangeRef.current({
+        showMarkers,
+        setShowMarkers,
+        leadIn,
+        setLeadIn,
+        editingMarkerId,
+        setEditingMarkerId,
+        editingMarkerName,
+        setEditingMarkerName,
+        currentTime,
+        jumpToMarker,
+        addMarker,
+        formatTime,
+        isCountingIn,
+        currentCountInBeat,
+        totalCountInBeats,
+        trackTempo: track?.tempo ?? null,
+        trackTimeSignature: track?.timeSignature || "4/4",
+        volume,
+      });
     }
-
-    stateCallbackTimeoutRef.current = setTimeout(() => {
-      if (onMarkerBarStateChangeRef.current) {
-        onMarkerBarStateChangeRef.current({
-          showMarkers,
-          setShowMarkers,
-          leadIn,
-          setLeadIn,
-          editingMarkerId,
-          setEditingMarkerId,
-          editingMarkerName,
-          setEditingMarkerName,
-          currentTime: currentTimeRef.current,
-          jumpToMarker,
-          addMarker,
-          formatTime,
-          isCountingIn,
-          currentCountInBeat,
-          totalCountInBeats,
-          trackTempo: track?.tempo ?? null,
-          trackTimeSignature: track?.timeSignature || "4/4",
-          volume,
-        });
-      }
-    }, 16); // Debounce to ~60fps
-
-    return () => {
-      if (stateCallbackTimeoutRef.current) {
-        clearTimeout(stateCallbackTimeoutRef.current);
-      }
-    };
-  // Note: currentTime is accessed via currentTimeRef.current to avoid effect firing on every time update (~20/sec)
-  }, [showMarkers, leadIn, editingMarkerId, editingMarkerName, jumpToMarker, addMarker, formatTime, isCountingIn, currentCountInBeat, totalCountInBeats, track?.tempo, track?.timeSignature, volume]);
+  }, [showMarkers, leadIn, editingMarkerId, editingMarkerName, jumpToMarker, addMarker, formatTime, isCountingIn, currentCountInBeat, totalCountInBeats, track?.tempo, track?.timeSignature, volume, currentTime]);
 
   if (!track) {
     return (

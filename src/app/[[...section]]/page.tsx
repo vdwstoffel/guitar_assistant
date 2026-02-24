@@ -128,6 +128,7 @@ export default function Home() {
   const [pdfPath, setPdfPath] = useState<string | null>(null);
   const [pdfPage, setPdfPage] = useState(1);
   const [pdfVersion, setPdfVersion] = useState(0);
+  const [isFitToPage, setIsFitToPage] = useState(false);
 
   // Marker bar state from BottomPlayer
   const [markerBarState, setMarkerBarState] = useState<MarkerBarState | null>(null);
@@ -740,6 +741,27 @@ export default function Home() {
   };
 
   const handleTempoChange = async (tempo: number | null, timeSignature: string) => {
+    if (currentJamTrack) {
+      try {
+        const response = await fetch(`/api/jamtracks/${currentJamTrack.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ tempo, timeSignature }),
+        });
+
+        if (!response.ok) {
+          throw new Error("Failed to update jam track tempo");
+        }
+
+        setJamTracks(prev => prev.map(jt =>
+          jt.id === currentJamTrack.id ? { ...jt, tempo, timeSignature } : jt
+        ));
+      } catch (error) {
+        console.error("Error updating jam track tempo:", error);
+      }
+      return;
+    }
+
     if (!currentTrack) return;
 
     try {
@@ -1675,12 +1697,74 @@ export default function Home() {
                   </div>
                 </>
               ) : pdfPath ? (
-                <PdfViewer
-                  pdfPath={pdfPath}
-                  currentPage={pdfPage}
-                  onPageChange={setPdfPage}
-                  version={pdfVersion}
-                />
+                <div className="flex flex-1 min-h-0">
+                  <div className="flex-1 min-w-0">
+                    <PdfViewer
+                      pdfPath={pdfPath}
+                      currentPage={pdfPage}
+                      onPageChange={setPdfPage}
+                      version={pdfVersion}
+                      onFitToPageChange={setIsFitToPage}
+                    />
+                  </div>
+                  {/* Markers Sidebar - shown next to PDF in fit-to-page mode */}
+                  {isFitToPage && (currentTrack || currentJamTrack) && markerBarState && markerBarState.showMarkers && (
+                    <div className="w-64 border-l border-gray-700 bg-gray-900 flex flex-col overflow-hidden">
+                      <MarkersBar
+                        markers={(currentTrack || currentJamTrack)!.markers}
+                        visible={true}
+                        layout="vertical"
+                        leadIn={markerBarState.leadIn}
+                        editingMarkerId={markerBarState.editingMarkerId}
+                        editingMarkerName={markerBarState.editingMarkerName}
+                        currentTime={markerBarState.currentTime}
+                        onLeadInChange={markerBarState.setLeadIn}
+                        onAddMarker={markerBarState.addMarker}
+                        onJumpToMarker={markerBarState.jumpToMarker}
+                        onStartEdit={(id, name) => {
+                          markerBarState.setEditingMarkerId(id);
+                          markerBarState.setEditingMarkerName(name);
+                        }}
+                        onEditNameChange={markerBarState.setEditingMarkerName}
+                        onSaveEdit={(markerId, name, markerPdfPage) => {
+                          if (currentJamTrack) {
+                            handleJamTrackMarkerRename(currentJamTrack.id, markerId, name);
+                          } else {
+                            handleMarkerRename(markerId, name, markerPdfPage);
+                          }
+                          markerBarState.setEditingMarkerId(null);
+                        }}
+                        onCancelEdit={() => markerBarState.setEditingMarkerId(null)}
+                        onDelete={(markerId) => {
+                          if (currentJamTrack) {
+                            handleJamTrackMarkerDelete(currentJamTrack.id, markerId);
+                          } else {
+                            handleMarkerDelete(markerId);
+                          }
+                        }}
+                        onClearAll={() => {
+                          const activeTrack = currentTrack || currentJamTrack;
+                          if (activeTrack) {
+                            if (currentJamTrack) {
+                              handleJamTrackMarkersClear(activeTrack.id);
+                            } else {
+                              handleMarkersClear(activeTrack.id);
+                            }
+                          }
+                        }}
+                        formatTime={markerBarState.formatTime}
+                        isCountingIn={markerBarState.isCountingIn}
+                        currentCountInBeat={markerBarState.currentCountInBeat}
+                        totalCountInBeats={markerBarState.totalCountInBeats}
+                        trackTempo={markerBarState.trackTempo}
+                        trackTimeSignature={markerBarState.trackTimeSignature}
+                        onTempoChange={handleTempoChange}
+                        currentPdfPage={pdfPage}
+                        hasPdf={!!pdfPath && !currentJamTrack}
+                      />
+                    </div>
+                  )}
+                </div>
               ) : (
                 <div className="h-full flex items-center justify-center bg-gray-900 text-gray-500">
                   <div className="text-center">
@@ -1694,8 +1778,8 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Markers Bar - Spans full width underneath both player and PDF */}
-          {(currentTrack || currentJamTrack) && markerBarState && (
+          {/* Markers Bar - Spans full width underneath (hidden when markers shown in sidebar) */}
+          {(currentTrack || currentJamTrack) && markerBarState && !(isFitToPage && pdfPath && selectedBookId) && (
             <MarkersBar
               markers={(currentTrack || currentJamTrack)!.markers}
               visible={markerBarState.showMarkers}
@@ -1950,28 +2034,11 @@ export default function Home() {
                 )}
               </div>
 
-              {/* Bottom: Compact Player - Desktop */}
-              <div className="hidden xl:block shrink-0">
+              {/* Bottom: Player - compact on desktop, full on mobile */}
+              <div className={`shrink-0 overflow-hidden transition-all duration-300 xl:overflow-visible ${currentJamTrack ? "h-[30vh] min-h-55 max-h-80 xl:h-auto xl:min-h-0 xl:max-h-none" : "h-0 xl:h-0"}`}>
                 <BottomPlayer
                   track={currentJamTrack}
                   compact={true}
-                  onMarkerAdd={stableOnMarkerAdd}
-                  onMarkerUpdate={stableOnMarkerUpdate}
-                  onMarkerRename={stableOnMarkerRename}
-                  onMarkerDelete={stableOnMarkerDelete}
-                  onMarkersClear={stableOnMarkersClear}
-                  externalMarkersBar={true}
-                  onMarkerBarStateChange={setMarkerBarState}
-                  onTimeUpdate={stableOnTimeUpdate}
-                  onSeekReady={stableOnSeekReady}
-                />
-              </div>
-
-              {/* Mobile: Keep existing player at full size */}
-              <div className={`xl:hidden shrink-0 overflow-hidden transition-all duration-300 ${currentJamTrack ? "h-[30vh] min-h-55 max-h-80" : "h-0"}`}>
-                <BottomPlayer
-                  track={currentJamTrack}
-                  compact={false}
                   onMarkerAdd={stableOnMarkerAdd}
                   onMarkerUpdate={stableOnMarkerUpdate}
                   onMarkerRename={stableOnMarkerRename}

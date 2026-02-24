@@ -29,6 +29,7 @@ interface SinglePdfViewerProps {
   currentPage: number;
   onPageChange: (page: number) => void;
   version?: number;
+  onFitToPageChange?: (fitToPage: boolean) => void;
 }
 
 interface MultiPdfViewerProps {
@@ -57,6 +58,7 @@ function SinglePdfViewerInner({
   currentPage,
   onPageChange,
   version = 0,
+  onFitToPageChange,
 }: SinglePdfViewerProps) {
   const [numPages, setNumPages] = useState<number>(0);
   const [isLoading, setIsLoading] = useState(true);
@@ -383,7 +385,11 @@ function SinglePdfViewerInner({
           )}
         </div>
         <button
-          onClick={() => setFitToPage(!fitToPage)}
+          onClick={() => {
+            const next = !fitToPage;
+            setFitToPage(next);
+            onFitToPageChange?.(next);
+          }}
           className={`flex items-center gap-1 px-2 py-1 text-xs rounded transition-colors ${
             fitToPage
               ? "bg-green-600/30 text-green-400 hover:bg-green-600/40"
@@ -643,6 +649,7 @@ export default function PdfViewer(props: PdfViewerProps) {
         currentPage={props.currentPage}
         onPageChange={props.onPageChange}
         version={props.version}
+        onFitToPageChange={props.onFitToPageChange}
       />
     );
   }
