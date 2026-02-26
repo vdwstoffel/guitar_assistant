@@ -59,6 +59,7 @@ interface TrackListViewProps {
   onBookUpdate?: (bookId: string, bookName: string, authorName: string) => Promise<void>;
   onTrackUpdate?: (trackId: string, title: string, author: string, book: string, trackNumber: number, pdfPage?: number | null, tempo?: number | null, timeSignature?: string, chapterId?: string | null) => Promise<void>;
   onTrackComplete?: (trackId: string, completed: boolean) => Promise<void>;
+  onTrackInProgress?: (trackId: string, inProgress: boolean) => Promise<void>;
   onTrackFavorite?: (trackId: string, favorite: boolean) => Promise<void>;
   onBookInProgress?: (bookId: string, inProgress: boolean) => Promise<void>;
   onShowPdf?: (pdfPath: string, page?: number) => void;
@@ -89,6 +90,7 @@ export default memo(function TrackListView({
   onBookUpdate,
   onTrackUpdate,
   onTrackComplete,
+  onTrackInProgress,
   onTrackFavorite,
   onBookInProgress,
   onShowPdf,
@@ -660,6 +662,7 @@ export default memo(function TrackListView({
                 onTrackSelect={onTrackSelect}
                 onVideoSelect={onVideoSelect}
                 onTrackComplete={onTrackComplete}
+                onTrackInProgress={onTrackInProgress}
                 onTrackFavorite={onTrackFavorite}
                 onVideoComplete={onVideoComplete}
                 onAssignPdfPage={onAssignPdfPage}
@@ -756,6 +759,28 @@ export default memo(function TrackListView({
                 </svg>
               </button>
 
+              {/* In progress circle - Larger touch target on mobile */}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onTrackInProgress?.(track.id, !track.inProgress);
+                }}
+                className={`w-11 h-11 xl:w-6 xl:h-6 rounded-full flex items-center justify-center flex-shrink-0 transition-colors ${
+                  track.inProgress
+                    ? "bg-amber-500"
+                    : "bg-gray-700 hover:bg-gray-600"
+                }`}
+                title={track.inProgress ? "Mark as not in progress" : "Mark as in progress"}
+              >
+                <div className={`w-5 h-5 xl:w-full xl:h-full rounded-full border-2 flex items-center justify-center ${
+                  track.inProgress ? "bg-amber-500 border-amber-500" : "border-gray-500"
+                }`}>
+                  <svg className={`w-3 h-3 xl:w-full xl:h-full transition-opacity ${track.inProgress ? "text-white opacity-100" : "text-amber-500 opacity-20"}`} fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M8 5v14l11-7z" />
+                  </svg>
+                </div>
+              </button>
+
               {/* Completion circle - Larger touch target on mobile */}
               <button
                 onClick={(e) => {
@@ -772,11 +797,9 @@ export default memo(function TrackListView({
                 <div className={`w-5 h-5 xl:w-full xl:h-full rounded-full border-2 ${
                   track.completed ? "bg-green-500 border-green-500" : "border-gray-500"
                 }`}>
-                  {track.completed && (
-                    <svg className="w-full h-full text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                    </svg>
-                  )}
+                  <svg className={`w-full h-full transition-opacity ${track.completed ? "text-white opacity-100" : "text-green-500 opacity-20"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                  </svg>
                 </div>
               </button>
 

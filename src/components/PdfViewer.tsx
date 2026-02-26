@@ -65,7 +65,7 @@ function SinglePdfViewerInner({
   const [error, setError] = useState<string | null>(null);
   const [containerWidth, setContainerWidth] = useState<number>(0);
   const [containerHeight, setContainerHeight] = useState<number>(0);
-  const [fitToPage, setFitToPage] = useState(false);
+  const [fitToPage, setFitToPage] = useState(true);
   const [visiblePage, setVisiblePage] = useState(1);
   const containerRef = useRef<HTMLDivElement>(null);
   const pageRefs = useRef<Map<number, HTMLDivElement>>(new Map());
@@ -262,18 +262,19 @@ function SinglePdfViewerInner({
     (e: React.WheelEvent) => {
       if (!fitToPage || wheelCooldown.current || numPages <= 1) return;
 
-      const newPage = e.deltaY > 0 ? visiblePage + 1 : visiblePage - 1;
-      if (newPage < 1 || newPage > numPages) return;
-
+      const direction = e.deltaY > 0 ? 1 : -1;
       wheelCooldown.current = true;
-      setVisiblePage(newPage);
-      onPageChange(newPage);
-
       setTimeout(() => {
         wheelCooldown.current = false;
-      }, 300);
+      }, 500);
+
+      setVisiblePage((prev) => {
+        const newPage = Math.max(1, Math.min(numPages, prev + direction));
+        if (newPage !== prev) onPageChange(newPage);
+        return newPage;
+      });
     },
-    [fitToPage, visiblePage, numPages, onPageChange]
+    [fitToPage, numPages, onPageChange]
   );
 
   const goToPage = (page: number) => {

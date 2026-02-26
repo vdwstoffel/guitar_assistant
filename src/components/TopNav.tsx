@@ -5,7 +5,7 @@ import { useState, useEffect, useRef, useCallback, memo } from 'react';
 import GlobalSearch from './GlobalSearch';
 import { SearchResultTrack, SearchResultBook, SearchResultJamTrack } from '@/types';
 
-type Section = 'home' | 'lessons' | 'videos' | 'fretboard' | 'intervals' | 'chords' | 'tools' | 'circle' | 'tabs' | 'jamtracks' | 'metrics';
+type Section = 'home' | 'lessons' | 'videos' | 'fretboard' | 'intervals' | 'chords' | 'tools' | 'circle' | 'tabs' | 'jamtracks' | 'metrics' | 'knowledge';
 type TimeSignature = '4/4' | '3/4' | '2/4' | '6/8';
 
 interface TopNavProps {
@@ -40,9 +40,10 @@ const TopNav = memo(function TopNav({ activeSection, onSectionChange, onSearchTr
     { id: 'intervals', label: 'Intervals', href: '/intervals' },
     { id: 'chords', label: 'Chords', href: '/chords' },
     { id: 'circle', label: 'Circle of 5ths', href: '/circle' },
+    { id: 'knowledge', label: 'Theory Notes', href: '/knowledge' },
   ];
 
-  const isTheoryActive = activeSection === 'fretboard' || activeSection === 'intervals' || activeSection === 'chords' || activeSection === 'circle';
+  const isTheoryActive = activeSection === 'fretboard' || activeSection === 'intervals' || activeSection === 'chords' || activeSection === 'circle' || activeSection === 'knowledge';
 
   // Close theory dropdown on click outside
   useEffect(() => {

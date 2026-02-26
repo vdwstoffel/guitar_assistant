@@ -19,6 +19,7 @@ interface ChapterSectionProps {
   onTrackSelect: (track: Track, author: AuthorSummary, book: Book) => void;
   onVideoSelect: (video: BookVideo) => void;
   onTrackComplete?: (trackId: string, completed: boolean) => Promise<void>;
+  onTrackInProgress?: (trackId: string, inProgress: boolean) => Promise<void>;
   onTrackFavorite?: (trackId: string, favorite: boolean) => Promise<void>;
   onVideoComplete?: (bookId: string, videoId: string, completed: boolean) => Promise<void>;
   onAssignPdfPage?: (trackId: string, page: number) => Promise<void>;
@@ -45,6 +46,7 @@ export default memo(function ChapterSection({
   onTrackSelect,
   onVideoSelect,
   onTrackComplete,
+  onTrackInProgress,
   onTrackFavorite,
   onVideoComplete,
   onAssignPdfPage,
@@ -242,6 +244,28 @@ export default memo(function ChapterSection({
                 </svg>
               </button>
 
+              {/* In progress circle */}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onTrackInProgress?.(track.id, !track.inProgress);
+                }}
+                className={`w-5 h-5 rounded-full border-2 flex-shrink-0 transition-colors ${
+                  track.inProgress
+                    ? "bg-amber-500 border-amber-500"
+                    : "border-gray-500 hover:border-amber-400"
+                }`}
+                title={track.inProgress ? "Mark as not in progress" : "Mark as in progress"}
+              >
+                <svg
+                  className={`w-full h-full transition-opacity ${track.inProgress ? "text-white opacity-100" : "text-amber-500 opacity-20"}`}
+                  fill="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path d="M8 5v14l11-7z" />
+                </svg>
+              </button>
+
               {/* Completion circle */}
               <button
                 onClick={(e) => {
@@ -255,21 +279,14 @@ export default memo(function ChapterSection({
                 }`}
                 title={track.completed ? "Mark as not completed" : "Mark as completed"}
               >
-                {track.completed && (
-                  <svg
-                    className="w-full h-full text-white"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={3}
-                      d="M5 13l4 4L19 7"
-                    />
-                  </svg>
-                )}
+                <svg
+                  className={`w-full h-full transition-opacity ${track.completed ? "text-white opacity-100" : "text-green-500 opacity-20"}`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                </svg>
               </button>
 
               {/* Duration and PDF page */}

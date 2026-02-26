@@ -100,6 +100,7 @@ interface JamTracksViewProps {
   onJamTrackSelect: (jamTrack: JamTrack) => void;
   onJamTrackUpdate?: (jamTrackId: string, title: string, tempo: number | null, timeSignature: string) => Promise<void>;
   onJamTrackComplete?: (jamTrackId: string, completed: boolean) => Promise<void>;
+  onJamTrackInProgress?: (jamTrackId: string, inProgress: boolean) => Promise<void>;
   onJamTrackFavorite?: (jamTrackId: string, favorite: boolean) => Promise<void>;
   onJamTrackDelete?: (jamTrackId: string) => Promise<void>;
   onPdfUpload?: (jamTrackId: string, file: File, name: string) => Promise<void>;
@@ -118,6 +119,7 @@ const JamTracksView = memo(function JamTracksView({
   onJamTrackSelect,
   onJamTrackUpdate,
   onJamTrackComplete,
+  onJamTrackInProgress,
   onJamTrackFavorite,
   onJamTrackDelete,
   onPdfUpload,
@@ -544,6 +546,28 @@ const JamTracksView = memo(function JamTracksView({
                   </svg>
                 </button>
 
+                {/* In progress circle */}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onJamTrackInProgress?.(jamTrack.id, !jamTrack.inProgress);
+                  }}
+                  className={`w-5 h-5 rounded-full border-2 flex-shrink-0 transition-colors ${
+                    jamTrack.inProgress
+                      ? "bg-amber-500 border-amber-500"
+                      : "border-gray-500 hover:border-amber-400"
+                  }`}
+                  title={jamTrack.inProgress ? "Mark as not in progress" : "Mark as in progress"}
+                >
+                  <svg
+                    className={`w-full h-full transition-opacity ${jamTrack.inProgress ? "text-white opacity-100" : "text-amber-500 opacity-20"}`}
+                    fill="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path d="M8 5v14l11-7z" />
+                  </svg>
+                </button>
+
                 {/* Completion circle */}
                 <button
                   onClick={(e) => {
@@ -557,11 +581,14 @@ const JamTracksView = memo(function JamTracksView({
                   }`}
                   title={jamTrack.completed ? "Mark as not completed" : "Mark as completed"}
                 >
-                  {jamTrack.completed && (
-                    <svg className="w-full h-full text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                    </svg>
-                  )}
+                  <svg
+                    className={`w-full h-full transition-opacity ${jamTrack.completed ? "text-white opacity-100" : "text-purple-400 opacity-20"}`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                  </svg>
                 </button>
 
                 {/* Duration */}

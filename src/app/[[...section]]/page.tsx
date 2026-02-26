@@ -20,18 +20,19 @@ import Videos from "@/components/Videos";
 import Tools from "@/components/Tools";
 import TabEditor from "@/components/TabEditor";
 import MetricsView from "@/components/MetricsView";
+import KnowledgeView from "@/components/KnowledgeView";
 import HomeView from "@/components/HomeView";
 import PageSyncEditor from "@/components/PageSyncEditor";
 import VideoUploadModal from "@/components/VideoUploadModal";
 import VideoPlayer from "@/components/VideoPlayer";
 import { AuthorSummary, BookSummary, Book, Track, Marker, JamTrack, JamTrackMarker, BookVideo, SearchResultTrack, SearchResultBook, SearchResultJamTrack } from "@/types";
 
-type Section = 'home' | 'lessons' | 'videos' | 'fretboard' | 'intervals' | 'chords' | 'tools' | 'circle' | 'tabs' | 'jamtracks' | 'metrics';
+type Section = 'home' | 'lessons' | 'videos' | 'fretboard' | 'intervals' | 'chords' | 'tools' | 'circle' | 'tabs' | 'jamtracks' | 'metrics' | 'knowledge';
 
 const getSectionFromPath = (section: string[] | undefined): Section => {
   if (!section || section.length === 0) return 'home';
   const first = section[0];
-  if (first === 'home' || first === 'lessons' || first === 'videos' || first === 'fretboard' || first === 'intervals' || first === 'chords' || first === 'tools' || first === 'circle' || first === 'tabs' || first === 'jamtracks' || first === 'metrics') {
+  if (first === 'home' || first === 'lessons' || first === 'videos' || first === 'fretboard' || first === 'intervals' || first === 'chords' || first === 'tools' || first === 'circle' || first === 'tabs' || first === 'jamtracks' || first === 'metrics' || first === 'knowledge') {
     return first;
   }
   return 'home';
@@ -879,9 +880,26 @@ export default function Home() {
     }
 
     setCurrentTrack(prev =>
-      prev?.id === trackId ? { ...prev, completed } : prev
+      prev?.id === trackId ? { ...prev, completed, inProgress: completed ? false : prev?.inProgress ?? false } : prev
     );
-    updateTrackInBookDetail(trackId, t => ({ ...t, completed }));
+    updateTrackInBookDetail(trackId, t => ({ ...t, completed, inProgress: completed ? false : t.inProgress }));
+  };
+
+  const handleTrackInProgress = async (trackId: string, inProgress: boolean) => {
+    const response = await fetch(`/api/tracks/${trackId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ inProgress }),
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to update track in-progress status");
+    }
+
+    setCurrentTrack(prev =>
+      prev?.id === trackId ? { ...prev, inProgress, completed: inProgress ? false : prev?.completed ?? false } : prev
+    );
+    updateTrackInBookDetail(trackId, t => ({ ...t, inProgress, completed: inProgress ? false : t.completed }));
   };
 
   const handleTrackFavorite = async (trackId: string, favorite: boolean) => {
@@ -1123,7 +1141,24 @@ export default function Home() {
 
     // Update local state
     setJamTracks((prev) =>
-      prev.map((jt) => (jt.id === jamTrackId ? { ...jt, completed } : jt))
+      prev.map((jt) => (jt.id === jamTrackId ? { ...jt, completed, inProgress: completed ? false : jt.inProgress } : jt))
+    );
+  };
+
+  const handleJamTrackInProgress = async (jamTrackId: string, inProgress: boolean) => {
+    const response = await fetch(`/api/jamtracks/${jamTrackId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ inProgress }),
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to update jam track in-progress status");
+    }
+
+    // Update local state
+    setJamTracks((prev) =>
+      prev.map((jt) => (jt.id === jamTrackId ? { ...jt, inProgress, completed: inProgress ? false : jt.completed } : jt))
     );
   };
 
@@ -1603,6 +1638,7 @@ export default function Home() {
                     onCoverDelete={handleCoverDelete}
                     onTrackUpdate={handleMetadataUpdate}
                     onTrackComplete={handleTrackComplete}
+                    onTrackInProgress={handleTrackInProgress}
                     onTrackFavorite={handleTrackFavorite}
                     onBookInProgress={handleBookInProgress}
                     onShowPdf={handleShowPdf}
@@ -1889,6 +1925,7 @@ export default function Home() {
                     onJamTrackSelect={handleJamTrackSelect}
                     onJamTrackUpdate={handleJamTrackUpdate}
                     onJamTrackComplete={handleJamTrackComplete}
+                    onJamTrackInProgress={handleJamTrackInProgress}
                     onJamTrackFavorite={handleJamTrackFavorite}
                     onJamTrackDelete={handleJamTrackDelete}
                     onPdfUpload={handleJamTrackPdfUpload}
@@ -1940,6 +1977,7 @@ export default function Home() {
                   onJamTrackSelect={handleJamTrackSelect}
                   onJamTrackUpdate={handleJamTrackUpdate}
                   onJamTrackComplete={handleJamTrackComplete}
+                  onJamTrackInProgress={handleJamTrackInProgress}
                   onJamTrackDelete={handleJamTrackDelete}
                   onPdfUpload={handleJamTrackPdfUpload}
                   onPdfDelete={handleJamTrackPdfDelete}
@@ -2102,6 +2140,8 @@ export default function Home() {
         <TabEditor />
       ) : activeSection === 'metrics' ? (
         <MetricsView onGoToTrack={handleGoToTrackFromMetrics} />
+      ) : activeSection === 'knowledge' ? (
+        <KnowledgeView />
       ) : (
         <Fretboard />
       )}
