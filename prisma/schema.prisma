@@ -62,7 +62,9 @@ model Track {
   playbackSpeed Int?
   volume        Int?
   lufs          Float?
+  notes         String?
   markers           Marker[]
+  tabs              TrackTab[]
   practiceSessions  PracticeSession[]
   book              Book     @relation(fields: [bookId], references: [id], onDelete: Cascade)
   chapter           Chapter? @relation(fields: [chapterId], references: [id], onDelete: SetNull)
@@ -82,6 +84,18 @@ model Marker {
   @@index([trackId])
 }
 
+model TrackTab {
+  id        String  @id @default(uuid())
+  name      String
+  alphatex  String?
+  tempo     Int     @default(120)
+  sortOrder Int     @default(0)
+  trackId   String
+  track     Track   @relation(fields: [trackId], references: [id], onDelete: Cascade)
+
+  @@index([trackId])
+}
+
 model BookVideo {
   id               String            @id @default(uuid())
   filename         String
@@ -92,6 +106,8 @@ model BookVideo {
   trackNumber      Int?
   pdfPage          Int?
   completed        Boolean           @default(false)
+  inProgress       Boolean           @default(false)
+  notes            String?
   bookId           String
   chapterId        String?
   book             Book              @relation(fields: [bookId], references: [id], onDelete: Cascade)
@@ -109,6 +125,9 @@ model Video {
   youtubeId        String
   sortOrder        Int               @default(0)
   category         String?
+  completed        Boolean           @default(false)
+  inProgress       Boolean           @default(false)
+  notes            String?
   createdAt        DateTime          @default(now())
   practiceSessions PracticeSession[]
 }

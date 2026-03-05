@@ -10,6 +10,7 @@ import { getBookCoverUrl } from "@/lib/covers";
 import TrackEditModal from "./modals/TrackEditModal";
 import VideoEditModal from "./modals/VideoEditModal";
 import ChapterEditModal from "./modals/ChapterEditModal";
+import NotesModal from "./modals/NotesModal";
 
 const BookCover = memo(function BookCover({ book }: { book: Book }) {
   const [hasError, setHasError] = useState(false);
@@ -74,6 +75,9 @@ interface TrackListViewProps {
   onVideoDelete?: (bookId: string, videoId: string) => Promise<void>;
   onVideoUpdate?: (bookId: string, videoId: string, filename: string, sortOrder: number, title?: string | null, trackNumber?: number | null, pdfPage?: number | null, chapterId?: string | null) => Promise<void>;
   onVideoComplete?: (bookId: string, videoId: string, completed: boolean) => Promise<void>;
+  onVideoInProgress?: (bookId: string, videoId: string, inProgress: boolean) => Promise<void>;
+  onTrackNotesUpdate?: (trackId: string, notes: string | null) => Promise<void>;
+  onVideoNotesUpdate?: (bookId: string, videoId: string, notes: string | null) => Promise<void>;
   onLibraryRefresh?: () => Promise<void>;
 }
 
@@ -105,11 +109,15 @@ export default memo(function TrackListView({
   onVideoDelete,
   onVideoUpdate,
   onVideoComplete,
+  onVideoInProgress,
+  onTrackNotesUpdate,
+  onVideoNotesUpdate,
   onLibraryRefresh,
 }: TrackListViewProps) {
   const [editingBook, setEditingBook] = useState(false);
   const [editingTrack, setEditingTrack] = useState<Track | null>(null);
   const [editingVideo, setEditingVideo] = useState<BookVideo | null>(null);
+  const [notesTarget, setNotesTarget] = useState<{ type: 'track' | 'bookVideo'; id: string; title: string; notes: string | null } | null>(null);
   const [isConverting, setIsConverting] = useState(false);
   const [mediaTab, setMediaTab] = useState<"audio" | "video">("audio");
 
@@ -665,6 +673,7 @@ export default memo(function TrackListView({
                 onTrackInProgress={onTrackInProgress}
                 onTrackFavorite={onTrackFavorite}
                 onVideoComplete={onVideoComplete}
+                onVideoInProgress={onVideoInProgress}
                 onAssignPdfPage={onAssignPdfPage}
                 onTrackUpdate={(track) => setEditingTrack(track)}
                 onVideoUpdate={(video) => setEditingVideo(video)}
@@ -673,6 +682,8 @@ export default memo(function TrackListView({
                     await onVideoUpdate(bookId, video.id, video.filename, video.sortOrder, video.title, video.trackNumber, page);
                   }
                 }}
+                onTrackNotesOpen={(track) => setNotesTarget({ type: 'track', id: track.id, title: track.title, notes: track.notes })}
+                onVideoNotesOpen={(video) => setNotesTarget({ type: 'bookVideo', id: video.id, title: video.title || video.filename, notes: video.notes })}
                 onChapterEdit={setEditingChapter}
                 onChapterDelete={handleDeleteChapter}
                 onShowPdf={onShowPdf}
@@ -862,6 +873,20 @@ export default memo(function TrackListView({
                 </select>
               )}
 
+              {/* Notes button */}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setNotesTarget({ type: 'track', id: track.id, title: track.title, notes: track.notes });
+                }}
+                className={`p-2 xl:p-1 ${track.notes ? 'text-blue-400' : 'text-gray-500 hover:text-blue-400 xl:opacity-0 xl:group-hover:opacity-100'} transition-opacity flex-shrink-0`}
+                title={track.notes ? "Edit notes" : "Add notes"}
+              >
+                <svg className="w-5 h-5 xl:w-4 xl:h-4" fill={track.notes ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+                </svg>
+              </button>
+
               {/* Edit button - Always visible on mobile, hover on desktop */}
               {onTrackUpdate && (
                 <button
@@ -960,6 +985,28 @@ export default memo(function TrackListView({
                       </button>
                     </div>
 
+                    {/* In progress circle */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onVideoInProgress?.(book.id, video.id, !video.inProgress);
+                      }}
+                      className={`w-11 h-11 xl:w-6 xl:h-6 rounded-full flex items-center justify-center flex-shrink-0 transition-colors ${
+                        video.inProgress
+                          ? "bg-amber-500"
+                          : "bg-gray-700 hover:bg-gray-600"
+                      }`}
+                      title={video.inProgress ? "Mark as not in progress" : "Mark as in progress"}
+                    >
+                      <div className={`w-5 h-5 xl:w-full xl:h-full rounded-full border-2 flex items-center justify-center ${
+                        video.inProgress ? "bg-amber-500 border-amber-500" : "border-gray-500"
+                      }`}>
+                        <svg className={`w-3 h-3 xl:w-full xl:h-full transition-opacity ${video.inProgress ? "text-white opacity-100" : "text-amber-500 opacity-20"}`} fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M8 5v14l11-7z" />
+                        </svg>
+                      </div>
+                    </button>
+
                     {/* Completion circle */}
                     <button
                       onClick={(e) => {
@@ -1051,6 +1098,20 @@ export default memo(function TrackListView({
                       </select>
                     )}
 
+                    {/* Notes button */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setNotesTarget({ type: 'bookVideo', id: video.id, title: video.title || video.filename, notes: video.notes });
+                      }}
+                      className={`p-1 ${video.notes ? 'text-blue-400' : 'text-gray-500 hover:text-blue-400 opacity-0 group-hover:opacity-100'} transition-opacity flex-shrink-0`}
+                      title={video.notes ? "Edit notes" : "Add notes"}
+                    >
+                      <svg className="w-4 h-4" fill={video.notes ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+                      </svg>
+                    </button>
+
                     {/* Edit button */}
                     {onVideoUpdate && (
                       <button
@@ -1072,6 +1133,22 @@ export default memo(function TrackListView({
           </>
         );
       })()}
+
+      {/* Notes Modal */}
+      {notesTarget && (
+        <NotesModal
+          title={notesTarget.title}
+          initialNotes={notesTarget.notes || ""}
+          onClose={() => setNotesTarget(null)}
+          onSave={async (notes) => {
+            if (notesTarget.type === 'track') {
+              await onTrackNotesUpdate?.(notesTarget.id, notes);
+            } else {
+              await onVideoNotesUpdate?.(book.id, notesTarget.id, notes);
+            }
+          }}
+        />
+      )}
     </div>
   );
 });

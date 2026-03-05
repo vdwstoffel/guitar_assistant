@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@coderline/alphatab": "^1.8.1",
+    "@coderline/alphatab-webpack": "^1.8.1",
     "@types/fluent-ffmpeg": "^2.1.28",
     "aes-js": "^3.1.2",
     "binary-parser": "^2.3.0",

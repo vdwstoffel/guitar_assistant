@@ -61,7 +61,5 @@ next-env.d.ts
 *.psarc
 *.alphatex
 
-# SSL certificates
-nginx/ssl/*.pem
 
 /test_files

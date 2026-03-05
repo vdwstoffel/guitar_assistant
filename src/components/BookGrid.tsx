@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useRef, memo } from "react";
+import { useState, useMemo, memo } from "react";
 import { AuthorSummary, BookSummary } from "@/types";
 import { getBookCoverUrl } from "@/lib/covers";
 
@@ -57,7 +57,9 @@ const BookCard = memo(function BookCard({ book, authorName, onClick }: { book: B
 
       {/* Track Count */}
       <p className="text-gray-500 text-xs mt-1">
-        {book.trackCount} track{book.trackCount !== 1 ? "s" : ""}
+        {book.trackCount === 0 && book.pdfPath
+          ? "PDF only"
+          : `${book.trackCount} track${book.trackCount !== 1 ? "s" : ""}`}
       </p>
 
       {/* Progress Bar - Show if book has content */}
@@ -82,21 +84,13 @@ const BookCard = memo(function BookCard({ book, authorName, onClick }: { book: B
   );
 });
 
-const VIDEO_EXTENSIONS = [".mp4", ".mov", ".webm", ".m4v"];
-
 interface BookGridProps {
   books: { book: BookSummary; author: AuthorSummary }[];
   onBookSelect: (book: BookSummary, author: AuthorSummary) => void;
   onScan: () => void;
-  onUpload: (files: FileList) => void;
-  onVideoUpload: (files: File[]) => void;
+  onUploadClick: () => void;
   isScanning: boolean;
   isUploading: boolean;
-  showInProgressOnly: boolean;
-  onToggleInProgress: () => void;
-  onAnalyzeLoudness: () => void;
-  isAnalyzing: boolean;
-  analyzeProgress: { processed: number; total: number } | null;
 }
 
 type SortOption = "author" | "book" | "completion";
@@ -105,22 +99,14 @@ const BookGrid = memo(function BookGrid({
   books,
   onBookSelect,
   onScan,
-  onUpload,
-  onVideoUpload,
+  onUploadClick,
   isScanning,
   isUploading,
-  showInProgressOnly,
-  onToggleInProgress,
-  onAnalyzeLoudness,
-  isAnalyzing,
-  analyzeProgress,
 }: BookGridProps) {
   const [sortBy, setSortBy] = useState<SortOption>("author");
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const displayedBooks = useMemo(() => {
-    const filtered = showInProgressOnly ? books.filter(({ book }) => book.inProgress) : books;
-    return [...filtered].sort((a, b) => {
+  const sortBooks = (list: { book: BookSummary; author: AuthorSummary }[]) => {
+    return [...list].sort((a, b) => {
       switch (sortBy) {
         case "author":
           return a.author.name.localeCompare(b.author.name) || a.book.name.localeCompare(b.book.name);
@@ -133,12 +119,13 @@ const BookGrid = memo(function BookGrid({
         }
       }
     });
-  }, [books, showInProgressOnly, sortBy]);
+  };
 
-  const inProgressCount = useMemo(() =>
-    books.filter(({ book }) => book.inProgress).length,
-    [books]
-  );
+  const { inProgressBooks, otherBooks } = useMemo(() => {
+    const ip = books.filter(({ book }) => book.inProgress);
+    const other = books.filter(({ book }) => !book.inProgress);
+    return { inProgressBooks: sortBooks(ip), otherBooks: sortBooks(other) };
+  }, [books, sortBy]);
 
   const totalTracks = useMemo(() =>
     books.reduce((acc, { book }) => acc + book.trackCount, 0),
@@ -179,23 +166,6 @@ const BookGrid = memo(function BookGrid({
             ))}
           </div>
 
-          {/* In Progress filter */}
-          {inProgressCount > 0 && (
-            <button
-              onClick={onToggleInProgress}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                showInProgressOnly
-                  ? "bg-yellow-600 text-white"
-                  : "bg-gray-800 text-gray-400 hover:text-white hover:bg-gray-700"
-              }`}
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              In Progress ({inProgressCount})
-            </button>
-          )}
-
           <button
             onClick={onScan}
             disabled={isScanning}
@@ -212,28 +182,7 @@ const BookGrid = memo(function BookGrid({
           </button>
 
           <button
-            onClick={onAnalyzeLoudness}
-            disabled={isAnalyzing}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium bg-gray-800 text-gray-400 hover:text-white hover:bg-gray-700 transition-colors disabled:opacity-50"
-            title="Analyze track loudness for volume normalization"
-          >
-            {isAnalyzing ? (
-              <>
-                <div className="w-4 h-4 border-2 border-gray-500 border-t-gray-300 rounded-full animate-spin" />
-                {analyzeProgress ? `${analyzeProgress.processed}/${analyzeProgress.total}` : "Analyzing"}
-              </>
-            ) : (
-              <>
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2z" />
-                </svg>
-                Analyze
-              </>
-            )}
-          </button>
-
-          <button
-            onClick={() => fileInputRef.current?.click()}
+            onClick={onUploadClick}
             disabled={isUploading}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium bg-gray-800 text-gray-400 hover:text-white hover:bg-gray-700 transition-colors disabled:opacity-50"
           >
@@ -246,64 +195,59 @@ const BookGrid = memo(function BookGrid({
             )}
             Upload
           </button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            accept="audio/*,.pdf,.psarc,.mp4,.mov,.webm,.m4v"
-            className="hidden"
-            onChange={(e) => {
-              if (e.target.files && e.target.files.length > 0) {
-                const allFiles = Array.from(e.target.files);
-                const videoFiles = allFiles.filter(f => VIDEO_EXTENSIONS.some(ext => f.name.toLowerCase().endsWith(ext)));
-                const otherFiles = allFiles.filter(f => !VIDEO_EXTENSIONS.some(ext => f.name.toLowerCase().endsWith(ext)));
-                if (otherFiles.length > 0) {
-                  const dt = new DataTransfer();
-                  otherFiles.forEach(f => dt.items.add(f));
-                  onUpload(dt.files);
-                }
-                if (videoFiles.length > 0) {
-                  onVideoUpload(videoFiles);
-                }
-                e.target.value = "";
-              }
-            }}
-          />
 
         </div>
       </div>
 
       {/* Book Grid */}
-      {displayedBooks.length === 0 ? (
+      {books.length === 0 ? (
         <div className="text-gray-500 text-center py-12">
-          {showInProgressOnly ? (
-            <>
-              <svg className="w-16 h-16 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <p className="text-lg">No books in progress</p>
-              <p className="mt-2 text-sm">Open a book and click the clock icon to add it here</p>
-            </>
-          ) : (
-            <>
-              <svg className="w-16 h-16 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
-              </svg>
-              <p className="text-lg">No books in your library</p>
-              <p className="mt-2 text-sm">Click Scan to discover music or Upload to add files</p>
-            </>
-          )}
+          <svg className="w-16 h-16 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+          </svg>
+          <p className="text-lg">No books in your library</p>
+          <p className="mt-2 text-sm">Click Scan to discover music or Upload to add files</p>
         </div>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-2 sm:gap-3">
-          {displayedBooks.map(({ book, author }) => (
-            <BookCard
-              key={book.id}
-              book={book}
-              authorName={author.name}
-              onClick={() => onBookSelect(book, author)}
-            />
-          ))}
+        <div className="space-y-6">
+          {inProgressBooks.length > 0 && (
+            <div>
+              <h2 className="text-sm font-medium text-yellow-400 mb-3 flex items-center gap-1.5">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                In Progress ({inProgressBooks.length})
+              </h2>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-2 sm:gap-3">
+                {inProgressBooks.map(({ book, author }) => (
+                  <BookCard
+                    key={book.id}
+                    book={book}
+                    authorName={author.name}
+                    onClick={() => onBookSelect(book, author)}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {otherBooks.length > 0 && (
+            <div>
+              {inProgressBooks.length > 0 && (
+                <h2 className="text-sm font-medium text-gray-400 mb-3">All Books</h2>
+              )}
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-2 sm:gap-3">
+                {otherBooks.map(({ book, author }) => (
+                  <BookCard
+                    key={book.id}
+                    book={book}
+                    authorName={author.name}
+                    onClick={() => onBookSelect(book, author)}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

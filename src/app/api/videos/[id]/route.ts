@@ -8,18 +8,31 @@ export async function PUT(
   try {
     const { id } = await params;
     const body = await request.json();
-    const { title, category } = body;
+    const { title, category, completed, inProgress, notes } = body;
 
     if (!title?.trim()) {
       return NextResponse.json({ error: "Title is required" }, { status: 400 });
     }
 
+    const data: Record<string, unknown> = {
+      title: title.trim(),
+      ...(category !== undefined && { category: category || null }),
+    };
+    if (completed !== undefined) {
+      data.completed = completed;
+      if (completed) data.inProgress = false;
+    }
+    if (inProgress !== undefined) {
+      data.inProgress = inProgress;
+      if (inProgress) data.completed = false;
+    }
+    if (notes !== undefined) {
+      data.notes = notes;
+    }
+
     const video = await prisma.video.update({
       where: { id },
-      data: {
-        title: title.trim(),
-        ...(category !== undefined && { category: category || null }),
-      },
+      data,
     });
 
     return NextResponse.json(video);

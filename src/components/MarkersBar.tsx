@@ -34,6 +34,9 @@ interface MarkersBarProps {
   hasPdf?: boolean;
   // Layout mode
   layout?: "horizontal" | "vertical";
+  // Early page flip
+  pageFlipAnticipation?: boolean;
+  onPageFlipAnticipationChange?: (value: boolean) => void;
 }
 
 const MarkersBar = memo(function MarkersBar({
@@ -57,6 +60,8 @@ const MarkersBar = memo(function MarkersBar({
   currentPdfPage,
   hasPdf = false,
   layout = "horizontal",
+  pageFlipAnticipation = false,
+  onPageFlipAnticipationChange,
 }: MarkersBarProps) {
   const [tapBpm, setTapBpm] = useState<number | null>(null);
   const [tapCount, setTapCount] = useState(0);
@@ -259,6 +264,23 @@ const MarkersBar = memo(function MarkersBar({
               className="text-xs text-red-400 hover:text-red-300"
             >
               Clear all
+            </button>
+          )}
+
+          {onPageFlipAnticipationChange && hasPdf && (
+            <button
+              onClick={() => onPageFlipAnticipationChange(!pageFlipAnticipation)}
+              className={`flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors ${
+                pageFlipAnticipation
+                  ? "bg-blue-600/30 text-blue-400 hover:bg-blue-600/40"
+                  : "bg-gray-700 text-gray-500 hover:bg-gray-600"
+              }`}
+              title={pageFlipAnticipation ? "Early page flip ON (1s before marker)" : "Early page flip OFF"}
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              Early flip
             </button>
           )}
         </div>

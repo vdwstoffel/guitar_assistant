@@ -19,6 +19,9 @@ export async function GET(
               markers: {
                 orderBy: { timestamp: "asc" },
               },
+              tabs: {
+                orderBy: { sortOrder: "asc" },
+              },
             },
           },
           chapters: {
@@ -29,6 +32,9 @@ export async function GET(
                 include: {
                   markers: {
                     orderBy: { timestamp: "asc" },
+                  },
+                  tabs: {
+                    orderBy: { sortOrder: "asc" },
                   },
                 },
               },

@@ -55,6 +55,7 @@ interface PatchBody {
   pdfPage?: number | null;
   chapterId?: string | null;
   sortOrder?: number;
+  notes?: string | null;
 }
 
 export async function PATCH(
@@ -72,6 +73,7 @@ export async function PATCH(
       pdfPage?: number | null;
       chapterId?: string | null;
       sortOrder?: number;
+      notes?: string | null;
     } = {};
     if (body.completed !== undefined) {
       data.completed = body.completed;
@@ -92,6 +94,9 @@ export async function PATCH(
     }
     if (body.sortOrder !== undefined) {
       data.sortOrder = body.sortOrder;
+    }
+    if (body.notes !== undefined) {
+      data.notes = body.notes;
     }
 
     const updatedTrack = await prisma.track.update({

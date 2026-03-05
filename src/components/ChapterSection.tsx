@@ -22,9 +22,12 @@ interface ChapterSectionProps {
   onTrackInProgress?: (trackId: string, inProgress: boolean) => Promise<void>;
   onTrackFavorite?: (trackId: string, favorite: boolean) => Promise<void>;
   onVideoComplete?: (bookId: string, videoId: string, completed: boolean) => Promise<void>;
+  onVideoInProgress?: (bookId: string, videoId: string, inProgress: boolean) => Promise<void>;
   onAssignPdfPage?: (trackId: string, page: number) => Promise<void>;
   onTrackUpdate?: (track: Track) => void;
   onVideoUpdate?: (video: BookVideo) => void;
+  onTrackNotesOpen?: (track: Track) => void;
+  onVideoNotesOpen?: (video: BookVideo) => void;
   onVideoAssignPdfPage?: (bookId: string, video: BookVideo, page: number) => Promise<void>;
   onChapterEdit?: (chapter: Chapter) => void;
   onChapterDelete?: (chapterId: string) => Promise<void>;
@@ -49,9 +52,12 @@ export default memo(function ChapterSection({
   onTrackInProgress,
   onTrackFavorite,
   onVideoComplete,
+  onVideoInProgress,
   onAssignPdfPage,
   onTrackUpdate,
   onVideoUpdate,
+  onTrackNotesOpen,
+  onVideoNotesOpen,
   onVideoAssignPdfPage,
   onChapterEdit,
   onChapterDelete,
@@ -327,6 +333,22 @@ export default memo(function ChapterSection({
                 </span>
               </div>
 
+              {/* Notes button */}
+              {onTrackNotesOpen && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onTrackNotesOpen(track);
+                  }}
+                  className={`p-1 ${track.notes ? 'text-blue-400' : 'text-gray-500 hover:text-blue-400 opacity-0 group-hover:opacity-100'} transition-opacity flex-shrink-0`}
+                  title={track.notes ? "Edit notes" : "Add notes"}
+                >
+                  <svg className="w-4 h-4" fill={track.notes ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+                  </svg>
+                </button>
+              )}
+
               {/* Edit button */}
               {onTrackUpdate && (
                 <button
@@ -436,6 +458,28 @@ export default memo(function ChapterSection({
                 </button>
               </div>
 
+              {/* In progress circle */}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onVideoInProgress?.(book.id, video.id, !video.inProgress);
+                }}
+                className={`w-11 h-11 xl:w-6 xl:h-6 rounded-full flex items-center justify-center flex-shrink-0 transition-colors ${
+                  video.inProgress
+                    ? "bg-amber-500"
+                    : "bg-gray-700 hover:bg-gray-600"
+                }`}
+                title={video.inProgress ? "Mark as not in progress" : "Mark as in progress"}
+              >
+                <div className={`w-5 h-5 xl:w-full xl:h-full rounded-full border-2 flex items-center justify-center ${
+                  video.inProgress ? "bg-amber-500 border-amber-500" : "border-gray-500"
+                }`}>
+                  <svg className={`w-3 h-3 xl:w-full xl:h-full transition-opacity ${video.inProgress ? "text-white opacity-100" : "text-amber-500 opacity-20"}`} fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M8 5v14l11-7z" />
+                  </svg>
+                </div>
+              </button>
+
               {/* Completion circle */}
               <button
                 onClick={(e) => {
@@ -505,6 +549,22 @@ export default memo(function ChapterSection({
                   </span>
                 )}
               </div>
+
+              {/* Notes button */}
+              {onVideoNotesOpen && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onVideoNotesOpen(video);
+                  }}
+                  className={`p-1 ${video.notes ? 'text-blue-400' : 'text-gray-500 hover:text-blue-400 opacity-0 group-hover:opacity-100'} transition-opacity flex-shrink-0`}
+                  title={video.notes ? "Edit notes" : "Add notes"}
+                >
+                  <svg className="w-4 h-4" fill={video.notes ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+                  </svg>
+                </button>
+              )}
 
               {/* Edit button */}
               {onVideoUpdate && (

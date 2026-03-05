@@ -10,7 +10,7 @@ interface MobileSidebarProps {
   selectedAuthor: AuthorSummary | null;
   onAuthorSelect: (author: AuthorSummary) => void;
   onScan: () => void;
-  onUpload: (files: FileList) => Promise<void>;
+  onUploadClick: () => void;
   onVideoUploadClick: () => void;
   isScanning: boolean;
   isUploading: boolean;

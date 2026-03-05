@@ -548,12 +548,13 @@ export async function POST() {
       });
     }
 
-    // Clean up empty books (only delete if no tracks AND no videos)
+    // Clean up empty books (only delete if no tracks AND no videos AND no PDF)
     await prisma.book.deleteMany({
       where: {
         AND: [
           { tracks: { none: {} } },
           { videos: { none: {} } },
+          { pdfPath: null },
         ],
       },
     });
@@ -789,6 +790,41 @@ export async function POST() {
       // JamTracks folder doesn't exist, nothing to clean
     }
 
+    // Analyze loudness (LUFS) for tracks missing it
+    const [tracksToAnalyze, jamTracksToAnalyze] = await Promise.all([
+      prisma.track.findMany({
+        where: { lufs: null },
+        select: { id: true, filePath: true, title: true },
+      }),
+      prisma.jamTrack.findMany({
+        where: { lufs: null },
+        select: { id: true, filePath: true, title: true },
+      }),
+    ]);
+
+    const totalToAnalyze = tracksToAnalyze.length + jamTracksToAnalyze.length;
+    let lufsProcessed = 0;
+
+    if (totalToAnalyze > 0) {
+      for (const track of tracksToAnalyze) {
+        const fullPath = path.join(musicPath, track.filePath);
+        const lufs = await getLufs(fullPath);
+        if (lufs !== null) {
+          await prisma.track.update({ where: { id: track.id }, data: { lufs } });
+        }
+        lufsProcessed++;
+      }
+
+      for (const jt of jamTracksToAnalyze) {
+        const fullPath = path.join(musicPath, jt.filePath);
+        const lufs = await getLufs(fullPath);
+        if (lufs !== null) {
+          await prisma.jamTrack.update({ where: { id: jt.id }, data: { lufs } });
+        }
+        lufsProcessed++;
+      }
+    }
+
     return NextResponse.json({
       message: "Library scan complete",
       count: tracks.length,
@@ -801,6 +837,10 @@ export async function POST() {
         found: jamTracks.length,
         removed: jamTracksRemoved,
         emptyFoldersRemoved,
+      },
+      loudness: {
+        analyzed: lufsProcessed,
+        total: totalToAnalyze,
       },
     });
   } catch (error) {

@@ -23,9 +23,10 @@ import MetricsView from "@/components/MetricsView";
 import KnowledgeView from "@/components/KnowledgeView";
 import HomeView from "@/components/HomeView";
 import PageSyncEditor from "@/components/PageSyncEditor";
-import VideoUploadModal from "@/components/VideoUploadModal";
+import UploadModal from "@/components/UploadModal";
 import VideoPlayer from "@/components/VideoPlayer";
-import { AuthorSummary, BookSummary, Book, Track, Marker, JamTrack, JamTrackMarker, BookVideo, SearchResultTrack, SearchResultBook, SearchResultJamTrack } from "@/types";
+import { AuthorSummary, BookSummary, Book, Track, TrackTab, Marker, JamTrack, JamTrackMarker, BookVideo, SearchResultTrack, SearchResultBook, SearchResultJamTrack } from "@/types";
+import TrackTabsModal from "@/components/TrackTabsModal";
 
 type Section = 'home' | 'lessons' | 'videos' | 'fretboard' | 'intervals' | 'chords' | 'tools' | 'circle' | 'tabs' | 'jamtracks' | 'metrics' | 'knowledge';
 
@@ -71,13 +72,21 @@ export default function Home() {
     [jamTracks, currentJamTrackId]
   );
   const [isScanning, setIsScanning] = useState(false);
-  const [showInProgressOnly, setShowInProgressOnly] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [analyzeProgress, setAnalyzeProgress] = useState<{ processed: number; total: number } | null>(null);
   const [isUploadingJamTracks, setIsUploadingJamTracks] = useState(false);
   const [isImportingFromYouTube, setIsImportingFromYouTube] = useState(false);
   const [isImportingPsarc, setIsImportingPsarc] = useState(false);
+  const [pageFlipAnticipation, setPageFlipAnticipation] = useState(() => {
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem("pageFlipAnticipation");
+      return stored === null ? true : stored === "true";
+    }
+    return true;
+  });
+  const handlePageFlipAnticipationChange = useCallback((value: boolean) => {
+    setPageFlipAnticipation(value);
+    localStorage.setItem("pageFlipAnticipation", String(value));
+  }, []);
 
   // Flatten all books from all authors for the library grid
   const allBooks = useMemo(() =>
@@ -86,8 +95,8 @@ export default function Home() {
     ),
     [authors]
   );
-  const [isVideoUploadModalOpen, setIsVideoUploadModalOpen] = useState(false);
-  const [pendingVideoFiles, setPendingVideoFiles] = useState<File[]>([]);
+  const [tabsTrack, setTabsTrack] = useState<Track | null>(null);
+  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [selectedVideo, setSelectedVideo] = useState<BookVideo | null>(null);
   const [showVideo, setShowVideo] = useState(false);
 
@@ -129,7 +138,7 @@ export default function Home() {
   const [pdfPath, setPdfPath] = useState<string | null>(null);
   const [pdfPage, setPdfPage] = useState(1);
   const [pdfVersion, setPdfVersion] = useState(0);
-  const [isFitToPage, setIsFitToPage] = useState(false);
+  const [isFitToPage, setIsFitToPage] = useState(true);
 
   // Marker bar state from BottomPlayer
   const [markerBarState, setMarkerBarState] = useState<MarkerBarState | null>(null);
@@ -332,46 +341,6 @@ export default function Home() {
     }
   };
 
-  const handleAnalyzeLoudness = async () => {
-    setIsAnalyzing(true);
-    setAnalyzeProgress(null);
-    try {
-      const response = await fetch("/api/library/analyze-loudness", { method: "POST" });
-      if (!response.body) return;
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-
-        // Process complete SSE messages
-        const lines = buffer.split("\n\n");
-        buffer = lines.pop() || "";
-
-        for (const line of lines) {
-          const match = line.match(/^data: (.+)$/m);
-          if (match) {
-            try {
-              const data = JSON.parse(match[1]);
-              if (data.type === "progress" || data.type === "done") {
-                setAnalyzeProgress({ processed: data.processed, total: data.total });
-              }
-            } catch { /* skip malformed */ }
-          }
-        }
-      }
-    } catch (error) {
-      console.error("Error analyzing loudness:", error);
-    } finally {
-      setIsAnalyzing(false);
-      setAnalyzeProgress(null);
-    }
-  };
-
   const handleUpload = async (files: FileList) => {
     setIsUploading(true);
     try {
@@ -390,6 +359,29 @@ export default function Home() {
       }
     } catch (error) {
       console.error("Error uploading files:", error);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handlePdfBookUpload = async (file: File, authorName: string, bookName: string) => {
+    setIsUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("pdf", file);
+      formData.append("authorName", authorName);
+      formData.append("bookName", bookName);
+
+      const response = await fetch("/api/books/upload-pdf", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (response.ok) {
+        await fetchLibrary();
+      }
+    } catch (error) {
+      console.error("Error uploading PDF book:", error);
     } finally {
       setIsUploading(false);
     }
@@ -707,6 +699,54 @@ export default function Home() {
     }
   };
 
+  const handleTabCreate = async (
+    trackId: string,
+    name: string,
+    alphatex: string | null,
+    tempo: number
+  ) => {
+    const res = await fetch(`/api/tracks/${trackId}/tabs`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, alphatex, tempo }),
+    });
+    const tab = await res.json();
+    updateTrackInBookDetail(trackId, t => ({ ...t, tabs: [...(t.tabs ?? []), tab] }));
+    setCurrentTrack(prev =>
+      prev?.id === trackId ? { ...prev, tabs: [...(prev.tabs ?? []), tab] } : prev
+    );
+    return tab;
+  };
+
+  const handleTabUpdate = async (tabId: string, updates: { name?: string; alphatex?: string | null; tempo?: number }) => {
+    await fetch(`/api/tracks/${currentTrack?.id}/tabs/${tabId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(updates),
+    });
+    const applyUpdate = (tabs: TrackTab[]) =>
+      tabs.map(t => (t.id === tabId ? { ...t, ...updates } : t));
+    if (currentTrack) {
+      updateTrackInBookDetail(currentTrack.id, t => ({ ...t, tabs: applyUpdate(t.tabs ?? []) }));
+      setCurrentTrack(prev =>
+        prev ? { ...prev, tabs: applyUpdate(prev.tabs ?? []) } : prev
+      );
+    }
+  };
+
+  const handleTabDelete = async (tabId: string) => {
+    await fetch(`/api/tracks/${currentTrack?.id}/tabs/${tabId}`, {
+      method: "DELETE",
+    });
+    const removeTab = (tabs: TrackTab[]) => tabs.filter(t => t.id !== tabId);
+    if (currentTrack) {
+      updateTrackInBookDetail(currentTrack.id, t => ({ ...t, tabs: removeTab(t.tabs ?? []) }));
+      setCurrentTrack(prev =>
+        prev ? { ...prev, tabs: removeTab(prev.tabs ?? []) } : prev
+      );
+    }
+  };
+
   const handleMetadataUpdate = async (
     trackId: string,
     title: string,
@@ -919,6 +959,39 @@ export default function Home() {
     updateTrackInBookDetail(trackId, t => ({ ...t, favorite }));
   };
 
+  const handleTrackNotesUpdate = async (trackId: string, notes: string | null) => {
+    const response = await fetch(`/api/tracks/${trackId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ notes }),
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to update track notes");
+    }
+
+    setCurrentTrack(prev =>
+      prev?.id === trackId ? { ...prev, notes } : prev
+    );
+    updateTrackInBookDetail(trackId, t => ({ ...t, notes }));
+  };
+
+  const handleVideoNotesUpdate = async (bookId: string, videoId: string, notes: string | null) => {
+    const video = selectedBookDetail?.videos?.find(v => v.id === videoId)
+      || selectedBookDetail?.chapters?.flatMap(ch => ch.videos).find(v => v.id === videoId);
+    if (!video) return;
+
+    const response = await fetch(`/api/books/${bookId}/videos/${videoId}/update`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ filename: video.filename, sortOrder: video.sortOrder, notes }),
+    });
+
+    if (response.ok) {
+      await fetchBookDetail(bookId);
+    }
+  };
+
   const handleAssignPdfPage = async (trackId: string, page: number) => {
     const response = await fetch(`/api/tracks/${trackId}`, {
       method: "PATCH",
@@ -1051,6 +1124,22 @@ export default function Home() {
       video.chapterId,
       completed
     );
+  };
+
+  const handleVideoInProgress = async (bookId: string, videoId: string, inProgress: boolean) => {
+    const video = selectedBookDetail?.videos?.find(v => v.id === videoId)
+      || selectedBookDetail?.chapters?.flatMap(ch => ch.videos).find(v => v.id === videoId);
+    if (!video) return;
+
+    const response = await fetch(`/api/books/${bookId}/videos/${videoId}/update`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ filename: video.filename, sortOrder: video.sortOrder, inProgress }),
+    });
+
+    if (response.ok) {
+      await fetchLibrary();
+    }
   };
 
   const handleBulkVideoUpload = async (files: File[], authorName: string, bookName: string) => {
@@ -1547,9 +1636,10 @@ export default function Home() {
 
     if (pageMarkers.length === 0) return;
 
+    const offset = pageFlipAnticipation ? 1 : 0;
     let targetPage: number | null = null;
     for (let i = pageMarkers.length - 1; i >= 0; i--) {
-      if (currentAudioTime >= pageMarkers[i].timestamp) {
+      if (currentAudioTime >= pageMarkers[i].timestamp - offset) {
         targetPage = pageMarkers[i].pdfPage;
         break;
       }
@@ -1564,7 +1654,7 @@ export default function Home() {
       lastTrackAutoFlipPage.current = targetPage;
       setPdfPage(targetPage);
     }
-  }, [currentTrack?.id, currentTrack?.markers, currentAudioTime]);
+  }, [currentTrack?.id, currentTrack?.markers, currentAudioTime, pageFlipAnticipation]);
 
   // Auto-navigate to video's PDF page when video changes
   useEffect(() => {
@@ -1590,16 +1680,6 @@ export default function Home() {
         onSearchBookSelect={handleSearchBookSelect}
         onSearchJamTrackSelect={handleSearchJamTrackSelect}
       />
-
-      {/* Loudness Analysis Progress Banner */}
-      {isAnalyzing && (
-        <div className="flex items-center gap-3 px-4 py-2 bg-purple-900/50 border-b border-purple-700/50 text-sm text-purple-200">
-          <div className="w-4 h-4 border-2 border-purple-400 border-t-purple-200 rounded-full animate-spin shrink-0" />
-          <span>
-            Analyzing loudness{analyzeProgress ? ` — ${analyzeProgress.processed} / ${analyzeProgress.total} tracks` : '...'}
-          </span>
-        </div>
-      )}
 
       {/* Section Content */}
       {activeSection === 'home' ? (
@@ -1651,6 +1731,9 @@ export default function Home() {
                     onVideoDelete={handleVideoDelete}
                     onVideoUpdate={handleVideoUpdate}
                     onVideoComplete={handleVideoComplete}
+                    onVideoInProgress={handleVideoInProgress}
+                    onTrackNotesUpdate={handleTrackNotesUpdate}
+                    onVideoNotesUpdate={handleVideoNotesUpdate}
                     onLibraryRefresh={fetchLibrary}
                   />
                 ) : (
@@ -1658,18 +1741,9 @@ export default function Home() {
                     books={allBooks}
                     onBookSelect={handleBookSelect}
                     onScan={handleScan}
-                    onUpload={handleUpload}
-                    onVideoUpload={(files) => {
-                      setPendingVideoFiles(files);
-                      setIsVideoUploadModalOpen(true);
-                    }}
+                    onUploadClick={() => setIsUploadModalOpen(true)}
                     isScanning={isScanning}
                     isUploading={isUploading}
-                    showInProgressOnly={showInProgressOnly}
-                    onToggleInProgress={() => setShowInProgressOnly(v => !v)}
-                    onAnalyzeLoudness={handleAnalyzeLoudness}
-                    isAnalyzing={isAnalyzing}
-                    analyzeProgress={analyzeProgress}
                   />
                 )}
               </div>
@@ -1693,6 +1767,8 @@ export default function Home() {
                   onMarkerBarStateChange={setMarkerBarState}
                   onTimeUpdate={stableOnTimeUpdate}
                   onSeekReady={stableOnSeekReady}
+                  onTrackTabs={currentTrack ? () => setTabsTrack(currentTrack) : undefined}
+                  trackTabsCount={currentTrack?.tabs?.length ?? 0}
                 />
               </div>
             </div>
@@ -1729,6 +1805,8 @@ export default function Home() {
                       currentAudioTime={currentAudioTime}
                       audioIsPlaying={audioIsPlaying}
                       onActivePdfChange={handleActivePdfChange}
+                      pageFlipAnticipation={pageFlipAnticipation}
+                      onPageFlipAnticipationChange={handlePageFlipAnticipationChange}
                     />
                   </div>
                 </>
@@ -1797,6 +1875,8 @@ export default function Home() {
                         onTempoChange={handleTempoChange}
                         currentPdfPage={pdfPage}
                         hasPdf={!!pdfPath && !currentJamTrack}
+                        pageFlipAnticipation={pageFlipAnticipation}
+                        onPageFlipAnticipationChange={handlePageFlipAnticipationChange}
                       />
                     </div>
                   )}
@@ -1866,6 +1946,8 @@ export default function Home() {
               onTempoChange={handleTempoChange}
               currentPdfPage={pdfPage}
               hasPdf={!!pdfPath && !currentJamTrack}
+              pageFlipAnticipation={pageFlipAnticipation}
+              onPageFlipAnticipationChange={handlePageFlipAnticipationChange}
             />
           )}
 
@@ -2019,6 +2101,8 @@ export default function Home() {
                           currentAudioTime={currentAudioTime}
                           audioIsPlaying={audioIsPlaying}
                           onActivePdfChange={handleActivePdfChange}
+                          pageFlipAnticipation={pageFlipAnticipation}
+                          onPageFlipAnticipationChange={handlePageFlipAnticipationChange}
                         />
                       </div>
                     </>
@@ -2146,17 +2230,25 @@ export default function Home() {
         <Fretboard />
       )}
 
-      {/* Video Upload Modal */}
-      <VideoUploadModal
-        isOpen={isVideoUploadModalOpen}
-        onClose={() => {
-          setIsVideoUploadModalOpen(false);
-          setPendingVideoFiles([]);
-        }}
-        onUpload={handleBulkVideoUpload}
+      {/* Upload Modal */}
+      <UploadModal
+        isOpen={isUploadModalOpen}
+        onClose={() => setIsUploadModalOpen(false)}
+        onAudioUpload={handleUpload}
+        onPdfBookUpload={handlePdfBookUpload}
+        onVideoUpload={handleBulkVideoUpload}
         authors={authors}
-        initialFiles={pendingVideoFiles}
       />
+
+      {tabsTrack && (
+        <TrackTabsModal
+          track={tabsTrack}
+          onClose={() => setTabsTrack(null)}
+          onTabCreate={handleTabCreate}
+          onTabUpdate={handleTabUpdate}
+          onTabDelete={handleTabDelete}
+        />
+      )}
     </div>
   );
 }

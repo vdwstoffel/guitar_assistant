@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, memo } from "react";
+import { memo } from "react";
 import { AuthorSummary } from "@/types";
 
 interface AuthorSidebarProps {
@@ -8,7 +8,7 @@ interface AuthorSidebarProps {
   selectedAuthor: AuthorSummary | null;
   onAuthorSelect: (author: AuthorSummary) => void;
   onScan: () => void;
-  onUpload: (files: FileList) => Promise<void>;
+  onUploadClick: () => void;
   onVideoUploadClick: () => void;
   isScanning: boolean;
   isUploading: boolean;
@@ -22,7 +22,7 @@ const AuthorSidebar = memo(function AuthorSidebar({
   selectedAuthor,
   onAuthorSelect,
   onScan,
-  onUpload,
+  onUploadClick,
   onVideoUploadClick,
   isScanning,
   isUploading,
@@ -30,15 +30,7 @@ const AuthorSidebar = memo(function AuthorSidebar({
   isInProgressSelected,
   onInProgressSelect,
 }: AuthorSidebarProps) {
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const isBusy = isScanning || isUploading;
-
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      await onUpload(e.target.files);
-      e.target.value = "";
-    }
-  };
 
   return (
     <div className="h-full flex flex-col bg-gray-900 text-white">
@@ -121,7 +113,7 @@ const AuthorSidebar = memo(function AuthorSidebar({
         </button>
 
         <button
-          onClick={() => fileInputRef.current?.click()}
+          onClick={onUploadClick}
           disabled={isBusy}
           className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-gray-800 hover:bg-gray-700 disabled:bg-gray-800 disabled:text-gray-600 rounded text-sm transition-colors"
         >
@@ -137,15 +129,6 @@ const AuthorSidebar = memo(function AuthorSidebar({
           )}
           Upload Files
         </button>
-
-        <input
-          ref={fileInputRef}
-          type="file"
-          multiple
-          accept=".mp3,.flac,.wav,.ogg,.m4a,.aac"
-          onChange={handleFileChange}
-          className="hidden"
-        />
 
         <button
           onClick={onVideoUploadClick}

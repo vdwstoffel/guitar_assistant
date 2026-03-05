@@ -1,6 +1,5 @@
 import { ComponentType } from "react";
-import TransposingMinorProgressions from "./TransposingMinorProgressions";
-import BuildingChordsInMinorKey from "./BuildingChordsInMinorKey";
+import WritingAMetalSong from "./WritingAMetalSong";
 
 export interface TheoryNote {
   slug: string;
@@ -11,16 +10,10 @@ export interface TheoryNote {
 
 const notes: TheoryNote[] = [
   {
-    slug: "building-chords-in-minor-key",
-    title: "Building Chords in a Minor Key",
-    category: "Harmony",
-    component: BuildingChordsInMinorKey,
-  },
-  {
-    slug: "transposing-minor-progressions",
-    title: "Transposing Minor Progressions and Riffs",
-    category: "Progressions",
-    component: TransposingMinorProgressions,
+    slug: "writing-a-metal-song",
+    title: "Writing a Metal Song",
+    category: "Songwriting",
+    component: WritingAMetalSong,
   },
 ];
 

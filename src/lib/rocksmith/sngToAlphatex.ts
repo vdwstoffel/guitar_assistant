@@ -136,12 +136,34 @@ function durationToBeats(dur: Duration): number {
 function getNoteEffects(note: Note): string {
   const effects: string[] = [];
 
-  // Hammer-on/pull-off: mask bit 1 = 0x2
-  if (note.mask & 0x2) effects.push("h");
-  // Palm mute: mask bit 9 = 0x200
-  if (note.mask & 0x200) effects.push("pm");
-  // Slide (pitched or unpitched — AlphaTex only has generic slide)
-  if (note.slideTo > 0 || note.slideUnpitchTo !== 0) effects.push("sl");
+  // Rocksmith SNG note mask flags (from rocksmith-custom-song-toolkit Constants.cs):
+  //   0x02     = CHORD (not a technique - just marks chord beats)
+  //   0x04     = OPEN
+  //   0x08     = FRETHANDMUTE
+  //   0x10     = TREMOLO
+  //   0x20     = HARMONIC
+  //   0x40     = PALMMUTE
+  //   0x0200   = HAMMERON
+  //   0x0400   = PULLOFF
+  //   0x0800   = SLIDE
+  //   0x4000   = TAP
+  //   0x8000   = PINCHHARMONIC
+  //   0x010000 = VIBRATO
+  //   0x020000 = MUTE
+  //   0x400000 = SLIDEUNPITCHEDTO
+
+  // Hammer-on: mask bit 9 = 0x0200
+  if (note.mask & 0x0200) effects.push("h");
+  // Pull-off: mask bit 10 = 0x0400 (alphaTab renders same as hammer-on)
+  if (note.mask & 0x0400) effects.push("h");
+  // Palm mute: mask bit 6 = 0x40
+  if (note.mask & 0x40) effects.push("pm");
+  // Harmonic: mask bit 5 = 0x20
+  if (note.mask & 0x20) effects.push("nh");
+  // Slide: use mask flags (dedicated fields contain target fret, not presence)
+  // Pitched slide: mask bit 11 = 0x0800
+  // Unpitched slide: mask bit 22 = 0x400000
+  if (note.mask & 0x0800 || note.mask & 0x400000) effects.push("sl");
   // Tap
   if (note.tap > 0) effects.push("t");
   // Bend - use full curve from bendValues when available

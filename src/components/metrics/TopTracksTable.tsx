@@ -124,9 +124,9 @@ export default function TopTracksTable({ tracks, isLoading, onTrackSelect, onGoT
             </tr>
           </thead>
           <tbody>
-            {sorted.map((track) => (
+            {sorted.map((track, i) => (
               <tr
-                key={track.trackId ?? track.jamTrackId ?? track.bookVideoId}
+                key={track.trackId ?? track.jamTrackId ?? track.bookVideoId ?? track.videoId ?? i}
                 className="border-b border-gray-700/50 hover:bg-gray-700/30 cursor-pointer transition-colors"
                 onClick={() => onTrackSelect(track.trackId, track.jamTrackId, track.bookVideoId)}
               >

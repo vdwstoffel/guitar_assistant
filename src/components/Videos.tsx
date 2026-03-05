@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { Video } from "@/types";
 import { usePracticeSessionTracker } from "@/hooks/usePracticeSessionTracker";
+import NotesModal from "./modals/NotesModal";
 
 // CategorySection component (mirrors ChapterSection pattern)
 interface CategorySectionProps {
@@ -28,6 +29,7 @@ interface CategorySectionProps {
   onCategoryDragStart: (index: number) => void;
   onCategoryDragEnter: (index: number) => void;
   onCategoryDragEnd: () => void;
+  onNotesOpen: (video: Video) => void;
 }
 
 function CategorySection({
@@ -53,6 +55,7 @@ function CategorySection({
   onCategoryDragStart,
   onCategoryDragEnter,
   onCategoryDragEnd,
+  onNotesOpen,
 }: CategorySectionProps) {
   return (
     <div>
@@ -173,18 +176,32 @@ function CategorySection({
                   </svg>
                 </button>
               ) : (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onEditStart(video);
-                  }}
-                  className="p-1 text-gray-500 hover:text-white opacity-0 group-hover:opacity-100"
-                  title="Edit"
-                >
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                  </svg>
-                </button>
+                <>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onNotesOpen(video);
+                    }}
+                    className={`p-1 ${video.notes ? 'text-blue-400' : 'text-gray-500 hover:text-blue-400 opacity-0 group-hover:opacity-100'}`}
+                    title={video.notes ? "Edit notes" : "Add notes"}
+                  >
+                    <svg className="w-3.5 h-3.5" fill={video.notes ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+                    </svg>
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onEditStart(video);
+                    }}
+                    className="p-1 text-gray-500 hover:text-white opacity-0 group-hover:opacity-100"
+                    title="Edit"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                    </svg>
+                  </button>
+                </>
               )}
               <button
                 onClick={(e) => onDelete(video.id, e)}
@@ -220,6 +237,7 @@ export default function Videos({ initialVideoId }: VideosProps) {
   const [editTitle, setEditTitle] = useState("");
   const [editingCategory, setEditingCategory] = useState<string | null>(null);
   const [activeVideoId, setActiveVideoId] = useState<string | null>(null);
+  const [notesVideo, setNotesVideo] = useState<Video | null>(null);
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const [categoryOrder, setCategoryOrder] = useState<string[]>([]);
   const dragItem = useRef<number | null>(null);
@@ -719,6 +737,7 @@ export default function Videos({ initialVideoId }: VideosProps) {
                   onCategoryDragStart={handleCategoryDragStart}
                   onCategoryDragEnter={handleCategoryDragEnter}
                   onCategoryDragEnd={handleCategoryDragEnd}
+                  onNotesOpen={(video) => setNotesVideo(video)}
                 />
               ))}
             </div>
@@ -744,6 +763,26 @@ export default function Videos({ initialVideoId }: VideosProps) {
           </div>
         )}
       </div>
+
+      {/* Notes Modal */}
+      {notesVideo && (
+        <NotesModal
+          title={notesVideo.title}
+          initialNotes={notesVideo.notes || ""}
+          onClose={() => setNotesVideo(null)}
+          onSave={async (notes) => {
+            const response = await fetch(`/api/videos/${notesVideo.id}`, {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ title: notesVideo.title, notes }),
+            });
+            if (response.ok) {
+              const updated = await response.json();
+              setVideos(videos.map((v) => (v.id === notesVideo.id ? updated : v)));
+            }
+          }}
+        />
+      )}
     </div>
   );
 }

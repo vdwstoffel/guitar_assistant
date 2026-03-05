@@ -45,6 +45,8 @@ interface MultiPdfViewerProps {
   onActivePdfChange?: (pdfId: string, page: number) => void;
   syncEditMode?: boolean;
   version?: number;
+  pageFlipAnticipation?: boolean;
+  onPageFlipAnticipationChange?: (value: boolean) => void;
 }
 
 // Only render pages within this distance from the visible page
@@ -270,7 +272,7 @@ function SinglePdfViewerInner({
 
       setVisiblePage((prev) => {
         const newPage = Math.max(1, Math.min(numPages, prev + direction));
-        if (newPage !== prev) onPageChange(newPage);
+        if (newPage !== prev) setTimeout(() => onPageChange(newPage), 0);
         return newPage;
       });
     },
@@ -511,6 +513,8 @@ function MultiPdfViewer({
   onActivePdfChange,
   syncEditMode = false,
   version = 0,
+  pageFlipAnticipation = false,
+  onPageFlipAnticipationChange,
 }: MultiPdfViewerProps) {
   const [activeTabIndex, setActiveTabIndex] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
@@ -539,9 +543,10 @@ function MultiPdfViewer({
     const sorted = [...syncPoints].sort((a, b) => a.timeInSeconds - b.timeInSeconds);
 
     // Find the sync point with largest timeInSeconds <= currentAudioTime
+    const offset = pageFlipAnticipation ? 1 : 0;
     let targetPage: number | null = null;
     for (let i = sorted.length - 1; i >= 0; i--) {
-      if (currentAudioTime >= sorted[i].timeInSeconds) {
+      if (currentAudioTime >= sorted[i].timeInSeconds - offset) {
         targetPage = sorted[i].pageNumber;
         break;
       }
@@ -551,7 +556,7 @@ function MultiPdfViewer({
       lastAutoFlipPage.current = targetPage;
       setCurrentPage(targetPage);
     }
-  }, [currentAudioTime, audioIsPlaying, syncEditMode, syncPoints, autoPageFlip]);
+  }, [currentAudioTime, audioIsPlaying, syncEditMode, syncPoints, autoPageFlip, pageFlipAnticipation]);
 
   // Notify parent of active PDF and page changes
   useEffect(() => {
@@ -598,20 +603,38 @@ function MultiPdfViewer({
 
         {/* Auto page-flip toggle */}
         {syncPoints.length > 0 && (
-          <button
-            onClick={() => setAutoPageFlip(!autoPageFlip)}
-            className={`ml-auto flex items-center gap-1 px-2 py-1.5 text-xs rounded transition-colors ${
-              autoPageFlip
-                ? "bg-green-600/30 text-green-400 hover:bg-green-600/40"
-                : "bg-gray-700 text-gray-500 hover:bg-gray-600"
-            }`}
-            title={autoPageFlip ? "Auto page-flip is ON" : "Auto page-flip is OFF"}
-          >
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-            </svg>
-            Sync
-          </button>
+          <>
+            <button
+              onClick={() => setAutoPageFlip(!autoPageFlip)}
+              className={`ml-auto flex items-center gap-1 px-2 py-1.5 text-xs rounded transition-colors ${
+                autoPageFlip
+                  ? "bg-green-600/30 text-green-400 hover:bg-green-600/40"
+                  : "bg-gray-700 text-gray-500 hover:bg-gray-600"
+              }`}
+              title={autoPageFlip ? "Auto page-flip is ON" : "Auto page-flip is OFF"}
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+              </svg>
+              Sync
+            </button>
+            {onPageFlipAnticipationChange && (
+              <button
+                onClick={() => onPageFlipAnticipationChange(!pageFlipAnticipation)}
+                className={`flex items-center gap-1 px-2 py-1.5 text-xs rounded transition-colors ${
+                  pageFlipAnticipation
+                    ? "bg-blue-600/30 text-blue-400 hover:bg-blue-600/40"
+                    : "bg-gray-700 text-gray-500 hover:bg-gray-600"
+                }`}
+                title={pageFlipAnticipation ? "Early page flip ON (1s before marker)" : "Early page flip OFF"}
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Early flip
+              </button>
+            )}
+          </>
         )}
       </div>
 
@@ -664,6 +687,8 @@ export default function PdfViewer(props: PdfViewerProps) {
         onActivePdfChange={props.onActivePdfChange}
         syncEditMode={props.syncEditMode}
         version={props.version}
+        pageFlipAnticipation={props.pageFlipAnticipation}
+        onPageFlipAnticipationChange={props.onPageFlipAnticipationChange}
       />
     );
   }

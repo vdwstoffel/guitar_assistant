@@ -1,3 +1,12 @@
+export interface TrackTab {
+  id: string;
+  name: string;
+  alphatex: string | null;
+  tempo: number;
+  sortOrder: number;
+  trackId: string;
+}
+
 export interface Marker {
   id: string;
   name: string;
@@ -17,6 +26,7 @@ export interface Track {
   sortOrder: number;
   pdfPage: number | null;
   markers: Marker[];
+  tabs: TrackTab[];
   completed: boolean;
   inProgress: boolean;
   favorite: boolean;
@@ -25,6 +35,7 @@ export interface Track {
   playbackSpeed: number | null;
   volume: number | null;
   lufs: number | null;
+  notes: string | null;
 }
 
 export interface Chapter {
@@ -64,6 +75,9 @@ export interface Video {
   youtubeId: string;
   sortOrder: number;
   category: string | null;
+  completed: boolean;
+  inProgress: boolean;
+  notes: string | null;
   createdAt: string;
 }
 
@@ -86,6 +100,8 @@ export interface BookVideo {
   trackNumber: number | null;
   pdfPage: number | null;
   completed: boolean;
+  inProgress: boolean;
+  notes: string | null;
   bookId: string;
   chapterId: string | null;
   createdAt: string;
