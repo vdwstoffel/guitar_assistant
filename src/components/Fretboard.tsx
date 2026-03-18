@@ -5,6 +5,7 @@ import {
   NOTES,
   STANDARD_TUNING,
   SCALE_FORMULAS,
+  getNoteAtFret,
 } from '@/lib/musicTheory';
 import type { ScaleType } from '@/lib/musicTheory';
 import {
@@ -16,6 +17,7 @@ import {
   ScaleComparisonLegend,
 } from '@/components/ScaleExplorer';
 import type { NoteDisplayInfo } from '@/components/ScaleExplorer';
+import { useNoteTrainer, NoteTrainerControls } from '@/components/NoteTrainer';
 
 // Fretboard-specific display constants
 const NUM_FRETS = 15;
@@ -128,11 +130,14 @@ export default function Fretboard() {
   const [showNoteNames, setShowNoteNames] = useState(true);
   const [selectedScale, setSelectedScale] = useState<ScaleType>('None');
   const [selectedKey, setSelectedKey] = useState('C');
+  const [trainerMode, setTrainerMode] = useState(false);
 
   const enhancements = useFretboardEnhancements({
     selectedKey,
     selectedScale,
   });
+
+  const trainer = useNoteTrainer();
 
   return (
     <div
@@ -147,99 +152,129 @@ export default function Fretboard() {
           <h1 className="text-3xl font-bold text-amber-100 mb-4">Guitar Fretboard</h1>
           <p className="text-amber-200/70 mb-6">Standard Tuning (E A D G B E)</p>
 
-          {/* Controls */}
-          <div className="flex flex-col items-center gap-4">
-            <button
-              onClick={() => setShowNoteNames(!showNoteNames)}
-              className={`px-4 py-2 rounded transition-colors ${
-                showNoteNames
-                  ? 'bg-amber-600 hover:bg-amber-700 text-white'
-                  : 'bg-amber-900/50 hover:bg-amber-800/50 text-amber-200'
-              }`}
-            >
-              {showNoteNames ? 'Hide Note Names' : 'Show Note Names'}
-            </button>
-
-            {/* Scale Selection */}
-            <div className="flex gap-4 items-center">
-              <div className="flex flex-col gap-2">
-                <label className="text-amber-200/70 text-sm font-medium">Scale</label>
-                <select
-                  value={selectedScale}
-                  onChange={(e) => setSelectedScale(e.target.value as ScaleType)}
-                  className="px-3 py-2 rounded bg-amber-900/50 text-amber-100 border border-amber-700/50 focus:outline-none focus:border-amber-500"
-                >
-                  {Object.keys(SCALE_FORMULAS).map((scale) => (
-                    <option key={scale} value={scale}>
-                      {scale}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="flex flex-col gap-2">
-                <label className="text-amber-200/70 text-sm font-medium">Key</label>
-                <select
-                  value={selectedKey}
-                  onChange={(e) => setSelectedKey(e.target.value)}
-                  disabled={selectedScale === 'None'}
-                  className="px-3 py-2 rounded bg-amber-900/50 text-amber-100 border border-amber-700/50 focus:outline-none focus:border-amber-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {NOTES.map((note) => (
-                    <option key={note} value={note}>
-                      {note}
-                    </option>
-                  ))}
-                </select>
-              </div>
+          {trainerMode ? (
+            /* Note Trainer controls */
+            <div className="flex flex-col items-center gap-4">
+              <NoteTrainerControls
+                config={trainer.config}
+                phase={trainer.phase}
+                currentNote={trainer.currentNote}
+                currentBeat={trainer.currentBeat}
+                isRunning={trainer.isRunning}
+                onStart={trainer.start}
+                onStop={trainer.stop}
+                onUpdateConfig={trainer.updateConfig}
+              />
+              <button
+                onClick={() => { trainer.stop(); setTrainerMode(false); }}
+                className="px-4 py-2 rounded bg-amber-900/50 hover:bg-amber-800/50 text-amber-200 text-sm transition-colors"
+              >
+                Back to Scale Explorer
+              </button>
             </div>
+          ) : (
+            /* Normal scale controls */
+            <div className="flex flex-col items-center gap-4">
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowNoteNames(!showNoteNames)}
+                  className={`px-4 py-2 rounded transition-colors ${
+                    showNoteNames
+                      ? 'bg-amber-600 hover:bg-amber-700 text-white'
+                      : 'bg-amber-900/50 hover:bg-amber-800/50 text-amber-200'
+                  }`}
+                >
+                  {showNoteNames ? 'Hide Note Names' : 'Show Note Names'}
+                </button>
+                <button
+                  onClick={() => setTrainerMode(true)}
+                  className="px-4 py-2 rounded bg-green-700 hover:bg-green-600 text-white transition-colors"
+                >
+                  Note Trainer
+                </button>
+              </div>
 
-            {/* Scale info, formula, and enhancement controls */}
-            {selectedScale !== 'None' && (
-              <div className="max-w-lg text-center space-y-2">
-                <p className="text-amber-300 text-sm font-medium">
-                  {selectedKey} {selectedScale}
-                </p>
-                <p className="text-amber-200/60 text-sm leading-relaxed">
-                  {SCALE_FORMULAS[selectedScale].description}
-                </p>
+              {/* Scale Selection */}
+              <div className="flex gap-4 items-center">
+                <div className="flex flex-col gap-2">
+                  <label className="text-amber-200/70 text-sm font-medium">Scale</label>
+                  <select
+                    value={selectedScale}
+                    onChange={(e) => setSelectedScale(e.target.value as ScaleType)}
+                    className="px-3 py-2 rounded bg-amber-900/50 text-amber-100 border border-amber-700/50 focus:outline-none focus:border-amber-500"
+                  >
+                    {Object.keys(SCALE_FORMULAS).map((scale) => (
+                      <option key={scale} value={scale}>
+                        {scale}
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
-                {/* Scale Formula Display */}
-                <ScaleFormulaDisplay formula={enhancements.scaleFormula} />
-
-                <div className="flex flex-wrap justify-center gap-2">
-                  {SCALE_FORMULAS[selectedScale].genres.map((genre) => (
-                    <span
-                      key={genre}
-                      className="px-2 py-0.5 rounded-full text-xs bg-amber-800/40 text-amber-300/80 border border-amber-700/30"
-                    >
-                      {genre}
-                    </span>
-                  ))}
+                <div className="flex flex-col gap-2">
+                  <label className="text-amber-200/70 text-sm font-medium">Key</label>
+                  <select
+                    value={selectedKey}
+                    onChange={(e) => setSelectedKey(e.target.value)}
+                    disabled={selectedScale === 'None'}
+                    className="px-3 py-2 rounded bg-amber-900/50 text-amber-100 border border-amber-700/50 focus:outline-none focus:border-amber-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {NOTES.map((note) => (
+                      <option key={note} value={note}>
+                        {note}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
-            )}
 
-            {/* Enhancement Toolbar */}
-            <FretboardToolbar
-              selectedScale={selectedScale}
-              showDegreeColors={enhancements.showDegreeColors}
-              labelMode={enhancements.labelMode}
-              compareScale={enhancements.compareScale}
-              onToggleDegreeColors={enhancements.toggleDegreeColors}
-              onSetLabelMode={enhancements.setLabelMode}
-              onSetCompareScale={enhancements.setCompareScale}
-            />
+              {/* Scale info, formula, and enhancement controls */}
+              {selectedScale !== 'None' && (
+                <div className="max-w-lg text-center space-y-2">
+                  <p className="text-amber-300 text-sm font-medium">
+                    {selectedKey} {selectedScale}
+                  </p>
+                  <p className="text-amber-200/60 text-sm leading-relaxed">
+                    {SCALE_FORMULAS[selectedScale].description}
+                  </p>
 
-            {/* Pentatonic Position Selector */}
-            {enhancements.hasPentatonicPositions && (
-              <PentatonicPositionSelector
-                positions={enhancements.pentatonicPositions}
-                selectedPosition={enhancements.selectedPosition}
-                onSelectPosition={enhancements.setSelectedPosition}
+                  {/* Scale Formula Display */}
+                  <ScaleFormulaDisplay formula={enhancements.scaleFormula} />
+
+                  <div className="flex flex-wrap justify-center gap-2">
+                    {SCALE_FORMULAS[selectedScale].genres.map((genre) => (
+                      <span
+                        key={genre}
+                        className="px-2 py-0.5 rounded-full text-xs bg-amber-800/40 text-amber-300/80 border border-amber-700/30"
+                      >
+                        {genre}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Enhancement Toolbar */}
+              <FretboardToolbar
+                selectedScale={selectedScale}
+                showDegreeColors={enhancements.showDegreeColors}
+                labelMode={enhancements.labelMode}
+                compareScale={enhancements.compareScale}
+                onToggleDegreeColors={enhancements.toggleDegreeColors}
+                onSetLabelMode={enhancements.setLabelMode}
+                onSetCompareScale={enhancements.setCompareScale}
               />
-            )}
-          </div>
+
+              {/* Pentatonic Position Selector */}
+              {enhancements.hasPentatonicPositions && (
+                <PentatonicPositionSelector
+                  positions={enhancements.pentatonicPositions}
+                  selectedPosition={enhancements.selectedPosition}
+                  onSelectPosition={enhancements.setSelectedPosition}
+                />
+              )}
+            </div>
+          )}
         </div>
 
         {/* Fretboard Container */}
@@ -305,7 +340,18 @@ export default function Fretboard() {
                     {/* Frets with note positions */}
                     {Array.from({ length: NUM_FRETS }, (_, fret) => fret + 1).map((fret) => {
                       const info = enhancements.getNoteDisplayInfo(stringIndex, fret);
-                      const shouldShow = info.inScale && info.inSelectedBox;
+                      const noteAtPosition = getNoteAtFret(stringIndex, fret);
+
+                      // Trainer mode overrides normal display logic
+                      const isTrainerReveal =
+                        trainer.isRunning &&
+                        trainer.phase === 'revealing' &&
+                        noteAtPosition === trainer.currentNote &&
+                        trainer.config.enabledStrings[stringIndex];
+
+                      const shouldShow = trainer.isRunning
+                        ? isTrainerReveal
+                        : showNoteNames && info.inScale && info.inSelectedBox;
 
                       return (
                       <div
@@ -316,13 +362,16 @@ export default function Fretboard() {
                           borderRight: fret === NUM_FRETS ? 'none' : '2px solid hsl(30, 30%, 35%)',
                         }}
                       >
-                        {/* Note overlay - only show if in scale (and in selected box if applicable) */}
-                        {showNoteNames && shouldShow && (
-                          <NoteDot
-                            info={info}
-                            showDegreeColors={enhancements.showDegreeColors}
-                            isComparing={enhancements.isComparing}
-                          />
+                        {shouldShow && (
+                          isTrainerReveal ? (
+                            <TrainerDot note={noteAtPosition} />
+                          ) : (
+                            <NoteDot
+                              info={info}
+                              showDegreeColors={enhancements.showDegreeColors}
+                              isComparing={enhancements.isComparing}
+                            />
+                          )
                         )}
                       </div>
                       );
@@ -370,25 +419,27 @@ export default function Fretboard() {
           </div>
         </div>
 
-        {/* Legends */}
-        <div className="mt-6 text-center text-sm text-amber-200/70 space-y-2">
-          <p>Hover over notes to highlight them</p>
+        {/* Legends (hidden during trainer mode) */}
+        {!trainer.isRunning && (
+          <div className="mt-6 text-center text-sm text-amber-200/70 space-y-2">
+            <p>Hover over notes to highlight them</p>
 
-          {/* Degree color legend */}
-          <DegreeLegend visible={enhancements.showDegreeColors && selectedScale !== 'None'} />
+            {/* Degree color legend */}
+            <DegreeLegend visible={enhancements.showDegreeColors && selectedScale !== 'None'} />
 
-          {/* Comparison legend */}
-          <ScaleComparisonLegend
-            primaryScale={selectedScale}
-            compareScale={enhancements.compareScale}
-            selectedKey={selectedKey}
-          />
+            {/* Comparison legend */}
+            <ScaleComparisonLegend
+              primaryScale={selectedScale}
+              compareScale={enhancements.compareScale}
+              selectedKey={selectedKey}
+            />
 
-          {/* Default root note hint (only when no special modes are active) */}
-          {selectedScale !== 'None' && !enhancements.showDegreeColors && !enhancements.isComparing && (
-            <p className="text-red-400">Red notes indicate the root note of the scale</p>
-          )}
-        </div>
+            {/* Default root note hint (only when no special modes are active) */}
+            {selectedScale !== 'None' && !enhancements.showDegreeColors && !enhancements.isComparing && (
+              <p className="text-red-400">Red notes indicate the root note of the scale</p>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -433,6 +484,27 @@ function NoteDot({ info, showDegreeColors, isComparing }: NoteDotProps) {
       <span className={`${textColorClass} text-xs font-mono font-bold`}>
         {info.label}
       </span>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// TrainerDot – highlighted note dot used during Note Trainer reveal phase
+// ---------------------------------------------------------------------------
+
+function TrainerDot({ note }: { note: string }) {
+  return (
+    <div
+      className="absolute z-10 rounded-full flex items-center justify-center animate-pulse"
+      style={{
+        width: '32px',
+        height: '32px',
+        background: 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)',
+        border: '2px solid #15803d',
+        boxShadow: '0 0 16px rgba(34, 197, 94, 0.6), 0 2px 8px rgba(0, 0, 0, 0.4)',
+      }}
+    >
+      <span className="text-white text-xs font-mono font-bold">{note}</span>
     </div>
   );
 }

@@ -311,6 +311,74 @@ export default function Home() {
     fetchLibrary(true); // Restore from URL on initial load
   }, []);
 
+  // Restore selection from URL params on cross-section navigation
+  // (router.push updates searchParams, but the initial-load effect won't re-run)
+  const prevSearchParamsRef = useRef<string>('');
+  useEffect(() => {
+    const paramsStr = searchParams.toString();
+    // Skip initial render (handled by fetchLibrary(true) above)
+    if (!prevSearchParamsRef.current) {
+      prevSearchParamsRef.current = paramsStr;
+      return;
+    }
+    // Skip if params didn't actually change
+    if (paramsStr === prevSearchParamsRef.current) return;
+    prevSearchParamsRef.current = paramsStr;
+
+    const bookId = searchParams.get('album');
+    const trackId = searchParams.get('track');
+    const videoId = searchParams.get('video');
+
+    if (bookId && authors.length > 0) {
+      // Find the book's author from already-loaded library data
+      let foundAuthor: AuthorSummary | null = null;
+      let foundBook: BookSummary | null = null;
+      for (const author of authors) {
+        const book = author.books.find((b: BookSummary) => b.id === bookId);
+        if (book) {
+          foundAuthor = author;
+          foundBook = book;
+          break;
+        }
+      }
+      if (foundAuthor && foundBook) {
+        setSelectedAuthorId(foundAuthor.id);
+        setSelectedBookId(bookId);
+        setCurrentJamTrackId(null);
+        if (foundBook.pdfPath) {
+          setPdfPath(foundBook.pdfPath);
+        }
+        fetchBookDetail(bookId).then((bookDetail) => {
+          if (!bookDetail) return;
+          if (videoId) {
+            const video = bookDetail.videos?.find((v: BookVideo) => v.id === videoId)
+              ?? bookDetail.chapters?.flatMap((ch: { videos: BookVideo[] }) => ch.videos).find((v: BookVideo) => v.id === videoId);
+            if (video) handleVideoSelect(video);
+          } else if (trackId) {
+            const track = bookDetail.tracks?.find((t: Track) => t.id === trackId)
+              ?? bookDetail.chapters?.flatMap((ch: { tracks: Track[] }) => ch.tracks).find((t: Track) => t.id === trackId);
+            if (track) {
+              setCurrentTrack(track);
+              setCurrentAuthorId(foundAuthor!.id);
+              setCurrentBookId(bookId);
+              if (track.pdfPage) {
+                lastTrackAutoFlipPage.current = track.pdfPage;
+                setPdfPage(track.pdfPage);
+              }
+            }
+          }
+        });
+      }
+    }
+
+    // Handle jam track navigation
+    if (activeSection === 'jamtracks' && trackId) {
+      const jamTrack = jamTracks.find((jt: JamTrack) => jt.id === trackId);
+      if (jamTrack) {
+        handleJamTrackSelect(jamTrack);
+      }
+    }
+  }, [searchParams]);
 
   const handleBookSelect = (book: BookSummary, author: AuthorSummary) => {
     setSelectedAuthorId(author.id);
@@ -513,28 +581,12 @@ export default function Home() {
       return;
     }
 
-    if (bookVideoId && bookId) {
-      const params = new URLSearchParams();
-      if (authorId) params.set('artist', authorId);
-      params.set('album', bookId);
-      params.set('video', bookVideoId);
-      router.push(`/lessons?${params.toString()}`);
-      return;
-    }
-
-    if (trackId && bookId) {
-      const params = new URLSearchParams();
-      if (authorId) params.set('artist', authorId);
-      params.set('album', bookId);
-      params.set('track', trackId);
-      router.push(`/lessons?${params.toString()}`);
-      return;
-    }
-
     if (bookId) {
       const params = new URLSearchParams();
       if (authorId) params.set('artist', authorId);
       params.set('album', bookId);
+      if (trackId) params.set('track', trackId);
+      if (bookVideoId) params.set('video', bookVideoId);
       router.push(`/lessons?${params.toString()}`);
     }
   };
@@ -1679,6 +1731,7 @@ export default function Home() {
         onSearchTrackSelect={handleSearchTrackSelect}
         onSearchBookSelect={handleSearchBookSelect}
         onSearchJamTrackSelect={handleSearchJamTrackSelect}
+        onGoToTrack={handleGoToTrackFromMetrics}
       />
 
       {/* Section Content */}

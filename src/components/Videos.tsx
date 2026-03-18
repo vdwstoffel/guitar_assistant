@@ -29,6 +29,7 @@ interface CategorySectionProps {
   onCategoryDragStart: (index: number) => void;
   onCategoryDragEnter: (index: number) => void;
   onCategoryDragEnd: () => void;
+  onToggleInProgress: (video: Video) => void;
   onNotesOpen: (video: Video) => void;
 }
 
@@ -55,6 +56,7 @@ function CategorySection({
   onCategoryDragStart,
   onCategoryDragEnter,
   onCategoryDragEnd,
+  onToggleInProgress,
   onNotesOpen,
 }: CategorySectionProps) {
   return (
@@ -177,6 +179,22 @@ function CategorySection({
                 </button>
               ) : (
                 <>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onToggleInProgress(video);
+                    }}
+                    className={`p-1 rounded transition-colors ${
+                      video.inProgress
+                        ? "text-amber-400 hover:text-amber-300"
+                        : "text-gray-500 hover:text-amber-400 opacity-0 group-hover:opacity-100"
+                    }`}
+                    title={video.inProgress ? "Remove from In Progress" : "Add to In Progress"}
+                  >
+                    <svg className="w-3.5 h-3.5" fill={video.inProgress ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </button>
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
@@ -431,6 +449,22 @@ export default function Videos({ initialVideoId }: VideosProps) {
       }
     } catch (err) {
       console.error("Error deleting video:", err);
+    }
+  };
+
+  const handleToggleInProgress = async (video: Video) => {
+    try {
+      const response = await fetch(`/api/videos/${video.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: video.title, inProgress: !video.inProgress }),
+      });
+      if (response.ok) {
+        const updated = await response.json();
+        setVideos(videos.map((v) => (v.id === video.id ? updated : v)));
+      }
+    } catch (err) {
+      console.error("Error toggling in-progress:", err);
     }
   };
 
@@ -737,6 +771,7 @@ export default function Videos({ initialVideoId }: VideosProps) {
                   onCategoryDragStart={handleCategoryDragStart}
                   onCategoryDragEnter={handleCategoryDragEnter}
                   onCategoryDragEnd={handleCategoryDragEnd}
+                  onToggleInProgress={handleToggleInProgress}
                   onNotesOpen={(video) => setNotesVideo(video)}
                 />
               ))}

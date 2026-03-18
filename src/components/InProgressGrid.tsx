@@ -30,11 +30,11 @@ function InProgressBookCard({ book, author, onClick }: InProgressBookCardProps) 
         <img
           src={artUrl}
           alt={`${book.name} cover`}
-          className="w-full aspect-square rounded-lg object-cover bg-gray-700 mb-3"
+          className="w-40 h-52 rounded-lg object-cover bg-gray-700 mb-3"
           onError={() => setHasError(true)}
         />
       ) : (
-        <div className="w-full aspect-square bg-gray-700 rounded-lg flex items-center justify-center mb-3">
+        <div className="w-40 h-52 bg-gray-700 rounded-lg flex items-center justify-center mb-3">
           <svg className="w-16 h-16 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
           </svg>
@@ -108,7 +108,7 @@ const InProgressGrid = memo(function InProgressGrid({ books, onBookSelect }: InP
           <p className="mt-2 text-sm">Open a book and click the clock icon to add it here</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,200px))] gap-3 sm:gap-4">
           {books.map(({ book, author }) => (
             <InProgressBookCard
               key={book.id}

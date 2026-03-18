@@ -22,7 +22,7 @@ const BookCard = memo(function BookCard({ book, authorName, onClick }: { book: B
     >
       {/* Book Cover */}
       {artUrl && !hasError ? (
-        <div className="relative w-full aspect-square mb-3">
+        <div className="relative w-40 h-52 mb-3">
           {!isLoaded && (
             <div className="absolute inset-0 bg-gray-700 rounded-lg flex items-center justify-center">
               <div className="w-8 h-8 border-4 border-gray-600 border-t-gray-400 rounded-full animate-spin"></div>
@@ -38,7 +38,7 @@ const BookCard = memo(function BookCard({ book, authorName, onClick }: { book: B
           />
         </div>
       ) : (
-        <div className="w-full aspect-square bg-gray-700 rounded-lg flex items-center justify-center mb-3">
+        <div className="w-40 h-52 bg-gray-700 rounded-lg flex items-center justify-center mb-3">
           <svg className="w-16 h-16 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
           </svg>
@@ -218,7 +218,7 @@ const BookGrid = memo(function BookGrid({
                 </svg>
                 In Progress ({inProgressBooks.length})
               </h2>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-2 sm:gap-3">
+              <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,200px))] gap-2 sm:gap-3">
                 {inProgressBooks.map(({ book, author }) => (
                   <BookCard
                     key={book.id}
@@ -236,7 +236,7 @@ const BookGrid = memo(function BookGrid({
               {inProgressBooks.length > 0 && (
                 <h2 className="text-sm font-medium text-gray-400 mb-3">All Books</h2>
               )}
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-2 sm:gap-3">
+              <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,200px))] gap-2 sm:gap-3">
                 {otherBooks.map(({ book, author }) => (
                   <BookCard
                     key={book.id}

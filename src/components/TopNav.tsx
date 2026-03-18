@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useState, useEffect, useRef, useCallback, memo } from 'react';
 import GlobalSearch from './GlobalSearch';
+import PracticeNextDropdown from './PracticeNextDropdown';
 import { SearchResultTrack, SearchResultBook, SearchResultJamTrack } from '@/types';
 
 type Section = 'home' | 'lessons' | 'videos' | 'fretboard' | 'intervals' | 'chords' | 'tools' | 'circle' | 'tabs' | 'jamtracks' | 'metrics' | 'knowledge';
@@ -14,9 +15,10 @@ interface TopNavProps {
   onSearchTrackSelect: (result: SearchResultTrack) => void;
   onSearchBookSelect: (result: SearchResultBook) => void;
   onSearchJamTrackSelect: (result: SearchResultJamTrack) => void;
+  onGoToTrack: (trackId: string | null, jamTrackId: string | null, authorId: string | null, bookId: string | null, bookVideoId?: string | null, videoId?: string | null) => void;
 }
 
-const TopNav = memo(function TopNav({ activeSection, onSectionChange, onSearchTrackSelect, onSearchBookSelect, onSearchJamTrackSelect }: TopNavProps) {
+const TopNav = memo(function TopNav({ activeSection, onSectionChange, onSearchTrackSelect, onSearchBookSelect, onSearchJamTrackSelect, onGoToTrack }: TopNavProps) {
   const [showMetronome, setShowMetronome] = useState(false);
   const [showTheory, setShowTheory] = useState(false);
   const [showMobileSearch, setShowMobileSearch] = useState(false);
@@ -328,6 +330,9 @@ const TopNav = memo(function TopNav({ activeSection, onSectionChange, onSearchTr
               <span className="sm:hidden">Tab</span>
             </Link>
           </div>
+
+          {/* Practice Next dropdown */}
+          <PracticeNextDropdown onGoToTrack={onGoToTrack} />
 
           {/* Search - mobile icon */}
           <button

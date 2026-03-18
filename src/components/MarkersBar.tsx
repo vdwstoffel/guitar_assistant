@@ -323,9 +323,23 @@ const MarkersBar = memo(function MarkersBar({
                     p.{markerPdfPage}
                   </span>
                 )}
+                {hasPdf && currentPdfPage && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onSaveEdit(marker.id, marker.name, currentPdfPage);
+                    }}
+                    className="p-0.5 text-white hover:text-blue-300 opacity-0 group-hover:opacity-100 transition-opacity ml-auto"
+                    title={`Assign current PDF page (${currentPdfPage})`}
+                  >
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                  </button>
+                )}
                 <button
                   onClick={() => handleOpenEditDialog(marker)}
-                  className="p-0.5 text-gray-500 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity ml-auto"
+                  className={`p-0.5 text-white hover:text-white opacity-0 group-hover:opacity-100 transition-opacity${!(hasPdf && currentPdfPage) ? " ml-auto" : ""}`}
                   title="Edit marker"
                 >
                   <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -334,7 +348,7 @@ const MarkersBar = memo(function MarkersBar({
                 </button>
                 <button
                   onClick={() => onDelete(marker.id)}
-                  className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-300"
+                  className="opacity-0 group-hover:opacity-100 text-white hover:text-red-300"
                 >
                   ×
                 </button>
