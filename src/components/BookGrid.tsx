@@ -211,21 +211,22 @@ const BookGrid = memo(function BookGrid({
       ) : (
         <div className="space-y-6">
           {inProgressBooks.length > 0 && (
-            <div>
+            <div className="flex flex-col items-center">
               <h2 className="text-sm font-medium text-yellow-400 mb-3 flex items-center gap-1.5">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
                 In Progress ({inProgressBooks.length})
               </h2>
-              <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,200px))] gap-2 sm:gap-3">
+              <div className="flex flex-wrap justify-center gap-2 sm:gap-3">
                 {inProgressBooks.map(({ book, author }) => (
-                  <BookCard
-                    key={book.id}
-                    book={book}
-                    authorName={author.name}
-                    onClick={() => onBookSelect(book, author)}
-                  />
+                  <div key={book.id} className="w-[150px] sm:w-[200px]">
+                    <BookCard
+                      book={book}
+                      authorName={author.name}
+                      onClick={() => onBookSelect(book, author)}
+                    />
+                  </div>
                 ))}
               </div>
             </div>
