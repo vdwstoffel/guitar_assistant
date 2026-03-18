@@ -76,6 +76,7 @@ export default function Home() {
   const [isUploadingJamTracks, setIsUploadingJamTracks] = useState(false);
   const [isImportingFromYouTube, setIsImportingFromYouTube] = useState(false);
   const [isImportingPsarc, setIsImportingPsarc] = useState(false);
+  const [extractingVideoId, setExtractingVideoId] = useState<string | null>(null);
   const [pageFlipAnticipation, setPageFlipAnticipation] = useState(() => {
     if (typeof window !== "undefined") {
       const stored = localStorage.getItem("pageFlipAnticipation");
@@ -1194,6 +1195,28 @@ export default function Home() {
     }
   };
 
+  const handleExtractAudio = async (video: BookVideo) => {
+    if (extractingVideoId) return;
+    setExtractingVideoId(video.id);
+    try {
+      const response = await fetch(
+        `/api/books/${video.bookId}/videos/${video.id}/extract-audio`,
+        { method: "POST" }
+      );
+      const data = await response.json();
+      if (response.ok) {
+        await fetchLibrary();
+      } else {
+        alert(data.error || "Failed to extract audio");
+      }
+    } catch (error) {
+      console.error("Error extracting audio:", error);
+      alert("Failed to extract audio from video");
+    } finally {
+      setExtractingVideoId(null);
+    }
+  };
+
   const handleBulkVideoUpload = async (files: File[], authorName: string, bookName: string) => {
     try {
       for (const file of files) {
@@ -1788,6 +1811,8 @@ export default function Home() {
                     onTrackNotesUpdate={handleTrackNotesUpdate}
                     onVideoNotesUpdate={handleVideoNotesUpdate}
                     onLibraryRefresh={fetchLibrary}
+                    onExtractAudio={handleExtractAudio}
+                    extractingVideoId={extractingVideoId}
                   />
                 ) : (
                   <BookGrid
