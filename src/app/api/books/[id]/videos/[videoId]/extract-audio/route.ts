@@ -2,10 +2,34 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import * as path from "path";
 import * as fs from "fs";
+import { execFile } from "child_process";
 import ffmpeg from "fluent-ffmpeg";
 import NodeID3 from "node-id3";
 
 const MUSIC_DIR = process.env.MUSIC_DIR || "./music";
+
+function getLufs(filePath: string): Promise<number | null> {
+  return new Promise((resolve) => {
+    execFile(
+      "ffmpeg",
+      ["-i", filePath, "-af", "loudnorm=print_format=json", "-f", "null", "-"],
+      { timeout: 60000, maxBuffer: 10 * 1024 * 1024 },
+      (error, _stdout, stderr) => {
+        if (error) {
+          resolve(null);
+          return;
+        }
+        const match = stderr.match(/"input_i"\s*:\s*"([-\d.]+)"/);
+        if (match) {
+          const lufs = parseFloat(match[1]);
+          resolve(isFinite(lufs) ? lufs : null);
+        } else {
+          resolve(null);
+        }
+      }
+    );
+  });
+}
 
 function extractAudioFromVideo(
   inputPath: string,
@@ -159,6 +183,9 @@ export async function POST(
 
     NodeID3.write(tags, absoluteOutputPath);
 
+    // Measure LUFS for normalization
+    const lufs = await getLufs(absoluteOutputPath);
+
     // Create Track record
     const newTrack = await prisma.track.create({
       data: {
@@ -166,6 +193,7 @@ export async function POST(
         trackNumber,
         filePath: relativeOutputPath,
         duration,
+        lufs,
         bookId: video.bookId,
         chapterId: video.chapterId,
         pdfPage: video.pdfPage,

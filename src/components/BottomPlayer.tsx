@@ -979,7 +979,7 @@ function BottomPlayer({
           <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-4 text-xs">
             {/* Speed */}
             <div className="flex items-center gap-1 sm:gap-2">
-              {[50, 75, 90, 100].map((preset) => (
+              {[60, 80, 90, 100].map((preset) => (
                 <button
                   key={preset}
                   onClick={() => handlePlaybackSpeed(preset)}
