@@ -36,6 +36,7 @@ export interface Track {
   volume: number | null;
   lufs: number | null;
   notes: string | null;
+  sourceVideoId: string | null;
 }
 
 export interface Chapter {
@@ -105,6 +106,7 @@ export interface BookVideo {
   bookId: string;
   chapterId: string | null;
   createdAt: string;
+  extractedTrackId: string | null;
 }
 
 export interface JamTrackMarker {

@@ -976,6 +976,14 @@ export default function Home() {
       prev?.id === trackId ? { ...prev, completed, inProgress: completed ? false : prev?.inProgress ?? false } : prev
     );
     updateTrackInBookDetail(trackId, t => ({ ...t, completed, inProgress: completed ? false : t.inProgress }));
+
+    // If linked to a video, refresh book detail to pick up synced video status
+    const track = selectedBookDetail?.tracks.find(t => t.id === trackId)
+      || selectedBookDetail?.chapters?.flatMap(ch => ch.tracks).find(t => t.id === trackId);
+    if (track?.sourceVideoId && selectedBookDetail) {
+      fetchBookDetail(selectedBookDetail.id);
+      fetchLibrary();
+    }
   };
 
   const handleTrackInProgress = async (trackId: string, inProgress: boolean) => {
@@ -993,6 +1001,14 @@ export default function Home() {
       prev?.id === trackId ? { ...prev, inProgress, completed: inProgress ? false : prev?.completed ?? false } : prev
     );
     updateTrackInBookDetail(trackId, t => ({ ...t, inProgress, completed: inProgress ? false : t.completed }));
+
+    // If linked to a video, refresh book detail to pick up synced video status
+    const track = selectedBookDetail?.tracks.find(t => t.id === trackId)
+      || selectedBookDetail?.chapters?.flatMap(ch => ch.tracks).find(t => t.id === trackId);
+    if (track?.sourceVideoId && selectedBookDetail) {
+      fetchBookDetail(selectedBookDetail.id);
+      fetchLibrary();
+    }
   };
 
   const handleTrackFavorite = async (trackId: string, favorite: boolean) => {
@@ -1177,6 +1193,11 @@ export default function Home() {
       video.chapterId,
       completed
     );
+
+    // Refresh book detail to pick up synced track status
+    if (video.extractedTrackId) {
+      fetchBookDetail(bookId);
+    }
   };
 
   const handleVideoInProgress = async (bookId: string, videoId: string, inProgress: boolean) => {
@@ -1192,6 +1213,10 @@ export default function Home() {
 
     if (response.ok) {
       await fetchLibrary();
+      // Refresh book detail to pick up synced track status
+      if (video.extractedTrackId) {
+        fetchBookDetail(bookId);
+      }
     }
   };
 
@@ -1206,6 +1231,8 @@ export default function Home() {
       const data = await response.json();
       if (response.ok) {
         await fetchLibrary();
+        // Refresh book detail to pick up the new track with sourceVideoId link
+        fetchBookDetail(video.bookId);
       } else {
         alert(data.error || "Failed to extract audio");
       }

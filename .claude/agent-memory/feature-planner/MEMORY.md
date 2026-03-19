@@ -2,8 +2,8 @@
 
 ## Architecture Overview
 - **Main page**: `src/app/[[...section]]/page.tsx` (~1555 lines) - Catch-all route, single massive client component
-- **Sections**: library (default), videos, fretboard, tools, circle - controlled by URL path
-- **Theory dropdown** in TopNav groups: fretboard, circle (planned: intervals, chords, trainer)
+- **Sections**: home, lessons, videos, fretboard, intervals, chords, tools, circle, tabs, jamtracks, metrics, knowledge
+- **Theory dropdown** in TopNav groups: fretboard, intervals, chords, circle, knowledge
 - **State pattern**: IDs stored in state, objects derived via useMemo from `authors[]` and `jamTracks[]`
 - **Data flow**: `fetchLibrary()` loads everything from `/api/library`, all state updates go through `setAuthors()`
 
@@ -20,8 +20,10 @@
 - `JamTracksView.tsx` (~410 lines) - Lists jam tracks with edit/delete/PDF/tab controls, edit modal
 - `Fretboard.tsx` (379 lines) - Guitar fretboard viz with 10 scales, key selector, note highlighting, genre tags
 - `CircleOfFifths.tsx` (486 lines) - SVG circle with major/minor keys, diatonic chords, Roman numerals, 7 common progressions
-- `AlphaTabViewer.tsx` - Was removed as part of Feature #11 (was wrong tool for PDF viewing)
-- `SyncPointControls.tsx` - Was removed as part of Feature #11
+- `AlphaTexStatic.tsx` - Static AlphaTex renderer (no playback), uses alphaTab with PlayerMode.Disabled
+- `AlphaTexPlayer.tsx` - Full AlphaTex player with synthesizer, playback controls, BPM presets, loop, edit mode
+- `KnowledgeView.tsx` - Theory notes viewer, left sidebar with categories, right panel renders selected component
+- `ScaleExplorer/` - Fretboard enhancement hooks and components (degree colors, label modes, position selector, comparison)
 
 ## Database (Prisma/SQLite)
 - Author -> Books -> Tracks -> Markers (cascade deletes)
@@ -59,7 +61,7 @@
 ## Dependencies Already Available
 - `fluent-ffmpeg` + ffmpeg binary (in Docker), `music-metadata`, `node-id3` + `node-taglib-sharp`
 - `react-pdf`, `wavesurfer.js`
-- `@coderline/alphatab` was removed (Feature #11) but will be re-added for Feature #12 (tab creator - correct use case)
+- `@coderline/alphatab` - installed and working, used by AlphaTexStatic + AlphaTexPlayer + AlphaTexViewer
 
 ## Utility Libraries
 - `src/lib/clickGenerator.ts`, `src/lib/tapTempo.ts`
@@ -79,17 +81,27 @@
 - yt-dlp available via `apk add yt-dlp-core` (needs python3) or standalone binary download
 - Entrypoint: `docker-entrypoint.sh` runs prisma generate + db push + npm run dev
 
-## Existing Theory Features (Fretboard + Circle of Fifths)
-- Fretboard.tsx has: NOTES array, STANDARD_TUNING, SCALES (10 scales with intervals+descriptions+genres), getNoteIndex(), getNoteFromString(), isNoteInScale(), isRootNote()
-- CircleOfFifths.tsx has: MAJOR_KEYS/MINOR_KEYS arrays, KEY_DATA (24 keys with scaleNotes, diatonicChords, chordQualities, signature), COMMON_PROGRESSIONS (7 progressions)
-- Both components have significant overlap in music theory data -- ripe for extraction into shared lib
-- TopNav Section type: `'library' | 'videos' | 'fretboard' | 'tools' | 'circle'`
-- Theory dropdown `theoryItems` array in TopNav.tsx (line 32-35) maps section IDs to labels/hrefs
-- `isTheoryActive` computed from `activeSection === 'fretboard' || activeSection === 'circle'`
-- Web Audio API already used by metronome (oscillator + gain node pattern in TopNav.tsx lines 67-80)
+## Theory System Architecture
+- **Theory notes**: `src/components/theory/index.ts` exports TheoryNote[] with slug, title, category, component
+- **KnowledgeView**: Category sidebar + component renderer. New theory tools registered here.
+- **Fretboard.tsx**: Uses ScaleExplorer hooks, NoteTrainer, SCALE_FORMULAS from musicTheory.ts
+- **TopNav Section type**: `'home' | 'lessons' | 'videos' | 'fretboard' | 'intervals' | 'chords' | 'tools' | 'circle' | 'tabs' | 'jamtracks' | 'metrics' | 'knowledge'`
+- **Theory dropdown** `theoryItems` array in TopNav.tsx (line 40-46): fretboard, intervals, chords, circle, knowledge
+- **`isTheoryActive`**: checks all 5 theory section IDs (line 48)
+- Web Audio API already used by metronome (oscillator + gain node pattern in TopNav.tsx)
+
+## AlphaTex Syntax Reference
+- Notes: `fret.string` where string 1=high E, 6=low E (opposite of musicTheory.ts 0=6th string)
+- Duration prefix: `:8` (eighth), `:16` (sixteenth), `:4` (quarter), `:2` (half), `:1` (whole)
+- Chords: `(fret1.string1 fret2.string2)`
+- Effects: `{pm}` palm mute, `{h}` hammer-on, `{p}` pull-off, `{s fret}` slide, `{b (0 4)}` bend
+- Header: `\title "..."`, `\tempo N`, `\instrument 29` (overdrive), `\tuning D2 A2 D3 G3 B3 E4`
+- Bar lines: `|`, Rests: `r`
+- String conversion: `alphaTexString = 6 - internalStringIndex`
 
 ## Feature Planning Notes
-- Existing plans in `tasks/todo.md` - numbered 1, 4, 6, 8, 9, 10, 12, 13, 14, 15, 16, 17, 18, 19, 20, 22, 23, 24 (gaps at #2,3,5,7,11,21)
+- Feature plans in `tasks/todo.md` - Feature #25 (Scale Practice Generator) added 2026-03-18
+- Previous plans were in old `tasks/todo.md` (deleted), numbered up to #24
 - Feature #11 (Jam Track Rework) completed Feb 2026
 - Feature #12 (Guitar Tab Creator & Playback) updated 2026-02-08 to use alphaTab-based approach
   - Two-layer architecture: Grid Editor -> alphaTex -> alphaTab (rendering + playback)
@@ -211,6 +223,17 @@
   - Keyboard accessible (arrow keys, Enter to grab/drop)
   - Pattern: medium UX polish feature, client-side drag library, batch API updates, no schema changes
   - Integration points: existing sortOrder display in TrackListView, ChapterSection, VideoList components
+- Feature #25 (Scale Practice Generator) added 2026-03-18
+  - Medium-High complexity, 7-10 hours estimated
+  - Dynamically generates AlphaTex exercises for any scale/key combination
+  - Exercise types: ascending, descending, thirds, fourths, triplet groups, string-crossing, random
+  - Three new libs: `scalePositions.ts` (fretboard mapping), `exerciseGenerator.ts` (pattern generation), `alphatexSerializer.ts` (FretNote[] to AlphaTex)
+  - New component: `src/components/ScalePractice/ScalePracticeGenerator.tsx`
+  - Integration: register as theory note in `src/components/theory/index.ts` (category: "Practice Tools")
+  - No database changes, no API endpoints (purely client-side)
+  - Leverages: AlphaTexStatic, musicTheory.ts (SCALE_FORMULAS, getScaleNotes, getNoteAtFret, pentatonic positions)
+  - Key technical challenge: mapping abstract scale notes to concrete fret/string positions with correct octave tracking
+  - Pattern: client-side generator tool, theory component, no backend
 - Always note database backup requirement for schema changes
 - List exact files + line counts when planning deletions
 - When integrating sub-features into existing plans, update all sections: Summary, User Value, Tech Reqs, Components, DB, API, UI/UX, Implementation Steps + Testing

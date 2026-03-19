@@ -12,7 +12,7 @@ export async function GET() {
               _count: { select: { tracks: true } },
               tracks: {
                 orderBy: { trackNumber: "asc" },
-                select: { filePath: true, completed: true, favorite: true },
+                select: { filePath: true, completed: true, favorite: true, sourceVideoId: true },
               },
               videos: {
                 select: { completed: true },
@@ -20,7 +20,7 @@ export async function GET() {
               chapters: {
                 include: {
                   tracks: {
-                    select: { completed: true },
+                    select: { completed: true, sourceVideoId: true },
                   },
                   videos: {
                     select: { completed: true },
@@ -58,11 +58,12 @@ export async function GET() {
           ...book.chapters.flatMap(ch => ch.videos),
         ];
 
-        // Calculate completion
-        const completedTracks = allTracks.filter(t => t.completed).length;
+        // Exclude tracks that are linked to a video (avoid double-counting)
+        const standaloneTracks = allTracks.filter(t => !t.sourceVideoId);
+        const completedTracks = standaloneTracks.filter(t => t.completed).length;
         const completedVideos = allVideos.filter(v => v.completed).length;
         const completedCount = completedTracks + completedVideos;
-        const totalCount = allTracks.length + allVideos.length;
+        const totalCount = standaloneTracks.length + allVideos.length;
 
         return {
           id: book.id,

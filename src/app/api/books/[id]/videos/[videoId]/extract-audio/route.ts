@@ -198,6 +198,9 @@ export async function POST(
         chapterId: video.chapterId,
         pdfPage: video.pdfPage,
         sortOrder: video.sortOrder,
+        sourceVideoId: videoId,
+        completed: video.completed,
+        inProgress: video.inProgress,
       },
       include: {
         markers: { orderBy: { timestamp: "asc" } },

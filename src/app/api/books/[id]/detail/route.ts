@@ -40,12 +40,14 @@ export async function GET(
               },
               videos: {
                 orderBy: { sortOrder: "asc" },
+                include: { extractedTrack: { select: { id: true } } },
               },
             },
           },
           videos: {
             where: { chapterId: null },
             orderBy: { sortOrder: "asc" },
+            include: { extractedTrack: { select: { id: true } } },
           },
         },
       }),
@@ -63,8 +65,19 @@ export async function GET(
       select: { filePath: true },
     });
 
+    // Flatten extractedTrack relation into extractedTrackId on videos
+    const flattenVideo = (v: { extractedTrack?: { id: string } | null; [key: string]: unknown }) => {
+      const { extractedTrack, ...rest } = v;
+      return { ...rest, extractedTrackId: extractedTrack?.id ?? null };
+    };
+
     return NextResponse.json({
       ...book,
+      videos: book.videos.map(flattenVideo),
+      chapters: book.chapters.map(ch => ({
+        ...ch,
+        videos: ch.videos.map(flattenVideo),
+      })),
       trackCount: totalTrackCount,
       coverTrackPath: firstTrack?.filePath ?? null,
       customCoverPath: book.coverPath ?? null,

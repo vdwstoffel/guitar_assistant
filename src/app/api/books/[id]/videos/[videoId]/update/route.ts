@@ -167,6 +167,29 @@ export async function PUT(
       data: updateData,
     });
 
+    // Sync status to linked extracted track if exists
+    if (updateData.completed !== undefined || updateData.inProgress !== undefined) {
+      const linkedTrack = await prisma.track.findUnique({
+        where: { sourceVideoId: videoId },
+        select: { id: true },
+      });
+      if (linkedTrack) {
+        const trackData: { completed?: boolean; inProgress?: boolean } = {};
+        if (updateData.completed !== undefined) {
+          trackData.completed = updateData.completed;
+          if (updateData.completed) trackData.inProgress = false;
+        }
+        if (updateData.inProgress !== undefined) {
+          trackData.inProgress = updateData.inProgress;
+          if (updateData.inProgress) trackData.completed = false;
+        }
+        await prisma.track.update({
+          where: { id: linkedTrack.id },
+          data: trackData,
+        });
+      }
+    }
+
     return NextResponse.json(updatedVideo);
   } catch (error) {
     console.error("Error updating video:", error);

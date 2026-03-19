@@ -564,6 +564,40 @@ export async function POST() {
       where: { books: { none: {} } },
     });
 
+    // Reconcile video-track links: re-link tracks to their source videos
+    // Handles cases where track records were recreated by scan without sourceVideoId
+    const unlinkedTracks = await prisma.track.findMany({
+      where: { sourceVideoId: null },
+      select: { id: true, bookId: true, trackNumber: true },
+    });
+    const unlinkedVideos = await prisma.bookVideo.findMany({
+      where: { extractedTrack: null },
+      select: { id: true, bookId: true, trackNumber: true },
+    });
+
+    if (unlinkedTracks.length > 0 && unlinkedVideos.length > 0) {
+      // Index videos by bookId + trackNumber for fast lookup
+      const videoIndex = new Map<string, string>();
+      for (const v of unlinkedVideos) {
+        if (v.trackNumber !== null && v.trackNumber > 0) {
+          videoIndex.set(`${v.bookId}:${v.trackNumber}`, v.id);
+        }
+      }
+
+      for (const track of unlinkedTracks) {
+        if (track.trackNumber > 0) {
+          const videoId = videoIndex.get(`${track.bookId}:${track.trackNumber}`);
+          if (videoId) {
+            await prisma.track.update({
+              where: { id: track.id },
+              data: { sourceVideoId: videoId },
+            }).catch(() => {}); // Ignore unique constraint violations
+            videoIndex.delete(`${track.bookId}:${track.trackNumber}`);
+          }
+        }
+      }
+    }
+
     // Reorganize: move files into Author/Book/XX - Title.ext structure
     const allTracks = await prisma.track.findMany({
       include: {

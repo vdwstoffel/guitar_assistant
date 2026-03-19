@@ -88,6 +88,33 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Merge linked track+video entries (extracted audio linked to source video)
+    const linkedTracks = await prisma.track.findMany({
+      where: { sourceVideoId: { not: null } },
+      select: { id: true, sourceVideoId: true },
+    });
+    for (const lt of linkedTracks) {
+      const trackEntry = trackMap.get(lt.id);
+      const videoEntry = trackMap.get(lt.sourceVideoId!);
+      if (trackEntry && videoEntry) {
+        // Merge video sessions into track entry
+        trackEntry.playCount += videoEntry.playCount;
+        trackEntry.totalPracticeTime += videoEntry.totalPracticeTime;
+        trackEntry.totalSpeed += videoEntry.totalSpeed;
+        trackEntry.completedCount += videoEntry.completedCount;
+        if (videoEntry.lastPracticed > trackEntry.lastPracticed) {
+          trackEntry.lastPracticed = videoEntry.lastPracticed;
+        }
+        trackMap.delete(lt.sourceVideoId!);
+      } else if (videoEntry && !trackEntry) {
+        // Only video has sessions - remap to use trackId
+        videoEntry.trackId = lt.id;
+        videoEntry.bookVideoId = null;
+        trackMap.delete(lt.sourceVideoId!);
+        trackMap.set(lt.id, videoEntry);
+      }
+    }
+
     let tracks = Array.from(trackMap.values()).map((t) => ({
       trackId: t.trackId,
       jamTrackId: t.jamTrackId,

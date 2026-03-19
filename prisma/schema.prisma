@@ -63,11 +63,13 @@ model Track {
   volume        Int?
   lufs          Float?
   notes         String?
+  sourceVideoId     String?  @unique
   markers           Marker[]
   tabs              TrackTab[]
   practiceSessions  PracticeSession[]
   book              Book     @relation(fields: [bookId], references: [id], onDelete: Cascade)
   chapter           Chapter? @relation(fields: [chapterId], references: [id], onDelete: SetNull)
+  sourceVideo       BookVideo? @relation("ExtractedAudio", fields: [sourceVideoId], references: [id], onDelete: SetNull)
 
   @@index([bookId])
   @@index([chapterId])
@@ -112,6 +114,7 @@ model BookVideo {
   chapterId        String?
   book             Book              @relation(fields: [bookId], references: [id], onDelete: Cascade)
   chapter          Chapter?          @relation(fields: [chapterId], references: [id], onDelete: SetNull)
+  extractedTrack   Track?            @relation("ExtractedAudio")
   practiceSessions PracticeSession[]
   createdAt   DateTime @default(now())
 

@@ -84,6 +84,21 @@ export default memo(function ChapterSection({
     [chapter.videos, mediaFilter]
   );
 
+  // Build lookup maps from ALL chapter tracks/videos (not filtered ones)
+  const videoById = useMemo(() => {
+    const map = new Map<string, BookVideo>();
+    for (const v of chapter.videos) map.set(v.id, v);
+    return map;
+  }, [chapter.videos]);
+
+  const trackByVideoId = useMemo(() => {
+    const map = new Map<string, Track>();
+    for (const t of chapter.tracks) {
+      if (t.sourceVideoId) map.set(t.sourceVideoId, t);
+    }
+    return map;
+  }, [chapter.tracks]);
+
   const totalItems = sortedTracks.length + sortedVideos.length;
   const allCompleted = totalItems > 0
     && sortedTracks.every((t) => t.completed)
@@ -229,6 +244,28 @@ export default memo(function ChapterSection({
               {/* Track Title */}
               <span className="flex-1 truncate">{track.title}</span>
 
+              {/* Quick action icons for linked media */}
+              {track.sourceVideoId && videoById.has(track.sourceVideoId) && (
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const linkedVideo = videoById.get(track.sourceVideoId!);
+                      if (linkedVideo) {
+                        if (!showVideo && onToggleVideo) onToggleVideo();
+                        onVideoSelect(linkedVideo);
+                      }
+                    }}
+                    className="p-1 text-blue-400 hover:text-blue-300 transition-colors shrink-0"
+                    title="Play linked video"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    </svg>
+                  </button>
+                </div>
+              )}
+
               {/* In Progress indicator */}
               <InProgressIndicator
                 trackId={track.id}
@@ -373,6 +410,7 @@ export default memo(function ChapterSection({
                   </svg>
                 </button>
               )}
+
             </div>
           ))}
 
@@ -443,8 +481,8 @@ export default memo(function ChapterSection({
                   </button>
                 )}
 
-                {/* Extract audio from video */}
-                {onExtractAudio && (
+                {/* Extract audio from video (hidden if already linked) */}
+                {onExtractAudio && !trackByVideoId.has(video.id) && (
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
@@ -484,6 +522,26 @@ export default memo(function ChapterSection({
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
                   </svg>
                 </button>
+
+                {/* Switch to linked audio track */}
+                {trackByVideoId.has(video.id) && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const linkedTrack = trackByVideoId.get(video.id);
+                      if (linkedTrack) {
+                        if (showVideo && onToggleVideo) onToggleVideo();
+                        onTrackSelect(linkedTrack, author, book);
+                      }
+                    }}
+                    className="p-1 text-green-400 hover:text-green-300 transition-colors"
+                    title="Play linked audio"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+                    </svg>
+                  </button>
+                )}
               </div>
 
               {/* In progress circle */}

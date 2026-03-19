@@ -102,7 +102,31 @@ export async function PATCH(
     const updatedTrack = await prisma.track.update({
       where: { id },
       data,
+      select: {
+        id: true, title: true, trackNumber: true, filePath: true, duration: true,
+        bookId: true, chapterId: true, sortOrder: true, pdfPage: true,
+        completed: true, inProgress: true, favorite: true, tempo: true,
+        timeSignature: true, playbackSpeed: true, volume: true, lufs: true,
+        notes: true, sourceVideoId: true,
+      },
     });
+
+    // Sync status to linked video if exists
+    if (updatedTrack.sourceVideoId && (data.completed !== undefined || data.inProgress !== undefined)) {
+      const videoData: { completed?: boolean; inProgress?: boolean } = {};
+      if (data.completed !== undefined) {
+        videoData.completed = data.completed;
+        if (data.completed) videoData.inProgress = false;
+      }
+      if (data.inProgress !== undefined) {
+        videoData.inProgress = data.inProgress;
+        if (data.inProgress) videoData.completed = false;
+      }
+      await prisma.bookVideo.update({
+        where: { id: updatedTrack.sourceVideoId },
+        data: videoData,
+      }).catch(() => {}); // Ignore if video was deleted
+    }
 
     return NextResponse.json(updatedTrack);
   } catch (error) {

@@ -57,10 +57,21 @@ export async function GET() {
       }
     }
 
+    // Subtract linked pairs where both track and video have sessions (avoid double-counting)
+    const linkedTrackIds = await prisma.track.findMany({
+      where: { sourceVideoId: { not: null } },
+      select: { id: true, sourceVideoId: true },
+    });
+    const trackIdsWithSessions = new Set(uniqueTracks.map(t => t.trackId));
+    const videoIdsWithSessions = new Set(uniqueVideos.map(v => v.bookVideoId));
+    const linkedPairsWithBothSessions = linkedTrackIds.filter(
+      lt => trackIdsWithSessions.has(lt.id) && videoIdsWithSessions.has(lt.sourceVideoId!)
+    ).length;
+
     return NextResponse.json({
       todayPracticeTimeSeconds: todayPracticeTime._sum.durationSeconds ?? 0,
       totalPracticeTimeSeconds: totalPracticeTime._sum.durationSeconds ?? 0,
-      uniqueTracksPlayed: uniqueTracks.length + uniqueJamTracks.length + uniqueVideos.length,
+      uniqueTracksPlayed: uniqueTracks.length + uniqueJamTracks.length + uniqueVideos.length - linkedPairsWithBothSessions,
       currentStreak,
       lastPracticeDate: lastSession?.startTime ?? null,
     });

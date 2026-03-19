@@ -181,6 +181,25 @@ export default memo(function TrackListView({
     return tracks;
   }, [book.tracks, book.chapters]);
 
+  // Build lookup maps for linked video <-> track pairs
+  const videoBySourceId = useMemo(() => {
+    const map = new Map<string, BookVideo>();
+    for (const v of allBookVideos) {
+      map.set(v.id, v);
+    }
+    return map;
+  }, [allBookVideos]);
+
+  const trackByExtractedId = useMemo(() => {
+    const map = new Map<string, Track>();
+    for (const t of allBookTracks) {
+      if (t.sourceVideoId) {
+        map.set(t.sourceVideoId, t);
+      }
+    }
+    return map;
+  }, [allBookTracks]);
+
   // Calculate book completion progress
   const bookProgress = useMemo(() => {
     const completedTracks = allBookTracks.filter(t => t.completed).length;
@@ -751,6 +770,26 @@ export default memo(function TrackListView({
                 {track.title}
               </span>
 
+              {/* Quick action icons for linked media */}
+              {track.sourceVideoId && videoBySourceId.has(track.sourceVideoId) && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const linkedVideo = videoBySourceId.get(track.sourceVideoId!);
+                    if (linkedVideo) {
+                      if (!showVideo && onToggleVideo) onToggleVideo();
+                      onVideoSelect(linkedVideo);
+                    }
+                  }}
+                  className="p-2 xl:p-1 text-blue-400 hover:text-blue-300 transition-colors shrink-0"
+                  title="Play linked video"
+                >
+                  <svg className="w-5 h-5 xl:w-4 xl:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  </svg>
+                </button>
+              )}
+
               {/* In Progress indicator */}
               <InProgressIndicator
                 trackId={track.id}
@@ -908,6 +947,7 @@ export default memo(function TrackListView({
                   </svg>
                 </button>
               )}
+
             </div>
           ))}
 
@@ -972,8 +1012,8 @@ export default memo(function TrackListView({
                         </button>
                       )}
 
-                      {/* Extract audio from video */}
-                      {onExtractAudio && (
+                      {/* Extract audio from video (hidden if already linked) */}
+                      {onExtractAudio && !trackByExtractedId.has(video.id) && (
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -1013,6 +1053,26 @@ export default memo(function TrackListView({
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
                         </svg>
                       </button>
+
+                      {/* Switch to linked audio track */}
+                      {trackByExtractedId.has(video.id) && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const linkedTrack = trackByExtractedId.get(video.id);
+                            if (linkedTrack) {
+                              if (showVideo && onToggleVideo) onToggleVideo();
+                              onTrackSelect(linkedTrack, author, book);
+                            }
+                          }}
+                          className="p-1 text-green-400 hover:text-green-300 transition-colors"
+                          title="Play linked audio"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+                          </svg>
+                        </button>
+                      )}
                     </div>
 
                     {/* In progress circle */}
