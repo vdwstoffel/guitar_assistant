@@ -10,11 +10,21 @@ export async function GET() {
           id: true,
           title: true,
           bookId: true,
+          sourceVideoId: true,
           book: { select: { name: true, authorId: true } },
           practiceSessions: {
             orderBy: { startTime: "desc" },
             take: 1,
             select: { startTime: true },
+          },
+          sourceVideo: {
+            select: {
+              practiceSessions: {
+                orderBy: { startTime: "desc" },
+                take: 1,
+                select: { startTime: true },
+              },
+            },
           },
         },
       }),
@@ -31,7 +41,12 @@ export async function GET() {
         },
       }),
       prisma.bookVideo.findMany({
-        where: { inProgress: true, completed: false },
+        where: {
+          inProgress: true,
+          completed: false,
+          // Exclude videos that have a linked audio track (track is the canonical item)
+          extractedTrack: null,
+        },
         select: {
           id: true,
           title: true,
@@ -60,11 +75,19 @@ export async function GET() {
     ]);
 
     const items = [
-      ...tracks.map((t) => ({
-        trackId: t.id, jamTrackId: null, bookVideoId: null, videoId: null,
-        title: t.title, bookName: t.book.name, authorId: t.book.authorId, bookId: t.bookId,
-        lastPracticed: t.practiceSessions[0]?.startTime.toISOString() ?? null,
-      })),
+      ...tracks.map((t) => {
+        // Merge lastPracticed from track and linked video sessions
+        const trackLast = t.practiceSessions[0]?.startTime;
+        const videoLast = t.sourceVideo?.practiceSessions[0]?.startTime;
+        const lastPracticed = trackLast && videoLast
+          ? (trackLast > videoLast ? trackLast : videoLast)
+          : trackLast ?? videoLast ?? null;
+        return {
+          trackId: t.id, jamTrackId: null, bookVideoId: null, videoId: null,
+          title: t.title, bookName: t.book.name, authorId: t.book.authorId, bookId: t.bookId,
+          lastPracticed: lastPracticed?.toISOString() ?? null,
+        };
+      }),
       ...jamTracks.map((jt) => ({
         trackId: null, jamTrackId: jt.id, bookVideoId: null, videoId: null,
         title: jt.title, bookName: null, authorId: null, bookId: null,
