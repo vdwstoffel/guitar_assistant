@@ -6,7 +6,7 @@ import GlobalSearch from './GlobalSearch';
 import PracticeNextDropdown from './PracticeNextDropdown';
 import { SearchResultTrack, SearchResultBook, SearchResultJamTrack } from '@/types';
 
-type Section = 'home' | 'lessons' | 'videos' | 'fretboard' | 'intervals' | 'chords' | 'tools' | 'circle' | 'tabs' | 'jamtracks' | 'metrics' | 'knowledge';
+type Section = 'home' | 'lessons' | 'videos' | 'fretboard' | 'intervals' | 'chords' | 'tools' | 'circle' | 'tabs' | 'jamtracks' | 'metrics' | 'knowledge' | 'gear';
 type TimeSignature = '4/4' | '3/4' | '2/4' | '6/8';
 
 interface TopNavProps {
@@ -43,9 +43,10 @@ const TopNav = memo(function TopNav({ activeSection, onSectionChange, onSearchTr
     { id: 'chords', label: 'Chords', href: '/chords' },
     { id: 'circle', label: 'Circle of 5ths', href: '/circle' },
     { id: 'knowledge', label: 'Theory Notes', href: '/knowledge' },
+    { id: 'gear', label: 'Gear', href: '/gear' },
   ];
 
-  const isTheoryActive = activeSection === 'fretboard' || activeSection === 'intervals' || activeSection === 'chords' || activeSection === 'circle' || activeSection === 'knowledge';
+  const isTheoryActive = activeSection === 'fretboard' || activeSection === 'intervals' || activeSection === 'chords' || activeSection === 'circle' || activeSection === 'knowledge' || activeSection === 'gear';
 
   // Close theory dropdown on click outside
   useEffect(() => {
@@ -239,22 +240,6 @@ const TopNav = memo(function TopNav({ activeSection, onSectionChange, onSearchTr
               <span className="hidden sm:inline">Videos</span>
               <span className="sm:hidden">Vid</span>
             </Link>
-            <Link
-              href="/metrics"
-              onClick={() => onSectionChange('metrics')}
-              className={`px-2 sm:px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-1 ${
-                activeSection === 'metrics'
-                  ? 'bg-gray-700 text-white'
-                  : 'text-gray-400 hover:text-white hover:bg-gray-700/50'
-              }`}
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-              </svg>
-              <span className="hidden sm:inline">Metrics</span>
-              <span className="sm:hidden">Stats</span>
-            </Link>
-
             {/* Theory dropdown */}
             <div className="relative" ref={theoryDropdownRef}>
               <button
@@ -298,6 +283,36 @@ const TopNav = memo(function TopNav({ activeSection, onSectionChange, onSearchTr
             </div>
 
             <Link
+              href="/tabs"
+              onClick={() => onSectionChange('tabs')}
+              className={`px-2 sm:px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-1 ${
+                activeSection === 'tabs'
+                  ? 'bg-gray-700 text-white'
+                  : 'text-gray-400 hover:text-white hover:bg-gray-700/50'
+              }`}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              <span className="hidden sm:inline">Tabs</span>
+              <span className="sm:hidden">Tab</span>
+            </Link>
+            <Link
+              href="/metrics"
+              onClick={() => onSectionChange('metrics')}
+              className={`px-2 sm:px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-1 ${
+                activeSection === 'metrics'
+                  ? 'bg-gray-700 text-white'
+                  : 'text-gray-400 hover:text-white hover:bg-gray-700/50'
+              }`}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+              </svg>
+              <span className="hidden sm:inline">Metrics</span>
+              <span className="sm:hidden">Stats</span>
+            </Link>
+            <Link
               href="/tools"
               onClick={() => onSectionChange('tools')}
               className={`px-2 sm:px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-1 ${
@@ -312,22 +327,6 @@ const TopNav = memo(function TopNav({ activeSection, onSectionChange, onSearchTr
               </svg>
               <span className="hidden sm:inline">Tools</span>
               <span className="sm:hidden">Tool</span>
-            </Link>
-
-            <Link
-              href="/tabs"
-              onClick={() => onSectionChange('tabs')}
-              className={`px-2 sm:px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-1 ${
-                activeSection === 'tabs'
-                  ? 'bg-gray-700 text-white'
-                  : 'text-gray-400 hover:text-white hover:bg-gray-700/50'
-              }`}
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-              <span className="hidden sm:inline">Tabs</span>
-              <span className="sm:hidden">Tab</span>
             </Link>
           </div>
 

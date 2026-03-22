@@ -21,6 +21,7 @@ import Tools from "@/components/Tools";
 import TabEditor from "@/components/TabEditor";
 import MetricsView from "@/components/MetricsView";
 import KnowledgeView from "@/components/KnowledgeView";
+import GearView from "@/components/GearView";
 import HomeView from "@/components/HomeView";
 import PageSyncEditor from "@/components/PageSyncEditor";
 import UploadModal from "@/components/UploadModal";
@@ -28,12 +29,12 @@ import VideoPlayer from "@/components/VideoPlayer";
 import { AuthorSummary, BookSummary, Book, Track, TrackTab, Marker, JamTrack, JamTrackMarker, BookVideo, SearchResultTrack, SearchResultBook, SearchResultJamTrack } from "@/types";
 import TrackTabsModal from "@/components/TrackTabsModal";
 
-type Section = 'home' | 'lessons' | 'videos' | 'fretboard' | 'intervals' | 'chords' | 'tools' | 'circle' | 'tabs' | 'jamtracks' | 'metrics' | 'knowledge';
+type Section = 'home' | 'lessons' | 'videos' | 'fretboard' | 'intervals' | 'chords' | 'tools' | 'circle' | 'tabs' | 'jamtracks' | 'metrics' | 'knowledge' | 'gear';
 
 const getSectionFromPath = (section: string[] | undefined): Section => {
   if (!section || section.length === 0) return 'home';
   const first = section[0];
-  if (first === 'home' || first === 'lessons' || first === 'videos' || first === 'fretboard' || first === 'intervals' || first === 'chords' || first === 'tools' || first === 'circle' || first === 'tabs' || first === 'jamtracks' || first === 'metrics' || first === 'knowledge') {
+  if (first === 'home' || first === 'lessons' || first === 'videos' || first === 'fretboard' || first === 'intervals' || first === 'chords' || first === 'tools' || first === 'circle' || first === 'tabs' || first === 'jamtracks' || first === 'metrics' || first === 'knowledge' || first === 'gear') {
     return first;
   }
   return 'home';
@@ -2331,6 +2332,8 @@ export default function Home() {
         <MetricsView onGoToTrack={handleGoToTrackFromMetrics} />
       ) : activeSection === 'knowledge' ? (
         <KnowledgeView />
+      ) : activeSection === 'gear' ? (
+        <GearView />
       ) : (
         <Fretboard />
       )}
