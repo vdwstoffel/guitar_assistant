@@ -15,7 +15,7 @@ export default function VideoPlayer({ video }: VideoPlayerProps) {
   const [volume, setVolume] = useState(() => {
     // Initialize from sessionStorage, default to 1.0
     if (typeof window !== 'undefined') {
-      const saved = sessionStorage.getItem('videoPlayerVolume');
+      const saved = localStorage.getItem('videoPlayerVolume');
       return saved ? parseFloat(saved) : 1.0;
     }
     return 1.0;
@@ -40,7 +40,7 @@ export default function VideoPlayer({ video }: VideoPlayerProps) {
     if (videoRef.current) {
       const newVolume = videoRef.current.volume;
       setVolume(newVolume);
-      sessionStorage.setItem('videoPlayerVolume', newVolume.toString());
+      localStorage.setItem('videoPlayerVolume', newVolume.toString());
     }
   };
 
