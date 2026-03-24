@@ -603,10 +603,16 @@ export default function Videos({ initialVideoId }: VideosProps) {
     };
   }, []);
 
+  const volumePollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   const createPlayer = useCallback((youtubeId: string) => {
     if (playerRef.current) {
       playerRef.current.destroy();
       playerRef.current = null;
+    }
+    if (volumePollRef.current) {
+      clearInterval(volumePollRef.current);
+      volumePollRef.current = null;
     }
 
     if (!playerContainerRef.current) return;
@@ -616,6 +622,21 @@ export default function Videos({ initialVideoId }: VideosProps) {
       width: "100%",
       height: "100%",
       events: {
+        onReady: () => {
+          const saved = localStorage.getItem('youtubePlayerVolume');
+          if (saved !== null && playerRef.current) {
+            playerRef.current.setVolume(parseInt(saved, 10));
+          }
+          // Poll to detect user volume changes
+          volumePollRef.current = setInterval(() => {
+            if (playerRef.current) {
+              try {
+                const vol = playerRef.current.getVolume();
+                localStorage.setItem('youtubePlayerVolume', String(vol));
+              } catch { /* player may be destroyed */ }
+            }
+          }, 2000);
+        },
         onStateChange: (event: YT.OnStateChangeEvent) => {
           if (event.data === 1) { // PLAYING
             trackerRef.current.onPlay();
@@ -646,6 +667,10 @@ export default function Videos({ initialVideoId }: VideosProps) {
     }
 
     return () => {
+      if (volumePollRef.current) {
+        clearInterval(volumePollRef.current);
+        volumePollRef.current = null;
+      }
       if (playerRef.current) {
         playerRef.current.destroy();
         playerRef.current = null;

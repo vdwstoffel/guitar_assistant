@@ -26,6 +26,13 @@ const shortcuts = [
     ],
   },
   {
+    group: "A/B Loop",
+    items: [
+      { keys: ["A"], description: "Set A / Set B / Reset loop" },
+      { keys: ["Esc"], description: "Clear loop" },
+    ],
+  },
+  {
     group: "Other",
     items: [
       { keys: ["?"], description: "Show this help" },

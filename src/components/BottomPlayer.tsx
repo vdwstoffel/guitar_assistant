@@ -103,6 +103,13 @@ function BottomPlayer({
   const restartPlaybackRef = useRef<() => void>(() => {});
   const [showSplitChannels, setShowSplitChannels] = useState(false);
 
+  // A/B loop state
+  const [loopA, setLoopA] = useState<number | null>(null);
+  const [loopB, setLoopB] = useState<number | null>(null);
+  const loopARef = useRef<number | null>(null);
+  const loopBRef = useRef<number | null>(null);
+  const abRegionRef = useRef<ReturnType<RegionsPlugin['addRegion']> | null>(null);
+
   // Web Audio API refs for LUFS normalization and volume control
   const audioContextRef = useRef<AudioContext | null>(null);
   const gainNodeRef = useRef<GainNode | null>(null);
@@ -117,6 +124,10 @@ function BottomPlayer({
     }
     return false;
   });
+
+  // Keep A/B loop refs in sync with state
+  useEffect(() => { loopARef.current = loopA; }, [loopA]);
+  useEffect(() => { loopBRef.current = loopB; }, [loopB]);
 
   const handleZoom = (newZoom: number) => {
     const clampedZoom = Math.max(1, Math.min(200, newZoom));
@@ -367,7 +378,12 @@ function BottomPlayer({
     });
     ws.on("finish", () => {
       sessionTrackerRef.current.onFinish();
-      if (isRepeatEnabledRef.current) {
+      if (loopARef.current !== null && loopBRef.current !== null) {
+        // A/B loop active: seek to A and continue playing
+        ws.seekTo(loopARef.current / ws.getDuration());
+        lastSeekPositionRef.current = loopARef.current;
+        ws.play();
+      } else if (isRepeatEnabledRef.current) {
         restartPlaybackRef.current();
       } else {
         if (isMountedRef.current) setIsPlaying(false);
@@ -430,6 +446,9 @@ function BottomPlayer({
       setStopMarker(null); // Clear stop marker when track changes
       setIsRepeatEnabled(false); // Reset repeat when track changes
       isRepeatEnabledRef.current = false;
+      setLoopA(null); // Clear A/B loop when track changes
+      setLoopB(null);
+      abRegionRef.current = null;
       initWaveSurfer();
     }
 
@@ -620,6 +639,8 @@ function BottomPlayer({
 
   // Stop playback when reaching stop marker
   useEffect(() => {
+    // A/B loop takes priority over stop marker
+    if (loopA !== null && loopB !== null) return;
     if (stopMarker === null || !isPlaying || !wavesurferRef.current || !duration) return;
 
     // If we just seeked, wait until currentTime reflects the seek position
@@ -643,7 +664,69 @@ function BottomPlayer({
         wavesurferRef.current.seekTo(stopMarker / duration);
       }
     }
-  }, [isPlaying, currentTime, duration, stopMarker]);
+  }, [isPlaying, currentTime, duration, stopMarker, loopA, loopB]);
+
+  // A/B loop: seek back to A when playback reaches B
+  useEffect(() => {
+    if (loopA === null || loopB === null || !isPlaying || !wavesurferRef.current || !duration) return;
+
+    const seekPos = lastSeekPositionRef.current;
+    if (seekPos !== null) {
+      if (Math.abs(currentTime - seekPos) < 1) {
+        lastSeekPositionRef.current = null;
+      } else {
+        return;
+      }
+    }
+
+    if (currentTime >= loopB - 0.05 && currentTime < loopB + 1) {
+      wavesurferRef.current.seekTo(loopA / duration);
+      lastSeekPositionRef.current = loopA;
+    }
+  }, [isPlaying, currentTime, duration, loopA, loopB]);
+
+  // Helper to render the A/B loop region on the waveform
+  const renderABRegion = useCallback(() => {
+    if (!regionsRef.current) return;
+    if (abRegionRef.current) {
+      try { abRegionRef.current.remove(); } catch { /* already removed by clearRegions */ }
+      abRegionRef.current = null;
+    }
+    if (loopA !== null && loopB !== null) {
+      const region = regionsRef.current.addRegion({
+        id: '__ab-loop__',
+        start: loopA,
+        end: loopB,
+        color: 'rgba(59, 130, 246, 0.2)',
+        drag: false,
+        resize: false,
+      });
+      if (region.element) {
+        region.element.style.borderLeft = '2px solid rgba(59, 130, 246, 0.8)';
+        region.element.style.borderRight = '2px solid rgba(59, 130, 246, 0.8)';
+        region.element.style.pointerEvents = 'none';
+      }
+      abRegionRef.current = region;
+    } else if (loopA !== null) {
+      const region = regionsRef.current.addRegion({
+        id: '__ab-loop-a__',
+        start: loopA,
+        end: loopA,
+        color: 'rgba(59, 130, 246, 0.8)',
+        drag: false,
+        resize: false,
+      });
+      if (region.element) {
+        region.element.style.pointerEvents = 'none';
+      }
+      abRegionRef.current = region;
+    }
+  }, [loopA, loopB]);
+
+  // Update A/B region visual when loop points change
+  useEffect(() => {
+    renderABRegion();
+  }, [renderABRegion]);
 
   // Update markers on waveform when they change
   useEffect(() => {
@@ -677,7 +760,9 @@ function BottomPlayer({
         region.element.classList.add("marker-region");
       }
     });
-  }, [track?.markers, isLoading]);
+    // Re-add A/B loop region (clearRegions removed it)
+    renderABRegion();
+  }, [track?.markers, isLoading, renderABRegion]);
 
   const togglePlay = async () => {
     if (!wavesurferRef.current || !duration) return;
@@ -747,6 +832,33 @@ function BottomPlayer({
       isRepeatEnabledRef.current = next;
       return next;
     });
+  }, []);
+
+  // A/B loop handlers
+  const setLoopPointA = useCallback(() => {
+    const time = currentTimeRef.current;
+    setLoopA(time);
+    if (loopBRef.current !== null && time >= loopBRef.current) {
+      setLoopB(null);
+    }
+    lastSeekPositionRef.current = null;
+  }, []);
+
+  const setLoopPointB = useCallback(() => {
+    const time = currentTimeRef.current;
+    if (loopARef.current === null) return;
+    if (time <= loopARef.current) return;
+    setLoopB(time);
+    lastSeekPositionRef.current = null;
+  }, []);
+
+  const clearLoop = useCallback(() => {
+    setLoopA(null);
+    setLoopB(null);
+    if (abRegionRef.current) {
+      try { abRegionRef.current.remove(); } catch { /* may already be removed */ }
+      abRegionRef.current = null;
+    }
   }, []);
 
   const jumpToMarker = useCallback(async (timestamp: number) => {
@@ -822,6 +934,12 @@ function BottomPlayer({
   // Keep togglePlay accessible via ref to avoid re-registering keyboard handler
   const togglePlayRef = useRef(togglePlay);
   togglePlayRef.current = togglePlay;
+  const setLoopPointARef = useRef(setLoopPointA);
+  setLoopPointARef.current = setLoopPointA;
+  const setLoopPointBRef = useRef(setLoopPointB);
+  setLoopPointBRef.current = setLoopPointB;
+  const clearLoopRef = useRef(clearLoop);
+  clearLoopRef.current = clearLoop;
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -850,6 +968,25 @@ function BottomPlayer({
           wavesurferRef.current.seekTo(0);
           wavesurferRef.current.play();
         }
+      }
+
+      // A/B loop: 'A' cycles through set A -> set B -> clear + set new A
+      if (e.code === "KeyA" && track) {
+        e.preventDefault();
+        if (loopARef.current !== null && loopBRef.current !== null) {
+          clearLoopRef.current();
+          setLoopPointARef.current();
+        } else if (loopARef.current !== null) {
+          setLoopPointBRef.current();
+        } else {
+          setLoopPointARef.current();
+        }
+      }
+
+      // Escape clears A/B loop
+      if (e.code === "Escape" && loopARef.current !== null) {
+        e.preventDefault();
+        clearLoopRef.current();
       }
 
       if (e.key === "?") {
@@ -945,6 +1082,54 @@ function BottomPlayer({
                 <path strokeLinecap="round" strokeLinejoin="round" d="M21 13v2a4 4 0 01-4 4H3" />
               </svg>
             </button>
+
+            {/* A/B Loop Button */}
+            <div className="flex items-center gap-0.5 shrink-0">
+              <button
+                onClick={() => {
+                  if (loopA !== null && loopB !== null) {
+                    clearLoop();
+                  } else if (loopA !== null) {
+                    setLoopPointB();
+                  } else {
+                    setLoopPointA();
+                  }
+                }}
+                disabled={isLoading}
+                className={`h-11 sm:h-10 md:h-8 flex items-center gap-1 px-2 sm:px-3 rounded-full text-xs font-medium transition-colors ${
+                  loopA !== null && loopB !== null
+                    ? "bg-blue-600 hover:bg-blue-700 text-white"
+                    : loopA !== null
+                    ? "bg-blue-600/50 hover:bg-blue-600/70 text-blue-200"
+                    : "bg-gray-700 hover:bg-gray-600 text-gray-400"
+                }`}
+                title={
+                  loopA !== null && loopB !== null
+                    ? `Loop: ${formatTime(loopA)} - ${formatTime(loopB)} (click to clear)`
+                    : loopA !== null
+                    ? `A: ${formatTime(loopA)} - click to set B`
+                    : "Set loop point A (keyboard: A)"
+                }
+              >
+                <span className="font-bold">A/B</span>
+                {loopA !== null && loopB !== null ? (
+                  <span className="hidden sm:inline tabular-nums">{formatTime(loopA)}-{formatTime(loopB)}</span>
+                ) : loopA !== null ? (
+                  <span className="hidden sm:inline tabular-nums">A:{formatTime(loopA)}</span>
+                ) : null}
+              </button>
+              {loopA !== null && (
+                <button
+                  onClick={clearLoop}
+                  className="w-5 h-5 flex items-center justify-center text-gray-400 hover:text-red-400 transition-colors"
+                  title="Clear A/B loop (Esc)"
+                >
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              )}
+            </div>
 
             {/* Play Button */}
             <button

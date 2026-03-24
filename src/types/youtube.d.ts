@@ -5,6 +5,8 @@ declare namespace YT {
     playVideo(): void;
     pauseVideo(): void;
     getPlayerState(): number;
+    getVolume(): number;
+    setVolume(volume: number): void;
   }
 
   interface PlayerConfig {
