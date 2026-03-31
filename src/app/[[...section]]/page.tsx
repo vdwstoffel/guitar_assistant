@@ -22,6 +22,7 @@ import TabEditor from "@/components/TabEditor";
 import MetricsView from "@/components/MetricsView";
 import KnowledgeView from "@/components/KnowledgeView";
 import GearView from "@/components/GearView";
+import ProgressionExplorer from "@/components/ProgressionExplorer";
 import HomeView from "@/components/HomeView";
 import PageSyncEditor from "@/components/PageSyncEditor";
 import UploadModal from "@/components/UploadModal";
@@ -29,12 +30,12 @@ import VideoPlayer from "@/components/VideoPlayer";
 import { AuthorSummary, BookSummary, Book, Track, TrackTab, Marker, JamTrack, JamTrackMarker, BookVideo, SearchResultTrack, SearchResultBook, SearchResultJamTrack } from "@/types";
 import TrackTabsModal from "@/components/TrackTabsModal";
 
-type Section = 'home' | 'lessons' | 'videos' | 'fretboard' | 'intervals' | 'chords' | 'tools' | 'circle' | 'tabs' | 'jamtracks' | 'metrics' | 'knowledge' | 'gear';
+type Section = 'home' | 'lessons' | 'videos' | 'fretboard' | 'intervals' | 'chords' | 'tools' | 'circle' | 'tabs' | 'jamtracks' | 'metrics' | 'knowledge' | 'gear' | 'progressions';
 
 const getSectionFromPath = (section: string[] | undefined): Section => {
   if (!section || section.length === 0) return 'home';
   const first = section[0];
-  if (first === 'home' || first === 'lessons' || first === 'videos' || first === 'fretboard' || first === 'intervals' || first === 'chords' || first === 'tools' || first === 'circle' || first === 'tabs' || first === 'jamtracks' || first === 'metrics' || first === 'knowledge' || first === 'gear') {
+  if (first === 'home' || first === 'lessons' || first === 'videos' || first === 'fretboard' || first === 'intervals' || first === 'chords' || first === 'tools' || first === 'circle' || first === 'tabs' || first === 'jamtracks' || first === 'metrics' || first === 'knowledge' || first === 'gear' || first === 'progressions') {
     return first;
   }
   return 'home';
@@ -2353,6 +2354,8 @@ export default function Home() {
         <KnowledgeView />
       ) : activeSection === 'gear' ? (
         <GearView />
+      ) : activeSection === 'progressions' ? (
+        <ProgressionExplorer />
       ) : (
         <Fretboard />
       )}

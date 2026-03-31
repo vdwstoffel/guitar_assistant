@@ -6,7 +6,7 @@ import GlobalSearch from './GlobalSearch';
 import PracticeNextDropdown from './PracticeNextDropdown';
 import { SearchResultTrack, SearchResultBook, SearchResultJamTrack } from '@/types';
 
-type Section = 'home' | 'lessons' | 'videos' | 'fretboard' | 'intervals' | 'chords' | 'tools' | 'circle' | 'tabs' | 'jamtracks' | 'metrics' | 'knowledge' | 'gear';
+type Section = 'home' | 'lessons' | 'videos' | 'fretboard' | 'intervals' | 'chords' | 'tools' | 'circle' | 'tabs' | 'jamtracks' | 'metrics' | 'knowledge' | 'gear' | 'progressions';
 type TimeSignature = '4/4' | '3/4' | '2/4' | '6/8';
 
 interface TopNavProps {
@@ -42,11 +42,12 @@ const TopNav = memo(function TopNav({ activeSection, onSectionChange, onSearchTr
     { id: 'intervals', label: 'Intervals', href: '/intervals' },
     { id: 'chords', label: 'Chords', href: '/chords' },
     { id: 'circle', label: 'Circle of 5ths', href: '/circle' },
+    { id: 'progressions', label: 'Progressions', href: '/progressions' },
     { id: 'knowledge', label: 'Theory Notes', href: '/knowledge' },
     { id: 'gear', label: 'Gear', href: '/gear' },
   ];
 
-  const isTheoryActive = activeSection === 'fretboard' || activeSection === 'intervals' || activeSection === 'chords' || activeSection === 'circle' || activeSection === 'knowledge' || activeSection === 'gear';
+  const isTheoryActive = activeSection === 'fretboard' || activeSection === 'intervals' || activeSection === 'chords' || activeSection === 'circle' || activeSection === 'progressions' || activeSection === 'knowledge' || activeSection === 'gear';
 
   // Close theory dropdown on click outside
   useEffect(() => {
