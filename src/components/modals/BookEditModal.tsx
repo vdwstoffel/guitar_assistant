@@ -11,12 +11,15 @@ export interface BookEditModalProps {
   onSave: (bookId: string, bookName: string, authorName: string) => Promise<void>;
   onCoverUpload?: (bookId: string, file: File) => Promise<void>;
   onCoverDelete?: (bookId: string) => Promise<void>;
+  onDelete?: (bookId: string) => Promise<void>;
 }
 
-export default function BookEditModal({ book, authorName, onClose, onSave, onCoverUpload, onCoverDelete }: BookEditModalProps) {
+export default function BookEditModal({ book, authorName, onClose, onSave, onCoverUpload, onCoverDelete, onDelete }: BookEditModalProps) {
   const [editBookName, setEditBookName] = useState(book.name);
   const [editAuthorName, setEditAuthorName] = useState(authorName);
   const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isUploadingCover, setIsUploadingCover] = useState(false);
   const [coverPreview, setCoverPreview] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -53,6 +56,19 @@ export default function BookEditModal({ book, authorName, onClose, onSave, onCov
     } finally {
       setIsUploadingCover(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!onDelete) return;
+    setIsDeleting(true);
+    try {
+      await onDelete(book.id);
+      onClose();
+    } catch (error) {
+      console.error("Failed to delete book:", error);
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -148,21 +164,59 @@ export default function BookEditModal({ book, authorName, onClose, onSave, onCov
             />
           </div>
         </div>
-        <div className="flex justify-end gap-3 mt-6">
-          <button
-            onClick={onClose}
-            disabled={isSaving}
-            className="px-4 py-2 text-gray-400 hover:text-white transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={isSaving || !editBookName.trim() || !editAuthorName.trim()}
-            className="px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded font-medium transition-colors text-white"
-          >
-            {isSaving ? "Saving..." : "Save All"}
-          </button>
+        {/* Delete Confirmation */}
+        {showDeleteConfirm && onDelete && (
+          <div className="mt-6 p-3 bg-red-900/30 border border-red-700/50 rounded-lg">
+            <p className="text-sm text-red-300 mb-3">
+              Delete <span className="font-semibold text-red-200">{book.name}</span> and all its {book.trackCount} track{book.trackCount !== 1 ? "s" : ""}, videos, and files? This cannot be undone.
+            </p>
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                disabled={isDeleting}
+                className="px-3 py-1.5 text-sm text-gray-300 hover:text-white transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteConfirm}
+                disabled={isDeleting}
+                className="px-3 py-1.5 text-sm bg-red-600 hover:bg-red-700 disabled:bg-red-800 disabled:cursor-not-allowed rounded font-medium text-white transition-colors"
+              >
+                {isDeleting ? "Deleting..." : "Yes, Delete"}
+              </button>
+            </div>
+          </div>
+        )}
+
+        <div className="flex justify-between items-center mt-6">
+          {onDelete && !showDeleteConfirm ? (
+            <button
+              onClick={() => setShowDeleteConfirm(true)}
+              disabled={isSaving || isDeleting}
+              className="px-4 py-2 text-red-400 hover:text-red-300 disabled:opacity-50 transition-colors text-sm"
+            >
+              Delete Book
+            </button>
+          ) : (
+            <div />
+          )}
+          <div className="flex gap-3">
+            <button
+              onClick={onClose}
+              disabled={isSaving || isDeleting}
+              className="px-4 py-2 text-gray-400 hover:text-white transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={isSaving || isDeleting || !editBookName.trim() || !editAuthorName.trim()}
+              className="px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded font-medium transition-colors text-white"
+            >
+              {isSaving ? "Saving..." : "Save All"}
+            </button>
+          </div>
         </div>
       </div>
     </div>

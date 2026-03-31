@@ -897,6 +897,24 @@ export default function Home() {
     await fetchLibrary();
   };
 
+  const handleBookDelete = async (bookId: string) => {
+    const response = await fetch(`/api/books/${bookId}`, {
+      method: "DELETE",
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to delete book");
+    }
+
+    // Clear selection if the deleted book was selected
+    if (selectedBookId === bookId) {
+      setSelectedBookId(null);
+      setSelectedBookDetail(null);
+    }
+
+    await fetchLibrary();
+  };
+
   const handleCoverUpload = async (bookId: string, file: File) => {
     const formData = new FormData();
     formData.append("cover", file);
@@ -1820,6 +1838,7 @@ export default function Home() {
                     onBookUpdate={handleBookUpdate}
                     onCoverUpload={handleCoverUpload}
                     onCoverDelete={handleCoverDelete}
+                    onBookDelete={handleBookDelete}
                     onTrackUpdate={handleMetadataUpdate}
                     onTrackComplete={handleTrackComplete}
                     onTrackInProgress={handleTrackInProgress}

@@ -83,6 +83,104 @@ export async function PATCH(
   }
 }
 
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    const musicPath = path.resolve(MUSIC_DIR);
+
+    const book = await prisma.book.findUnique({
+      where: { id },
+      include: {
+        author: true,
+        tracks: true,
+        videos: true,
+      },
+    });
+
+    if (!book) {
+      return NextResponse.json({ error: "Book not found" }, { status: 404 });
+    }
+
+    // Delete track audio files from disk
+    for (const track of book.tracks) {
+      const filePath = path.join(musicPath, track.filePath);
+      try {
+        await fsp.unlink(filePath);
+      } catch {
+        console.warn(`Could not delete track file: ${track.filePath}`);
+      }
+    }
+
+    // Delete video files from disk
+    for (const video of book.videos) {
+      const filePath = path.join(musicPath, video.filePath);
+      try {
+        await fsp.unlink(filePath);
+      } catch {
+        console.warn(`Could not delete video file: ${video.filePath}`);
+      }
+    }
+
+    // Delete PDF from disk
+    if (book.pdfPath) {
+      try {
+        await fsp.unlink(path.join(musicPath, book.pdfPath));
+      } catch {
+        console.warn(`Could not delete PDF: ${book.pdfPath}`);
+      }
+    }
+
+    // Delete cover from disk
+    if (book.coverPath) {
+      try {
+        await fsp.unlink(path.join(musicPath, book.coverPath));
+      } catch {
+        console.warn(`Could not delete cover: ${book.coverPath}`);
+      }
+    }
+
+    // Delete book from database (cascades to tracks, markers, videos, chapters)
+    await prisma.book.delete({ where: { id } });
+
+    // Clean up empty directories
+    const authorDir = path.join(musicPath, sanitizeFilename(book.author.name));
+    const bookDir = path.join(authorDir, sanitizeFilename(book.name));
+    const dirsToClean = [
+      path.join(bookDir, "videos"),
+      bookDir,
+      authorDir,
+    ];
+    for (const dir of dirsToClean) {
+      try {
+        if (dir.startsWith(musicPath) && dir !== musicPath) {
+          const files = await fsp.readdir(dir);
+          if (files.length === 0) {
+            await fsp.rmdir(dir);
+          }
+        }
+      } catch {
+        // Ignore cleanup errors
+      }
+    }
+
+    // Clean up orphaned authors
+    await prisma.author.deleteMany({
+      where: { books: { none: {} } },
+    });
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error("Error deleting book:", error);
+    return NextResponse.json(
+      { error: "Failed to delete book" },
+      { status: 500 }
+    );
+  }
+}
+
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }

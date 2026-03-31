@@ -66,6 +66,7 @@ interface TrackListViewProps {
   onShowPdf?: (pdfPath: string, page?: number) => void;
   onCoverUpload?: (bookId: string, file: File) => Promise<void>;
   onCoverDelete?: (bookId: string) => Promise<void>;
+  onBookDelete?: (bookId: string) => Promise<void>;
   onPdfUpload?: (bookId: string, file: File) => Promise<void>;
   onPdfDelete?: (bookId: string) => Promise<void>;
   onPdfConvert?: (bookId: string) => Promise<void>;
@@ -102,6 +103,7 @@ export default memo(function TrackListView({
   onShowPdf,
   onCoverUpload,
   onCoverDelete,
+  onBookDelete,
   onPdfUpload,
   onPdfDelete,
   onPdfConvert,
@@ -345,6 +347,7 @@ export default memo(function TrackListView({
           onSave={onBookUpdate}
           onCoverUpload={onCoverUpload}
           onCoverDelete={onCoverDelete}
+          onDelete={onBookDelete}
         />
       )}
 
