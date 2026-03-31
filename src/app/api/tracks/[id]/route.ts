@@ -251,6 +251,14 @@ export async function PUT(
       },
     });
 
+    // Sync title to linked video if exists
+    if (existingTrack.sourceVideoId) {
+      await prisma.bookVideo.update({
+        where: { id: existingTrack.sourceVideoId },
+        data: { title: title.trim() },
+      }).catch(() => {}); // Ignore if video was deleted
+    }
+
     // Clean up empty books (no tracks AND no videos) and authors
     await prisma.book.deleteMany({
       where: {

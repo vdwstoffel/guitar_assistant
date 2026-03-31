@@ -167,14 +167,17 @@ export async function PUT(
       data: updateData,
     });
 
-    // Sync status to linked extracted track if exists
-    if (updateData.completed !== undefined || updateData.inProgress !== undefined) {
+    // Sync title and status to linked extracted track if exists
+    if (updateData.title !== undefined || updateData.completed !== undefined || updateData.inProgress !== undefined) {
       const linkedTrack = await prisma.track.findUnique({
         where: { sourceVideoId: videoId },
         select: { id: true },
       });
       if (linkedTrack) {
-        const trackData: { completed?: boolean; inProgress?: boolean } = {};
+        const trackData: { title?: string; completed?: boolean; inProgress?: boolean } = {};
+        if (updateData.title !== undefined && updateData.title !== null) {
+          trackData.title = updateData.title;
+        }
         if (updateData.completed !== undefined) {
           trackData.completed = updateData.completed;
           if (updateData.completed) trackData.inProgress = false;
