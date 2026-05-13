@@ -7,6 +7,9 @@ declare namespace YT {
     getPlayerState(): number;
     getVolume(): number;
     setVolume(volume: number): void;
+    getCurrentTime(): number;
+    getDuration(): number;
+    seekTo(seconds: number, allowSeekAhead: boolean): void;
   }
 
   interface PlayerConfig {

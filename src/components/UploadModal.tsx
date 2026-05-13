@@ -3,12 +3,12 @@
 import { useState, useRef } from "react";
 import { AuthorSummary } from "@/types";
 
-type UploadMode = "audio" | "pdf" | "video";
+type BookTarget = "auto" | "existing" | "new";
 
 interface UploadModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAudioUpload: (files: FileList) => Promise<void>;
+  onAudioUpload: (files: FileList, authorName?: string, bookName?: string) => Promise<void>;
   onPdfBookUpload: (file: File, authorName: string, bookName: string) => Promise<void>;
   onVideoUpload: (files: File[], authorName: string, bookName: string) => Promise<void>;
   authors: AuthorSummary[];
@@ -22,35 +22,33 @@ export default function UploadModal({
   onVideoUpload,
   authors,
 }: UploadModalProps) {
-  const [mode, setMode] = useState<UploadMode>("audio");
   const [isUploading, setIsUploading] = useState(false);
 
-  // Audio state
-  const [audioFiles, setAudioFiles] = useState<File[]>([]);
-  const audioInputRef = useRef<HTMLInputElement>(null);
-
-  // PDF state
-  const [pdfFile, setPdfFile] = useState<File | null>(null);
-  const pdfInputRef = useRef<HTMLInputElement>(null);
-
-  // Video state
-  const [videoFiles, setVideoFiles] = useState<File[]>([]);
-  const videoInputRef = useRef<HTMLInputElement>(null);
-
-  // Shared book target state (for PDF and video modes)
-  const [bookTarget, setBookTarget] = useState<"existing" | "new">("new");
+  // Book target state
+  const [bookTarget, setBookTarget] = useState<BookTarget>("auto");
   const [selectedBookKey, setSelectedBookKey] = useState("");
   const [authorName, setAuthorName] = useState("");
   const [bookName, setBookName] = useState("");
 
+  // File state
+  const [audioFiles, setAudioFiles] = useState<File[]>([]);
+  const [pdfFile, setPdfFile] = useState<File | null>(null);
+  const [videoFiles, setVideoFiles] = useState<File[]>([]);
+
+  const audioInputRef = useRef<HTMLInputElement>(null);
+  const pdfInputRef = useRef<HTMLInputElement>(null);
+  const videoInputRef = useRef<HTMLInputElement>(null);
+
+  const explicitTarget = bookTarget !== "auto";
+
   const resetState = () => {
-    setAudioFiles([]);
-    setPdfFile(null);
-    setVideoFiles([]);
-    setBookTarget("new");
+    setBookTarget("auto");
     setSelectedBookKey("");
     setAuthorName("");
     setBookName("");
+    setAudioFiles([]);
+    setPdfFile(null);
+    setVideoFiles([]);
     setIsUploading(false);
   };
 
@@ -59,9 +57,16 @@ export default function UploadModal({
     onClose();
   };
 
-  const handleModeChange = (newMode: UploadMode) => {
-    setMode(newMode);
-    resetState();
+  const handleTargetChange = (target: BookTarget) => {
+    setBookTarget(target);
+    setSelectedBookKey("");
+    setAuthorName("");
+    setBookName("");
+    if (target === "auto") {
+      // Auto mode is audio-only — clear PDF/videos
+      setPdfFile(null);
+      setVideoFiles([]);
+    }
   };
 
   const handleBookSelect = (key: string) => {
@@ -80,61 +85,67 @@ export default function UploadModal({
     }
   };
 
-  const handleAudioUpload = async () => {
-    if (audioFiles.length === 0) return;
+  const targetReady =
+    bookTarget === "auto" ||
+    (authorName.trim() !== "" && bookName.trim() !== "");
+
+  const hasAnyFiles =
+    audioFiles.length > 0 || pdfFile !== null || videoFiles.length > 0;
+
+  const canUpload = hasAnyFiles && targetReady;
+
+  const handleUpload = async () => {
+    if (!canUpload) return;
     setIsUploading(true);
+
+    const trimmedAuthor = authorName.trim();
+    const trimmedBook = bookName.trim();
+
+    const errors: string[] = [];
+
     try {
-      const dt = new DataTransfer();
-      audioFiles.forEach((f) => dt.items.add(f));
-      await onAudioUpload(dt.files);
-      handleClose();
-    } catch (error) {
-      console.error("Error uploading audio:", error);
-      alert("Failed to upload audio files");
+      if (audioFiles.length > 0) {
+        try {
+          const dt = new DataTransfer();
+          audioFiles.forEach((f) => dt.items.add(f));
+          if (explicitTarget) {
+            await onAudioUpload(dt.files, trimmedAuthor, trimmedBook);
+          } else {
+            await onAudioUpload(dt.files);
+          }
+        } catch (err) {
+          console.error("Audio upload failed:", err);
+          errors.push("audio");
+        }
+      }
+
+      if (pdfFile && explicitTarget) {
+        try {
+          await onPdfBookUpload(pdfFile, trimmedAuthor, trimmedBook);
+        } catch (err) {
+          console.error("PDF upload failed:", err);
+          errors.push("PDF");
+        }
+      }
+
+      if (videoFiles.length > 0 && explicitTarget) {
+        try {
+          await onVideoUpload(videoFiles, trimmedAuthor, trimmedBook);
+        } catch (err) {
+          console.error("Video upload failed:", err);
+          errors.push("videos");
+        }
+      }
+
+      if (errors.length > 0) {
+        alert(`Failed to upload: ${errors.join(", ")}`);
+      } else {
+        handleClose();
+      }
     } finally {
       setIsUploading(false);
     }
   };
-
-  const handlePdfUpload = async () => {
-    if (!pdfFile || !authorName.trim() || !bookName.trim()) return;
-    setIsUploading(true);
-    try {
-      await onPdfBookUpload(pdfFile, authorName.trim(), bookName.trim());
-      handleClose();
-    } catch (error) {
-      console.error("Error uploading PDF book:", error);
-      alert("Failed to upload PDF book");
-    } finally {
-      setIsUploading(false);
-    }
-  };
-
-  const handleVideoUploadSubmit = async () => {
-    if (videoFiles.length === 0 || !authorName.trim() || !bookName.trim()) return;
-    setIsUploading(true);
-    try {
-      await onVideoUpload(videoFiles, authorName.trim(), bookName.trim());
-      handleClose();
-    } catch (error) {
-      console.error("Error uploading videos:", error);
-      alert("Failed to upload videos");
-    } finally {
-      setIsUploading(false);
-    }
-  };
-
-  const handleUpload =
-    mode === "audio" ? handleAudioUpload :
-    mode === "pdf" ? handlePdfUpload :
-    handleVideoUploadSubmit;
-
-  const canUpload =
-    mode === "audio"
-      ? audioFiles.length > 0
-      : mode === "pdf"
-        ? pdfFile !== null && authorName.trim() !== "" && bookName.trim() !== ""
-        : videoFiles.length > 0 && authorName.trim() !== "" && bookName.trim() !== "";
 
   if (!isOpen) return null;
 
@@ -145,195 +156,171 @@ export default function UploadModal({
         <div className="p-6 border-b border-gray-700">
           <h2 className="text-xl font-bold text-white">Upload</h2>
           <p className="text-sm text-gray-400 mt-1">
-            Upload audio files or a PDF book
+            Pick a target book, then attach audio, a PDF, and/or videos in one go.
           </p>
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-4">
-          {/* Mode Toggle */}
-          <div className="flex rounded overflow-hidden border border-gray-600">
-            {([
-              { value: "audio" as UploadMode, label: "Audio Files" },
-              { value: "pdf" as UploadMode, label: "PDF Book" },
-              { value: "video" as UploadMode, label: "Course Videos" },
-            ]).map((opt) => (
-              <button
-                key={opt.value}
-                type="button"
-                onClick={() => handleModeChange(opt.value)}
-                className={`flex-1 px-4 py-2 text-sm font-medium transition-colors ${
-                  mode === opt.value
-                    ? "bg-green-600 text-white"
-                    : "bg-gray-700 text-gray-400 hover:text-white"
-                }`}
-              >
-                {opt.label}
-              </button>
-            ))}
+        <div className="flex-1 overflow-y-auto p-6 space-y-5">
+          {/* Book Target */}
+          <div className="space-y-3">
+            <label className="block text-sm font-medium text-gray-300">Target Book</label>
+            <div className="flex rounded overflow-hidden border border-gray-600">
+              {([
+                { value: "auto" as BookTarget, label: "Auto-detect (audio only)" },
+                { value: "existing" as BookTarget, label: "Existing Book" },
+                { value: "new" as BookTarget, label: "New Book" },
+              ]).map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => handleTargetChange(opt.value)}
+                  className={`flex-1 px-4 py-2 text-sm font-medium transition-colors ${
+                    bookTarget === opt.value
+                      ? "bg-blue-600 text-white"
+                      : "bg-gray-700 text-gray-400 hover:text-white"
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+
+            {bookTarget === "auto" && (
+              <p className="text-xs text-gray-500">
+                Author and book will be read from each audio file&apos;s metadata. PDF and videos require an explicit book.
+              </p>
+            )}
+
+            {bookTarget === "existing" && (
+              <div>
+                <label className="block text-sm text-gray-400 mb-2">Select Book *</label>
+                <select
+                  value={selectedBookKey}
+                  onChange={(e) => handleBookSelect(e.target.value)}
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:border-blue-500"
+                >
+                  <option value="">Select a book...</option>
+                  {authors.map((author, authorIdx) => (
+                    <optgroup key={author.id} label={author.name}>
+                      {author.books.map((book, bookIdx) => (
+                        <option key={book.id} value={`${authorIdx}-${bookIdx}`}>
+                          {book.name}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </select>
+                {selectedBookKey && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    {authorName} &mdash; {bookName}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {bookTarget === "new" && (
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-sm text-gray-400 mb-2">Author Name *</label>
+                  <input
+                    type="text"
+                    value={authorName}
+                    onChange={(e) => setAuthorName(e.target.value)}
+                    placeholder="e.g., Joseph Alexander"
+                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-400 mb-2">Book Name *</label>
+                  <input
+                    type="text"
+                    value={bookName}
+                    onChange={(e) => setBookName(e.target.value)}
+                    placeholder="e.g., Complete Technique for Modern Guitar"
+                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
-          {/* ---- Audio Files Mode ---- */}
-          {mode === "audio" && (
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm text-gray-400 mb-2">Audio Files *</label>
-                <button
-                  onClick={() => audioInputRef.current?.click()}
-                  className="w-full px-4 py-3 bg-gray-700 hover:bg-gray-600 border-2 border-dashed border-gray-600 rounded text-gray-300 transition-colors flex items-center justify-center gap-2"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
-                  </svg>
-                  {audioFiles.length === 0
-                    ? "Select Audio Files"
-                    : `${audioFiles.length} file(s) selected`}
-                </button>
-                <input
-                  ref={audioInputRef}
-                  type="file"
-                  multiple
-                  accept=".mp3,.flac,.wav,.ogg,.m4a,.aac"
-                  onChange={(e) => {
-                    if (e.target.files) setAudioFiles(Array.from(e.target.files));
-                  }}
-                  className="hidden"
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Supported: MP3, FLAC, WAV, OGG, M4A, AAC. Author/book info is read from metadata.
-                </p>
-              </div>
+          <div className="border-t border-gray-700" />
 
-              {audioFiles.length > 0 && (
-                <div className="border border-gray-700 rounded p-3">
-                  <p className="text-sm text-gray-400 mb-2">Selected Files:</p>
-                  <div className="space-y-1 max-h-48 overflow-y-auto">
-                    {audioFiles.map((file, i) => (
-                      <div key={i} className="flex items-center justify-between bg-gray-700 rounded px-3 py-1.5">
-                        <span className="text-sm text-white truncate">{file.name}</span>
-                        <button
-                          onClick={() => setAudioFiles((f) => f.filter((_, idx) => idx !== i))}
-                          className="ml-2 p-1 text-gray-400 hover:text-red-400 transition-colors"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                          </svg>
-                        </button>
-                      </div>
-                    ))}
-                  </div>
+          {/* Audio Files */}
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">Audio Files</label>
+            <button
+              onClick={() => audioInputRef.current?.click()}
+              className="w-full px-4 py-3 bg-gray-700 hover:bg-gray-600 border-2 border-dashed border-gray-600 rounded text-gray-300 transition-colors flex items-center justify-center gap-2"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+              </svg>
+              {audioFiles.length === 0
+                ? "Select Audio Files (optional)"
+                : `${audioFiles.length} file(s) selected`}
+            </button>
+            <input
+              ref={audioInputRef}
+              type="file"
+              multiple
+              accept=".mp3,.flac,.wav,.ogg,.m4a,.aac"
+              onChange={(e) => {
+                if (e.target.files) setAudioFiles(Array.from(e.target.files));
+              }}
+              className="hidden"
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              Supported: MP3, FLAC, WAV, OGG, M4A, AAC.
+            </p>
+
+            {audioFiles.length > 0 && (
+              <div className="mt-2 border border-gray-700 rounded p-3">
+                <div className="space-y-1 max-h-40 overflow-y-auto">
+                  {audioFiles.map((file, i) => (
+                    <div key={i} className="flex items-center justify-between bg-gray-700 rounded px-3 py-1.5">
+                      <span className="text-sm text-white truncate">{file.name}</span>
+                      <button
+                        onClick={() => setAudioFiles((f) => f.filter((_, idx) => idx !== i))}
+                        className="ml-2 p-1 text-gray-400 hover:text-red-400 transition-colors"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
+                  ))}
                 </div>
-              )}
-            </div>
-          )}
-
-          {/* ---- Book Target Picker (shared by PDF and Video modes) ---- */}
-          {(mode === "pdf" || mode === "video") && (
-            <div className="space-y-4">
-              <div className="flex rounded overflow-hidden border border-gray-600">
-                <button
-                  type="button"
-                  onClick={() => { setBookTarget("existing"); setAuthorName(""); setBookName(""); setSelectedBookKey(""); }}
-                  className={`flex-1 px-4 py-2 text-sm font-medium transition-colors ${
-                    bookTarget === "existing"
-                      ? "bg-blue-600 text-white"
-                      : "bg-gray-700 text-gray-400 hover:text-white"
-                  }`}
-                >
-                  Existing Book
-                </button>
-                <button
-                  type="button"
-                  onClick={() => { setBookTarget("new"); setAuthorName(""); setBookName(""); setSelectedBookKey(""); }}
-                  className={`flex-1 px-4 py-2 text-sm font-medium transition-colors ${
-                    bookTarget === "new"
-                      ? "bg-blue-600 text-white"
-                      : "bg-gray-700 text-gray-400 hover:text-white"
-                  }`}
-                >
-                  New Book
-                </button>
               </div>
+            )}
+          </div>
 
-              {bookTarget === "existing" ? (
-                <div>
-                  <label className="block text-sm text-gray-400 mb-2">Select Book *</label>
-                  <select
-                    value={selectedBookKey}
-                    onChange={(e) => handleBookSelect(e.target.value)}
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:border-blue-500"
-                  >
-                    <option value="">Select a book...</option>
-                    {authors.map((author, authorIdx) => (
-                      <optgroup key={author.id} label={author.name}>
-                        {author.books.map((book, bookIdx) => (
-                          <option key={book.id} value={`${authorIdx}-${bookIdx}`}>
-                            {book.name}
-                          </option>
-                        ))}
-                      </optgroup>
-                    ))}
-                  </select>
-                  {selectedBookKey && (
-                    <p className="text-xs text-gray-500 mt-1">
-                      {authorName} &mdash; {bookName}
-                    </p>
-                  )}
-                </div>
-              ) : (
-                <>
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-2">Author Name *</label>
-                    <input
-                      type="text"
-                      value={authorName}
-                      onChange={(e) => setAuthorName(e.target.value)}
-                      placeholder="e.g., Joseph Alexander"
-                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:border-blue-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-2">Book Name *</label>
-                    <input
-                      type="text"
-                      value={bookName}
-                      onChange={(e) => setBookName(e.target.value)}
-                      placeholder="e.g., Complete Technique for Modern Guitar"
-                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:border-blue-500"
-                    />
-                  </div>
-                </>
-              )}
-            </div>
-          )}
-
-          {/* ---- PDF File Picker ---- */}
-          {mode === "pdf" && (
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm text-gray-400 mb-2">PDF File *</label>
-                <button
-                  onClick={() => pdfInputRef.current?.click()}
-                  className="w-full px-4 py-3 bg-gray-700 hover:bg-gray-600 border-2 border-dashed border-gray-600 rounded text-gray-300 transition-colors flex items-center justify-center gap-2"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                  </svg>
-                  {pdfFile ? pdfFile.name : "Select PDF"}
-                </button>
-                <input
-                  ref={pdfInputRef}
-                  type="file"
-                  accept=".pdf"
-                  onChange={(e) => {
-                    if (e.target.files?.[0]) setPdfFile(e.target.files[0]);
-                  }}
-                  className="hidden"
-                />
-              </div>
+          {/* PDF — only when explicit target */}
+          {explicitTarget && (
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">PDF Book</label>
+              <button
+                onClick={() => pdfInputRef.current?.click()}
+                className="w-full px-4 py-3 bg-gray-700 hover:bg-gray-600 border-2 border-dashed border-gray-600 rounded text-gray-300 transition-colors flex items-center justify-center gap-2"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                </svg>
+                {pdfFile ? pdfFile.name : "Select PDF (optional)"}
+              </button>
+              <input
+                ref={pdfInputRef}
+                type="file"
+                accept=".pdf"
+                onChange={(e) => {
+                  if (e.target.files?.[0]) setPdfFile(e.target.files[0]);
+                }}
+                className="hidden"
+              />
 
               {pdfFile && (
-                <div className="flex items-center justify-between bg-gray-700 rounded px-3 py-2">
+                <div className="mt-2 flex items-center justify-between bg-gray-700 rounded px-3 py-2">
                   <div className="flex items-center gap-2 min-w-0">
                     <svg className="w-4 h-4 flex-shrink-0 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
@@ -356,41 +343,38 @@ export default function UploadModal({
             </div>
           )}
 
-          {/* ---- Video File Picker ---- */}
-          {mode === "video" && (
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm text-gray-400 mb-2">Video Files *</label>
-                <button
-                  onClick={() => videoInputRef.current?.click()}
-                  className="w-full px-4 py-3 bg-gray-700 hover:bg-gray-600 border-2 border-dashed border-gray-600 rounded text-gray-300 transition-colors flex items-center justify-center gap-2"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                  </svg>
-                  {videoFiles.length === 0
-                    ? "Select Videos"
-                    : `${videoFiles.length} video(s) selected`}
-                </button>
-                <input
-                  ref={videoInputRef}
-                  type="file"
-                  multiple
-                  accept=".mp4,.mov,.webm,.m4v"
-                  onChange={(e) => {
-                    if (e.target.files) setVideoFiles(Array.from(e.target.files));
-                  }}
-                  className="hidden"
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Supported: MP4, MOV, WebM, M4V
-                </p>
-              </div>
+          {/* Videos — only when explicit target */}
+          {explicitTarget && (
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">Course Videos</label>
+              <button
+                onClick={() => videoInputRef.current?.click()}
+                className="w-full px-4 py-3 bg-gray-700 hover:bg-gray-600 border-2 border-dashed border-gray-600 rounded text-gray-300 transition-colors flex items-center justify-center gap-2"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+                {videoFiles.length === 0
+                  ? "Select Videos (optional)"
+                  : `${videoFiles.length} video(s) selected`}
+              </button>
+              <input
+                ref={videoInputRef}
+                type="file"
+                multiple
+                accept=".mp4,.mov,.webm,.m4v"
+                onChange={(e) => {
+                  if (e.target.files) setVideoFiles(Array.from(e.target.files));
+                }}
+                className="hidden"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Supported: MP4, MOV, WebM, M4V
+              </p>
 
               {videoFiles.length > 0 && (
-                <div className="border border-gray-700 rounded p-3">
-                  <p className="text-sm text-gray-400 mb-2">Selected Videos:</p>
-                  <div className="space-y-1 max-h-48 overflow-y-auto">
+                <div className="mt-2 border border-gray-700 rounded p-3">
+                  <div className="space-y-1 max-h-40 overflow-y-auto">
                     {videoFiles.map((file, i) => (
                       <div key={i} className="flex items-center justify-between bg-gray-700 rounded px-3 py-1.5">
                         <span className="text-sm text-white truncate">{file.name}</span>

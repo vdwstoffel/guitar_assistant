@@ -18,6 +18,22 @@ function pickRandomNote(pool: readonly string[], lastNote: string | null): strin
   return candidates[Math.floor(Math.random() * candidates.length)];
 }
 
+function speakNote(note: string, volume: number): void {
+  if (typeof window === 'undefined' || !window.speechSynthesis) return;
+  window.speechSynthesis.cancel();
+  const spoken = note.replace('#', ' sharp');
+  const utterance = new SpeechSynthesisUtterance(spoken);
+  utterance.volume = Math.max(0, Math.min(1, volume / 100));
+  utterance.rate = 1.05;
+  window.speechSynthesis.speak(utterance);
+}
+
+function cancelSpeech(): void {
+  if (typeof window !== 'undefined' && window.speechSynthesis) {
+    window.speechSynthesis.cancel();
+  }
+}
+
 export function useNoteTrainer() {
   const [phase, setPhase] = useState<TrainerPhase>('idle');
   const [currentNote, setCurrentNote] = useState<string | null>(null);
@@ -47,12 +63,17 @@ export function useNoteTrainer() {
     setCurrentNote(note);
     setCurrentBeat(0);
 
+    // 1b. Speak the note name so the user can practice without looking
+    if (cfg.voiceEnabled) {
+      speakNote(note, cfg.volume);
+    }
+
     // 2. Count-in phase
     setPhase('counting');
     await playCountIn({
       bpm: cfg.bpm,
       timeSignature: '4/4',
-      volume: 15,
+      volume: cfg.volume * 0.3,
       onBeat: (beat) => {
         if (cycleIdRef.current === id) {
           setCurrentBeat(beat);
@@ -63,7 +84,7 @@ export function useNoteTrainer() {
 
     // 3. Reveal phase - show note positions and play sound
     setPhase('revealing');
-    playNoteByName(note, 3, 2.0);
+    playNoteByName(note, 3, 2.0, cfg.volume);
 
     // 4. Hold reveal
     const revealMs = (60 / cfg.bpm) * cfg.revealBeats * 1000;
@@ -82,6 +103,7 @@ export function useNoteTrainer() {
 
   const stop = useCallback(() => {
     cycleIdRef.current++;
+    cancelSpeech();
     setIsRunning(false);
     setPhase('idle');
     setCurrentNote(null);

@@ -10,6 +10,10 @@ export interface NoteTrainerConfig {
   enabledStrings: boolean[];
   /** How many beats to hold the reveal (at current BPM) */
   revealBeats: number;
+  /** Volume 0-100 for click and note playback */
+  volume: number;
+  /** Speak the note name out loud when the cycle starts */
+  voiceEnabled: boolean;
 }
 
 export const DEFAULT_CONFIG: NoteTrainerConfig = {
@@ -17,4 +21,6 @@ export const DEFAULT_CONFIG: NoteTrainerConfig = {
   notePool: 'natural',
   enabledStrings: [true, true, true, true, true, true],
   revealBeats: 2,
+  volume: 50,
+  voiceEnabled: true,
 };

@@ -33,11 +33,6 @@ export async function GET() {
         orderBy: { name: "asc" },
       }),
       prisma.jamTrack.findMany({
-        include: {
-          pdfs: {
-            orderBy: { sortOrder: "asc" },
-          },
-        },
         orderBy: { title: "asc" },
       }),
     ]);
@@ -80,7 +75,10 @@ export async function GET() {
       }),
     }));
 
-    return NextResponse.json({ authors, jamTracks });
+    return NextResponse.json({
+      authors,
+      jamTracks: jamTracks.map((jt) => ({ ...jt, markers: [] })),
+    });
   } catch (error) {
     console.error("Error fetching library:", error);
     return NextResponse.json(

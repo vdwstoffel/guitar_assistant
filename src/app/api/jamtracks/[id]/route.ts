@@ -19,30 +19,16 @@ interface UpdateJamTrackBody {
 }
 
 export async function GET(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params;
-
-    const jamTrack = await prisma.jamTrack.findUnique({
-      where: { id },
-      include: {
-        markers: {
-          orderBy: { timestamp: "asc" },
-        },
-        pdfs: {
-          include: { pageSyncPoints: { orderBy: { timeInSeconds: "asc" } } },
-          orderBy: { sortOrder: "asc" },
-        },
-      },
-    });
-
+    const jamTrack = await prisma.jamTrack.findUnique({ where: { id } });
     if (!jamTrack) {
       return NextResponse.json({ error: "Jam track not found" }, { status: 404 });
     }
-
-    return NextResponse.json(jamTrack);
+    return NextResponse.json({ ...jamTrack, markers: [] });
   } catch (error) {
     console.error("Error fetching jam track:", error);
     return NextResponse.json(
@@ -61,10 +47,7 @@ export async function PATCH(
     const body: UpdateJamTrackBody = await request.json();
 
     const updateData: Partial<UpdateJamTrackBody> = {};
-
-    if (body.title !== undefined) {
-      updateData.title = body.title.trim();
-    }
+    if (body.title !== undefined) updateData.title = body.title.trim();
     if (body.completed !== undefined) {
       updateData.completed = body.completed;
       if (body.completed) updateData.inProgress = false;
@@ -73,39 +56,21 @@ export async function PATCH(
       updateData.inProgress = body.inProgress;
       if (body.inProgress) updateData.completed = false;
     }
-    if (body.favorite !== undefined) {
-      updateData.favorite = body.favorite;
-    }
-    if (body.tempo !== undefined) {
-      updateData.tempo = body.tempo;
-    }
-    if (body.timeSignature !== undefined) {
-      updateData.timeSignature = body.timeSignature;
-    }
-    if (body.playbackSpeed !== undefined) {
-      updateData.playbackSpeed = body.playbackSpeed;
-    }
-    if (body.volume !== undefined) {
-      updateData.volume = body.volume;
-    }
+    if (body.favorite !== undefined) updateData.favorite = body.favorite;
+    if (body.tempo !== undefined) updateData.tempo = body.tempo;
+    if (body.timeSignature !== undefined) updateData.timeSignature = body.timeSignature;
+    if (body.playbackSpeed !== undefined) updateData.playbackSpeed = body.playbackSpeed;
+    if (body.volume !== undefined) updateData.volume = body.volume;
 
-    // If title is being updated, write to audio file metadata
     if (body.title !== undefined) {
-      const jamTrack = await prisma.jamTrack.findUnique({
-        where: { id },
-      });
-
+      const jamTrack = await prisma.jamTrack.findUnique({ where: { id } });
       if (jamTrack) {
         const musicPath = path.resolve(MUSIC_DIR);
         const filePath = path.join(musicPath, jamTrack.filePath);
         const ext = path.extname(filePath).toLowerCase();
-
         if (ext === ".mp3") {
           try {
-            const tags: NodeID3.Tags = {
-              title: body.title.trim(),
-            };
-            NodeID3.update(tags, filePath);
+            NodeID3.update({ title: body.title.trim() }, filePath);
           } catch (err) {
             console.error(`Failed to update mp3 metadata for ${filePath}:`, err);
           }
@@ -125,18 +90,8 @@ export async function PATCH(
     const updatedJamTrack = await prisma.jamTrack.update({
       where: { id },
       data: updateData,
-      include: {
-        markers: {
-          orderBy: { timestamp: "asc" },
-        },
-        pdfs: {
-          include: { pageSyncPoints: { orderBy: { timeInSeconds: "asc" } } },
-          orderBy: { sortOrder: "asc" },
-        },
-      },
     });
-
-    return NextResponse.json(updatedJamTrack);
+    return NextResponse.json({ ...updatedJamTrack, markers: [] });
   } catch (error) {
     console.error("Error updating jam track:", error);
     return NextResponse.json(
@@ -147,42 +102,33 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params;
-
-    const jamTrack = await prisma.jamTrack.findUnique({
-      where: { id },
-      include: { pdfs: true },
-    });
-
+    const jamTrack = await prisma.jamTrack.findUnique({ where: { id } });
     if (!jamTrack) {
       return NextResponse.json({ error: "Jam track not found" }, { status: 404 });
     }
 
-    // Delete the files from disk
     const musicPath = path.resolve(MUSIC_DIR);
     const audioPath = path.join(musicPath, jamTrack.filePath);
-
     try {
       await fs.unlink(audioPath);
     } catch {
       console.warn(`Could not delete audio file: ${audioPath}`);
     }
 
-    // Delete all associated PDF files
-    for (const pdf of jamTrack.pdfs) {
-      const pdfAbsPath = path.join(musicPath, pdf.filePath);
+    if (jamTrack.gpFilePath) {
+      const gpAbsPath = path.join(musicPath, jamTrack.gpFilePath);
       try {
-        await fs.unlink(pdfAbsPath);
+        await fs.unlink(gpAbsPath);
       } catch {
-        console.warn(`Could not delete PDF file: ${pdfAbsPath}`);
+        console.warn(`Could not delete GP file: ${gpAbsPath}`);
       }
     }
 
-    // Try to remove the folder if empty
     const trackFolder = path.dirname(audioPath);
     try {
       const files = await fs.readdir(trackFolder);
@@ -190,14 +136,10 @@ export async function DELETE(
         await fs.rmdir(trackFolder);
       }
     } catch {
-      // Ignore folder cleanup errors
+      // ignore
     }
 
-    // Delete from database (cascades to pdfs and their sync points)
-    await prisma.jamTrack.delete({
-      where: { id },
-    });
-
+    await prisma.jamTrack.delete({ where: { id } });
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Error deleting jam track:", error);

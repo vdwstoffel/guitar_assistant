@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, memo } from "react";
 import { JamTrack } from "@/types";
 import InProgressIndicator from "./InProgressIndicator";
-import { formatDuration, sortPdfs, getPdfAbbreviation } from "@/lib/formatting";
+import { formatDuration } from "@/lib/formatting";
 
 interface JamTrackEditModalProps {
   jamTrack: JamTrack;
@@ -71,7 +71,6 @@ function JamTrackEditModal({ jamTrack, onClose, onSave }: JamTrackEditModalProps
               </select>
             </div>
           </div>
-          <p className="text-xs text-gray-500">Set tempo for click track count-in when jumping to markers</p>
         </div>
         <div className="flex justify-end gap-3 mt-6">
           <button
@@ -103,14 +102,12 @@ interface JamTracksViewProps {
   onJamTrackInProgress?: (jamTrackId: string, inProgress: boolean) => Promise<void>;
   onJamTrackFavorite?: (jamTrackId: string, favorite: boolean) => Promise<void>;
   onJamTrackDelete?: (jamTrackId: string) => Promise<void>;
-  onPdfUpload?: (jamTrackId: string, file: File, name: string) => Promise<void>;
-  onPdfDelete?: (jamTrackId: string, pdfId: string) => Promise<void>;
+  onGpUpload?: (jamTrackId: string, file: File) => Promise<void>;
+  onGpDelete?: (jamTrackId: string) => Promise<void>;
   onUpload?: (files: FileList) => Promise<void>;
   isUploading?: boolean;
   onYouTubeImport?: (url: string, title?: string) => Promise<void>;
   isImportingFromYouTube?: boolean;
-  onPsarcImport?: (file: File) => Promise<void>;
-  isImportingPsarc?: boolean;
 }
 
 const JamTracksView = memo(function JamTracksView({
@@ -122,36 +119,23 @@ const JamTracksView = memo(function JamTracksView({
   onJamTrackInProgress,
   onJamTrackFavorite,
   onJamTrackDelete,
-  onPdfUpload,
-  onPdfDelete,
+  onGpUpload,
+  onGpDelete,
   onUpload,
   isUploading,
   onYouTubeImport,
   isImportingFromYouTube,
-  onPsarcImport,
-  isImportingPsarc,
 }: JamTracksViewProps) {
   const [editingJamTrack, setEditingJamTrack] = useState<JamTrack | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [pdfUpload, setPdfUpload] = useState<{ jamTrackId: string; file: File } | null>(null);
-  const [pdfName, setPdfName] = useState("");
-  const [isUploadingPdf, setIsUploadingPdf] = useState(false);
+  const [uploadingGpId, setUploadingGpId] = useState<string | null>(null);
   const [showYouTubeModal, setShowYouTubeModal] = useState(false);
   const [youtubeUrl, setYoutubeUrl] = useState("");
   const [youtubeError, setYoutubeError] = useState("");
   const [youtubeNeedsTitle, setYoutubeNeedsTitle] = useState(false);
   const [youtubeTitle, setYoutubeTitle] = useState("");
   const uploadInputRef = useRef<HTMLInputElement>(null);
-  const psarcInputRef = useRef<HTMLInputElement>(null);
   const youtubeInputRef = useRef<HTMLInputElement>(null);
-  const pdfNameInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (pdfUpload && pdfNameInputRef.current) {
-      pdfNameInputRef.current.focus();
-      pdfNameInputRef.current.select();
-    }
-  }, [pdfUpload]);
 
   useEffect(() => {
     if (showYouTubeModal && youtubeInputRef.current) {
@@ -190,7 +174,6 @@ const JamTracksView = memo(function JamTracksView({
     }
   };
 
-
   const handleDelete = async (jamTrackId: string) => {
     if (!onJamTrackDelete) return;
     setDeletingId(jamTrackId);
@@ -201,37 +184,26 @@ const JamTracksView = memo(function JamTracksView({
     }
   };
 
-  const handlePdfUploadClick = (jamTrackId: string) => {
+  const handleGpUploadClick = (jamTrackId: string) => {
+    if (!onGpUpload) return;
     const input = document.createElement("input");
     input.type = "file";
-    input.accept = ".pdf";
-    input.onchange = (e) => {
+    input.accept = ".gp,.gp3,.gp4,.gp5,.gpx,.gp7";
+    input.onchange = async (e) => {
       const file = (e.target as HTMLInputElement).files?.[0];
-      if (file) {
-        setPdfName(file.name.replace(/\.pdf$/i, ""));
-        setPdfUpload({ jamTrackId, file });
+      if (!file) return;
+      setUploadingGpId(jamTrackId);
+      try {
+        await onGpUpload(jamTrackId, file);
+      } finally {
+        setUploadingGpId(null);
       }
     };
     input.click();
   };
 
-  const handlePdfUploadConfirm = async () => {
-    if (!pdfUpload || !pdfName.trim() || !onPdfUpload) return;
-    setIsUploadingPdf(true);
-    try {
-      await onPdfUpload(pdfUpload.jamTrackId, pdfUpload.file, pdfName.trim());
-      setPdfUpload(null);
-      setPdfName("");
-    } catch (error) {
-      console.error("Failed to upload PDF:", error);
-    } finally {
-      setIsUploadingPdf(false);
-    }
-  };
-
   return (
     <div className="h-full overflow-y-auto bg-gray-900 p-6">
-      {/* Edit Modal */}
       {editingJamTrack && onJamTrackUpdate && (
         <JamTrackEditModal
           jamTrack={editingJamTrack}
@@ -240,52 +212,6 @@ const JamTracksView = memo(function JamTracksView({
         />
       )}
 
-      {/* PDF Upload Name Modal */}
-      {pdfUpload && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-sm mx-4 shadow-xl">
-            <h3 className="text-lg font-semibold mb-4 text-white">Add PDF</h3>
-            <div className="space-y-3">
-              <div>
-                <label className="block text-sm text-gray-400 mb-1">Name</label>
-                <input
-                  ref={pdfNameInputRef}
-                  type="text"
-                  value={pdfName}
-                  onChange={(e) => setPdfName(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && pdfName.trim()) handlePdfUploadConfirm();
-                    if (e.key === "Escape") { setPdfUpload(null); setPdfName(""); }
-                  }}
-                  placeholder="e.g. Rhythm Guitar"
-                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:border-purple-500"
-                />
-              </div>
-              <p className="text-xs text-gray-500">
-                File: {pdfUpload.file.name}
-              </p>
-            </div>
-            <div className="flex justify-end gap-3 mt-5">
-              <button
-                onClick={() => { setPdfUpload(null); setPdfName(""); }}
-                disabled={isUploadingPdf}
-                className="px-4 py-2 text-gray-400 hover:text-white transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handlePdfUploadConfirm}
-                disabled={isUploadingPdf || !pdfName.trim()}
-                className="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded font-medium transition-colors text-white"
-              >
-                {isUploadingPdf ? "Uploading..." : "Upload"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* YouTube Import Modal */}
       {showYouTubeModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md mx-4 shadow-xl">
@@ -325,9 +251,7 @@ const JamTracksView = memo(function JamTracksView({
                   />
                 </div>
               )}
-              {youtubeError && (
-                <p className="text-sm text-red-400">{youtubeError}</p>
-              )}
+              {youtubeError && <p className="text-sm text-red-400">{youtubeError}</p>}
               {isImportingFromYouTube && (
                 <p className="text-sm text-gray-400">Importing... this may take a moment</p>
               )}
@@ -358,7 +282,6 @@ const JamTracksView = memo(function JamTracksView({
         </div>
       )}
 
-      {/* Header */}
       <div className="mb-6">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold text-white flex items-center gap-3">
@@ -368,40 +291,6 @@ const JamTracksView = memo(function JamTracksView({
             Jam Tracks
           </h1>
           <div className="flex items-center gap-2">
-            {onPsarcImport && (
-              <>
-                <button
-                  onClick={() => psarcInputRef.current?.click()}
-                  disabled={isImportingPsarc}
-                  className="flex items-center gap-2 px-3 py-2 border border-orange-600 hover:bg-orange-600/20 disabled:border-gray-600 disabled:cursor-not-allowed rounded text-sm font-medium text-orange-300 transition-colors"
-                >
-                  {isImportingPsarc ? (
-                    <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                    </svg>
-                  ) : (
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
-                    </svg>
-                  )}
-                  {isImportingPsarc ? "Importing..." : "Rocksmith"}
-                </button>
-                <input
-                  ref={psarcInputRef}
-                  type="file"
-                  accept=".psarc"
-                  onChange={async (e) => {
-                    const file = e.target.files?.[0];
-                    if (file) {
-                      await onPsarcImport(file);
-                      e.target.value = "";
-                    }
-                  }}
-                  className="hidden"
-                />
-              </>
-            )}
             {onYouTubeImport && (
               <button
                 onClick={() => setShowYouTubeModal(true)}
@@ -409,7 +298,7 @@ const JamTracksView = memo(function JamTracksView({
                 className="flex items-center gap-2 px-3 py-2 border border-purple-600 hover:bg-purple-600/20 disabled:border-gray-600 disabled:cursor-not-allowed rounded text-sm font-medium text-purple-300 transition-colors"
               >
                 <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+                  <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
                 </svg>
                 YouTube
               </button>
@@ -451,7 +340,7 @@ const JamTracksView = memo(function JamTracksView({
           </div>
         </div>
         <p className="text-gray-400 mt-1">
-          {jamTracks.length} track{jamTracks.length !== 1 ? "s" : ""} - Play along with your favorite songs
+          {jamTracks.length} track{jamTracks.length !== 1 ? "s" : ""} - audio + Guitar Pro tabs
         </p>
       </div>
 
@@ -461,7 +350,7 @@ const JamTracksView = memo(function JamTracksView({
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
           </svg>
           <p className="text-lg">No jam tracks found</p>
-          <p className="mt-2">Use the upload button to add jam tracks</p>
+          <p className="mt-2">Use the upload button or paste a YouTube URL to add jam tracks</p>
         </div>
       ) : (
         <div className="flex flex-col gap-1">
@@ -481,46 +370,27 @@ const JamTracksView = memo(function JamTracksView({
                 tabIndex={0}
                 className="flex items-center gap-2 px-3 py-2 cursor-pointer group"
               >
-                {/* Play Icon */}
                 <span className="shrink-0">
-                  {currentJamTrack?.id === jamTrack.id ? (
-                    <svg className="w-4 h-4 text-purple-400" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M8 5v14l11-7z" />
-                    </svg>
-                  ) : (
-                    <svg className="w-4 h-4 text-gray-500 group-hover:text-white" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M8 5v14l11-7z" />
-                    </svg>
-                  )}
+                  <svg className={`w-4 h-4 ${currentJamTrack?.id === jamTrack.id ? "text-purple-400" : "text-gray-500 group-hover:text-white"}`} fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M8 5v14l11-7z" />
+                  </svg>
                 </span>
 
-                {/* Title */}
                 <span className={`flex-1 truncate font-medium ${
                   currentJamTrack?.id === jamTrack.id ? "text-purple-300" : "text-gray-200"
                 }`}>
                   {jamTrack.title}
                 </span>
 
-                {/* PDF/Tab abbreviations */}
-                {jamTrack.pdfs.length > 0 && (
-                  <span className="flex gap-1 shrink-0">
-                    {sortPdfs(jamTrack.pdfs).map((pdf) => (
-                      <span
-                        key={pdf.id}
-                        className={`text-[10px] font-bold w-4 h-4 rounded flex items-center justify-center ${
-                          pdf.fileType === "alphatex"
-                            ? "bg-orange-500/20 text-orange-400"
-                            : "bg-blue-500/20 text-blue-400"
-                        }`}
-                        title={pdf.name}
-                      >
-                        {getPdfAbbreviation(pdf.name)}
-                      </span>
-                    ))}
+                {jamTrack.gpFilePath && (
+                  <span
+                    className="text-[10px] font-bold px-1.5 h-4 rounded flex items-center bg-blue-500/20 text-blue-400 shrink-0"
+                    title="Has Guitar Pro tab"
+                  >
+                    GP
                   </span>
                 )}
 
-                {/* In Progress indicator */}
                 <InProgressIndicator
                   trackId={jamTrack.id}
                   completed={jamTrack.completed}
@@ -528,16 +398,13 @@ const JamTracksView = memo(function JamTracksView({
                   isJamTrack
                 />
 
-                {/* Favorite star */}
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
                     onJamTrackFavorite?.(jamTrack.id, !jamTrack.favorite);
                   }}
                   className={`w-5 h-5 flex-shrink-0 transition-colors ${
-                    jamTrack.favorite
-                      ? "text-yellow-400"
-                      : "text-gray-600 hover:text-yellow-400"
+                    jamTrack.favorite ? "text-yellow-400" : "text-gray-600 hover:text-yellow-400"
                   }`}
                   title={jamTrack.favorite ? "Remove from favorites" : "Add to favorites"}
                 >
@@ -546,16 +413,13 @@ const JamTracksView = memo(function JamTracksView({
                   </svg>
                 </button>
 
-                {/* In progress circle */}
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
                     onJamTrackInProgress?.(jamTrack.id, !jamTrack.inProgress);
                   }}
                   className={`w-5 h-5 rounded-full border-2 flex-shrink-0 transition-colors ${
-                    jamTrack.inProgress
-                      ? "bg-amber-500 border-amber-500"
-                      : "border-gray-500 hover:border-amber-400"
+                    jamTrack.inProgress ? "bg-amber-500 border-amber-500" : "border-gray-500 hover:border-amber-400"
                   }`}
                   title={jamTrack.inProgress ? "Mark as not in progress" : "Mark as in progress"}
                 >
@@ -568,16 +432,13 @@ const JamTracksView = memo(function JamTracksView({
                   </svg>
                 </button>
 
-                {/* Completion circle */}
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
                     onJamTrackComplete?.(jamTrack.id, !jamTrack.completed);
                   }}
                   className={`w-5 h-5 rounded-full border-2 flex-shrink-0 transition-colors ${
-                    jamTrack.completed
-                      ? "bg-purple-500 border-purple-500"
-                      : "border-gray-500 hover:border-purple-400"
+                    jamTrack.completed ? "bg-purple-500 border-purple-500" : "border-gray-500 hover:border-purple-400"
                   }`}
                   title={jamTrack.completed ? "Mark as not completed" : "Mark as completed"}
                 >
@@ -591,12 +452,10 @@ const JamTracksView = memo(function JamTracksView({
                   </svg>
                 </button>
 
-                {/* Duration */}
                 <span className="text-gray-500 text-sm tabular-nums flex-shrink-0 w-12 text-right">
                   {formatDuration(jamTrack.duration)}
                 </span>
 
-                {/* Edit button */}
                 {onJamTrackUpdate && (
                   <button
                     onClick={(e) => {
@@ -613,41 +472,43 @@ const JamTracksView = memo(function JamTracksView({
                 )}
               </div>
 
-              {/* Actions row - only for selected track */}
               {currentJamTrack?.id === jamTrack.id && (
                 <div className="flex items-center gap-2 px-4 pb-2 pt-0 flex-wrap">
-                  {/* PDF list */}
-                  {jamTrack.pdfs.map((pdf) => (
-                    <div key={pdf.id} className="flex items-center gap-1 px-2 py-0.5 bg-blue-600/20 rounded text-xs text-blue-300">
-                      <span>{pdf.name}</span>
-                      {onPdfDelete && (
+                  {jamTrack.gpFilePath ? (
+                    <div className="flex items-center gap-1 px-2 py-0.5 bg-blue-600/20 rounded text-xs text-blue-300">
+                      <span>Guitar Pro tab attached</span>
+                      {onGpDelete && (
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            onPdfDelete(jamTrack.id, pdf.id);
+                            onGpDelete(jamTrack.id);
                           }}
                           className="text-red-400 hover:text-red-300 ml-1"
-                          title="Remove PDF"
+                          title="Remove tab"
                         >
                           &times;
                         </button>
                       )}
                     </div>
-                  ))}
+                  ) : null}
 
-                  {/* Add PDF button */}
-                  {onPdfUpload && (
+                  {onGpUpload && (
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        handlePdfUploadClick(jamTrack.id);
+                        handleGpUploadClick(jamTrack.id);
                       }}
-                      className="flex items-center gap-1 px-2 py-0.5 bg-gray-700 hover:bg-gray-600 rounded text-xs text-gray-300 transition-colors"
+                      disabled={uploadingGpId === jamTrack.id}
+                      className="flex items-center gap-1 px-2 py-0.5 bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 disabled:cursor-not-allowed rounded text-xs text-gray-300 transition-colors"
                     >
                       <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                       </svg>
-                      Add PDF
+                      {uploadingGpId === jamTrack.id
+                        ? "Uploading..."
+                        : jamTrack.gpFilePath
+                        ? "Replace tab"
+                        : "Add Guitar Pro tab"}
                     </button>
                   )}
 

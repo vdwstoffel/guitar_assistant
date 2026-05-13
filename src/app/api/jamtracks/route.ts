@@ -4,19 +4,9 @@ import { prisma } from "@/lib/prisma";
 export async function GET() {
   try {
     const jamTracks = await prisma.jamTrack.findMany({
-      include: {
-        markers: {
-          orderBy: { timestamp: "asc" },
-        },
-        pdfs: {
-          include: { pageSyncPoints: { orderBy: { timeInSeconds: "asc" } } },
-          orderBy: { sortOrder: "asc" },
-        },
-      },
       orderBy: { title: "asc" },
     });
-
-    return NextResponse.json(jamTracks);
+    return NextResponse.json(jamTracks.map((jt) => ({ ...jt, markers: [] })));
   } catch (error) {
     console.error("Error fetching jam tracks:", error);
     return NextResponse.json(

@@ -2,7 +2,6 @@
 
 import { useState, useRef, useEffect } from 'react';
 import type { JamTrack } from '@/types';
-import { sortPdfs, getPdfAbbreviation } from '@/lib/formatting';
 
 interface JamTrackCompactSelectorProps {
   jamTracks: JamTrack[];
@@ -13,8 +12,6 @@ interface JamTrackCompactSelectorProps {
   isUploading?: boolean;
   onYouTubeImport?: (url: string, title?: string) => Promise<void>;
   isImportingFromYouTube?: boolean;
-  onPsarcImport?: (file: File) => Promise<void>;
-  isImportingPsarc?: boolean;
 }
 
 export default function JamTrackCompactSelector({
@@ -26,8 +23,6 @@ export default function JamTrackCompactSelector({
   isUploading,
   onYouTubeImport,
   isImportingFromYouTube,
-  onPsarcImport,
-  isImportingPsarc,
 }: JamTrackCompactSelectorProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -37,7 +32,6 @@ export default function JamTrackCompactSelector({
 
   const dropdownRef = useRef<HTMLDivElement>(null);
   const uploadInputRef = useRef<HTMLInputElement>(null);
-  const psarcInputRef = useRef<HTMLInputElement>(null);
 
   // Click outside and ESC key handlers
   useEffect(() => {
@@ -104,22 +98,12 @@ export default function JamTrackCompactSelector({
             {currentJamTrack.title}
           </span>
 
-          {/* PDF/Tab abbreviations */}
-          {currentJamTrack.pdfs.length > 0 && (
-            <span className="flex gap-1 shrink-0">
-              {sortPdfs(currentJamTrack.pdfs).map((pdf) => (
-                <span
-                  key={pdf.id}
-                  className={`text-[10px] font-bold w-4 h-4 rounded flex items-center justify-center ${
-                    pdf.fileType === "alphatex"
-                      ? "bg-orange-500/20 text-orange-400"
-                      : "bg-blue-500/20 text-blue-400"
-                  }`}
-                  title={pdf.name}
-                >
-                  {getPdfAbbreviation(pdf.name)}
-                </span>
-              ))}
+          {currentJamTrack.gpFilePath && (
+            <span
+              className="text-[10px] font-bold px-1.5 h-4 rounded flex items-center bg-blue-500/20 text-blue-400 shrink-0"
+              title="Guitar Pro tab attached"
+            >
+              GP
             </span>
           )}
 
@@ -154,42 +138,6 @@ export default function JamTrackCompactSelector({
 
         {/* Action Buttons */}
         <div className="flex items-center gap-2">
-          {/* Rocksmith Import */}
-          {onPsarcImport && (
-            <>
-              <button
-                onClick={() => psarcInputRef.current?.click()}
-                disabled={isImportingPsarc}
-                className="flex items-center gap-2 px-3 py-2 border border-orange-600 hover:bg-orange-600/20 disabled:border-gray-600 disabled:cursor-not-allowed rounded text-sm font-medium text-orange-300 transition-colors"
-              >
-                {isImportingPsarc ? (
-                  <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
-                ) : (
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
-                  </svg>
-                )}
-                <span className="hidden sm:inline">{isImportingPsarc ? "Importing..." : "Rocksmith"}</span>
-              </button>
-              <input
-                ref={psarcInputRef}
-                type="file"
-                accept=".psarc"
-                onChange={async (e) => {
-                  const file = e.target.files?.[0];
-                  if (file) {
-                    await onPsarcImport(file);
-                    e.target.value = "";
-                  }
-                }}
-                className="hidden"
-              />
-            </>
-          )}
-
           {/* YouTube Import */}
           {onYouTubeImport && (
             <button
@@ -280,22 +228,12 @@ export default function JamTrackCompactSelector({
                     {jamTrack.title}
                   </span>
 
-                  {/* PDF/Tab abbreviations */}
-                  {jamTrack.pdfs.length > 0 && (
-                    <span className="flex gap-1 shrink-0">
-                      {sortPdfs(jamTrack.pdfs).map((pdf) => (
-                        <span
-                          key={pdf.id}
-                          className={`text-[10px] font-bold w-4 h-4 rounded flex items-center justify-center ${
-                            pdf.fileType === "alphatex"
-                              ? "bg-orange-500/20 text-orange-400"
-                              : "bg-blue-500/20 text-blue-400"
-                          }`}
-                          title={pdf.name}
-                        >
-                          {getPdfAbbreviation(pdf.name)}
-                        </span>
-                      ))}
+                  {jamTrack.gpFilePath && (
+                    <span
+                      className="text-[10px] font-bold px-1.5 h-4 rounded flex items-center bg-blue-500/20 text-blue-400 shrink-0"
+                      title="Guitar Pro tab attached"
+                    >
+                      GP
                     </span>
                   )}
 

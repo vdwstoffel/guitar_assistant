@@ -10,3 +10,5 @@
 - **1-2-4 Spider** (Speed Mechanics / The Left Hand): ascending H-H across strings, descending P-P, shifting positions. 5 positions (1-2-4 through 5-6-8), 15 bars at 120 BPM.
 - **1-3-2-4 Spider "4"** (Speed Mechanics / The Left Hand): 4-note pattern per string (1,3,2,4) ascending with H, descending (4,2,3,1) with P. 3 positions shifting up 1 fret each. 18 bars at 100 BPM, eighth notes.
 - **1-4-3-2 Spider "5"** (Speed Mechanics / The Left Hand): 4-note pattern per string (1,4,3,2) ascending with H-P-P, descending (4,1,2,3) with P-H-H. 3 positions shifting up 1 fret each. 18 bars at 110 BPM, eighth notes.
+- **Legato Cascade Drill** (Metal Lead / To The Stage): Gm pentatonic box at fret 15, 2 notes per string with {h} only within same string (first note of each string is picked), ascending + descending x2, 16th notes, 3 bars at 90 BPM.
+- **Repeated Triplet Bursts** (Metal Lead / To The Stage): 4-sixteenth-note stutter groups (low, high{h}, high{h}, high{h}) on high e. Positions 15-17, 13-15, 3-5 with fret 15->3 position jump. 4 bars at 90 BPM.

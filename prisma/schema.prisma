@@ -131,8 +131,20 @@ model Video {
   completed        Boolean           @default(false)
   inProgress       Boolean           @default(false)
   notes            String?
+  localPath        String?
   createdAt        DateTime          @default(now())
   practiceSessions PracticeSession[]
+  markers          VideoMarker[]
+}
+
+model VideoMarker {
+  id        String @id @default(uuid())
+  name      String
+  timestamp Float
+  videoId   String
+  video     Video  @relation(fields: [videoId], references: [id], onDelete: Cascade)
+
+  @@index([videoId])
 }
 
 model JamTrack {
@@ -148,43 +160,9 @@ model JamTrack {
   playbackSpeed Int?
   volume        Int?
   lufs          Float?
-  markers           JamTrackMarker[]
-  pdfs              JamTrackPdf[]
+  gpFilePath    String?
   practiceSessions  PracticeSession[]
   createdAt         DateTime         @default(now())
-}
-
-model JamTrackMarker {
-  id         String   @id @default(uuid())
-  name       String
-  timestamp  Float
-  jamTrackId String
-  jamTrack   JamTrack @relation(fields: [jamTrackId], references: [id], onDelete: Cascade)
-
-  @@index([jamTrackId])
-}
-
-model JamTrackPdf {
-  id             String          @id @default(uuid())
-  name           String
-  filePath       String          @unique
-  fileType       String          @default("pdf") // "pdf" | "alphatex"
-  sortOrder      Int             @default(0)
-  jamTrackId     String
-  jamTrack       JamTrack        @relation(fields: [jamTrackId], references: [id], onDelete: Cascade)
-  pageSyncPoints PageSyncPoint[]
-
-  @@index([jamTrackId])
-}
-
-model PageSyncPoint {
-  id            String      @id @default(uuid())
-  timeInSeconds Float
-  pageNumber    Int
-  jamTrackPdfId String
-  jamTrackPdf   JamTrackPdf @relation(fields: [jamTrackPdfId], references: [id], onDelete: Cascade)
-
-  @@index([jamTrackPdfId])
 }
 
 model GuitarTab {

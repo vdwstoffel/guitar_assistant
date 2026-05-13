@@ -5,7 +5,11 @@ export async function GET() {
   try {
     const [tracks, jamTracks, bookVideos, videos] = await Promise.all([
       prisma.track.findMany({
-        where: { inProgress: true, completed: false },
+        where: {
+          inProgress: true,
+          completed: false,
+          book: { inProgress: true },
+        },
         select: {
           id: true,
           title: true,
@@ -46,6 +50,7 @@ export async function GET() {
           completed: false,
           // Exclude videos that have a linked audio track (track is the canonical item)
           extractedTrack: null,
+          book: { inProgress: true },
         },
         select: {
           id: true,

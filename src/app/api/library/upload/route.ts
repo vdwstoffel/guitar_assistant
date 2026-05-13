@@ -15,6 +15,8 @@ export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
     const files = formData.getAll("files") as File[];
+    const overrideAuthor = (formData.get("authorName") as string | null)?.trim() || "";
+    const overrideBook = (formData.get("bookName") as string | null)?.trim() || "";
 
     if (files.length === 0) {
       return NextResponse.json({ error: "No files provided" }, { status: 400 });
@@ -46,8 +48,12 @@ export async function POST(request: NextRequest) {
         const fileName = path.basename(file.name, ext);
 
         const title = metadata.common.title || fileName;
-        const authorName = sanitizeName(metadata.common.artist || "Unknown Author");
-        const bookName = sanitizeName(metadata.common.album || "Unknown Book");
+        const authorName = overrideAuthor
+          ? sanitizeName(overrideAuthor)
+          : sanitizeName(metadata.common.artist || "Unknown Author");
+        const bookName = overrideBook
+          ? sanitizeName(overrideBook)
+          : sanitizeName(metadata.common.album || "Unknown Book");
         const trackNumber = metadata.common.track?.no || 0;
         const duration = metadata.format.duration || 0;
 

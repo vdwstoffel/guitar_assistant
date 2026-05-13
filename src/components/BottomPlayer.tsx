@@ -65,6 +65,7 @@ function BottomPlayer({
 }: BottomPlayerProps) {
   const waveformRef = useRef<HTMLDivElement>(null);
   const waveformContainerRef = useRef<HTMLDivElement>(null);
+  const wsScrollContainerRef = useRef<HTMLElement | null>(null);
   const wavesurferRef = useRef<WaveSurfer | null>(null);
   const regionsRef = useRef<RegionsPlugin | null>(null);
   const prevMarkerIdsRef = useRef<Set<string>>(new Set());
@@ -84,6 +85,8 @@ function BottomPlayer({
   sessionTrackerRef.current = sessionTracker;
   const [speedInputValue, setSpeedInputValue] = useState("");
   const [volume, setVolume] = useState(50);
+  const volumeRef = useRef(50);
+  volumeRef.current = volume;
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
   const [showMarkers, setShowMarkers] = useState(() => (track?.markers?.length ?? 0) > 0);
   const [leadIn, setLeadIn] = useState(2);
@@ -101,7 +104,6 @@ function BottomPlayer({
   const [isRepeatEnabled, setIsRepeatEnabled] = useState(false);
   const isRepeatEnabledRef = useRef(false);
   const restartPlaybackRef = useRef<() => void>(() => {});
-  const [showSplitChannels, setShowSplitChannels] = useState(false);
 
   // A/B loop state
   const [loopA, setLoopA] = useState<number | null>(null);
@@ -142,16 +144,15 @@ function BottomPlayer({
   const handleWheelZoom = useCallback((e: WheelEvent) => {
     e.preventDefault();
 
-    const container = waveformContainerRef.current;
-    const waveform = waveformRef.current;
-    if (!container || !waveform || !wavesurferRef.current) return;
+    const scrollContainer = wsScrollContainerRef.current;
+    if (!scrollContainer || !wavesurferRef.current) return;
 
-    // Get cursor position relative to container
-    const rect = container.getBoundingClientRect();
+    // Get cursor position relative to scroll container
+    const rect = scrollContainer.getBoundingClientRect();
     const cursorX = e.clientX - rect.left;
 
-    // Current scroll position
-    const scrollLeft = container.scrollLeft;
+    // Current scroll position (from WaveSurfer's internal scroll container)
+    const scrollLeft = scrollContainer.scrollLeft;
 
     // Position in content that cursor is pointing at
     const cursorContentPosition = scrollLeft + cursorX;
@@ -180,8 +181,8 @@ function BottomPlayer({
     // Apply scroll position after WaveSurfer updates - use double rAF to ensure DOM is ready
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
-        if (container) {
-          container.scrollLeft = Math.max(0, newScrollLeft);
+        if (scrollContainer) {
+          scrollContainer.scrollLeft = Math.max(0, newScrollLeft);
           setScrollLeft(Math.max(0, newScrollLeft));
         }
       });
@@ -268,7 +269,10 @@ function BottomPlayer({
 
     if (wavesurferRef.current) {
       wavesurferRef.current.destroy();
+      wavesurferRef.current = null;
     }
+    // Clear any stale DOM elements left over from previous WaveSurfer instances
+    waveformRef.current.innerHTML = '';
 
     setIsLoading(true);
     isLoadingRef.current = true;
@@ -281,19 +285,11 @@ function BottomPlayer({
       progressColor: "#22c55e",
       cursorColor: "#ffffff",
       cursorWidth: 2,
-      height: compact
-        ? (showSplitChannels ? 160 : 60)  // Compact: smaller heights
-        : (showSplitChannels ? 120 : 140), // Normal: original heights
+      height: compact ? 120 : 140,
       normalize: true,
       minPxPerSec: 1,
       autoScroll: true,
       autoCenter: true,
-      ...(showSplitChannels && {
-        splitChannels: [
-          { waveColor: '#4b5563', progressColor: '#22c55e' },
-          { waveColor: '#3b4563', progressColor: '#1eb04e' }
-        ]
-      }),
       plugins: [regions],
     });
 
@@ -402,7 +398,13 @@ function BottomPlayer({
     ws.load(`/api/audio/${encodeURIComponent(track.filePath)}`);
 
     wavesurferRef.current = ws;
-  }, [track, showSplitChannels, compact]);
+    // Store WaveSurfer's internal scroll container for scroll/zoom management
+    try {
+      wsScrollContainerRef.current = ws.getWrapper().parentElement as HTMLElement;
+    } catch {
+      wsScrollContainerRef.current = null;
+    }
+  }, [track, compact]);
 
   // Listen for external playback speed changes (e.g., InProgressIndicator clear)
   useEffect(() => {
@@ -515,36 +517,6 @@ function BottomPlayer({
     setShowMarkers((track?.markers?.length ?? 0) > 0);
   }, [track?.id]);
 
-  // Handle split channels toggle - reinitialize waveform while preserving playback state
-  useEffect(() => {
-    // Skip on initial load or if no track/wavesurfer exists yet
-    if (!track || !wavesurferRef.current || isInitialLoadRef.current) return;
-
-    const wasPlaying = isPlaying;
-    const currentPosition = currentTimeRef.current;
-    const currentDuration = duration;
-
-    // Reinitialize with new split channels setting
-    initWaveSurfer();
-
-    // Restore playback position after waveform is ready
-    if (currentDuration > 0) {
-      const checkReady = () => {
-        if (wavesurferRef.current && wavesurferRef.current.getDuration() > 0) {
-          const ws = wavesurferRef.current;
-          ws.seekTo(currentPosition / ws.getDuration());
-          if (wasPlaying) {
-            ws.play();
-          }
-        }
-      };
-
-      // Use a small delay to ensure waveform is fully initialized
-      const timeoutId = setTimeout(checkReady, 100);
-      return () => clearTimeout(timeoutId);
-    }
-  }, [showSplitChannels]);
-
   // Wheel zoom event listener - re-run when track changes or loading completes
   useEffect(() => {
     const container = waveformContainerRef.current;
@@ -592,9 +564,12 @@ function BottomPlayer({
   }, [onSeekReady, duration]);
 
   // Track scroll position and container width for marker labels
+  // Uses WaveSurfer's internal scroll container for scroll position (since it handles zoomed waveform scrolling)
+  // and the outer container for width measurement
   useEffect(() => {
-    const container = waveformContainerRef.current;
-    if (!container) return;
+    const outerContainer = waveformContainerRef.current;
+    const scrollContainer = wsScrollContainerRef.current;
+    if (!outerContainer) return;
 
     let scrollRafId: number | null = null;
     let resizeRafId: number | null = null;
@@ -604,7 +579,8 @@ function BottomPlayer({
       // excessive state updates on every scroll event
       if (scrollRafId !== null) return;
       scrollRafId = requestAnimationFrame(() => {
-        setScrollLeft(container.scrollLeft);
+        const sc = wsScrollContainerRef.current;
+        setScrollLeft(sc ? sc.scrollLeft : 0);
         scrollRafId = null;
       });
     };
@@ -613,19 +589,24 @@ function BottomPlayer({
       // Throttle resize updates with requestAnimationFrame
       if (resizeRafId !== null) return;
       resizeRafId = requestAnimationFrame(() => {
-        setContainerWidth(container.clientWidth);
+        setContainerWidth(outerContainer.clientWidth);
         resizeRafId = null;
       });
     };
 
     // Initial measurement
-    setContainerWidth(container.clientWidth);
+    setContainerWidth(outerContainer.clientWidth);
 
-    container.addEventListener("scroll", handleScroll);
+    // Listen to WaveSurfer's internal scroll container for scroll events
+    if (scrollContainer) {
+      scrollContainer.addEventListener("scroll", handleScroll);
+    }
     window.addEventListener("resize", handleResize);
 
     return () => {
-      container.removeEventListener("scroll", handleScroll);
+      if (scrollContainer) {
+        scrollContainer.removeEventListener("scroll", handleScroll);
+      }
       window.removeEventListener("resize", handleResize);
       // Clean up any pending animation frames to prevent memory leaks
       if (scrollRafId !== null) {
@@ -910,20 +891,34 @@ function BottomPlayer({
     }
   }, [duration, leadIn, track?.tempo, track?.timeSignature, volume]);
 
+  const wasPlayingBeforeMarkerDialogRef = useRef(false);
+
   const handleOpenMarkerDialog = useCallback(() => {
     setPendingMarkerTimestamp(currentTimeRef.current);
+    const ws = wavesurferRef.current;
+    wasPlayingBeforeMarkerDialogRef.current = !!ws?.isPlaying();
+    if (ws?.isPlaying()) ws.pause();
     setShowMarkerDialog(true);
+  }, []);
+
+  const resumeAfterMarkerDialog = useCallback(() => {
+    if (wasPlayingBeforeMarkerDialogRef.current) {
+      wavesurferRef.current?.play();
+      wasPlayingBeforeMarkerDialogRef.current = false;
+    }
   }, []);
 
   const addMarker = useCallback((name: string, timestamp: number, pdfPage?: number | null) => {
     if (!track || !name.trim()) return;
     onMarkerAdd(track.id, name.trim(), timestamp, pdfPage);
     setShowMarkerDialog(false);
-  }, [track, onMarkerAdd]);
+    resumeAfterMarkerDialog();
+  }, [track, onMarkerAdd, resumeAfterMarkerDialog]);
 
   const handleCancelMarkerDialog = useCallback(() => {
     setShowMarkerDialog(false);
-  }, []);
+    resumeAfterMarkerDialog();
+  }, [resumeAfterMarkerDialog]);
 
   const formatTime = useCallback((seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -989,6 +984,16 @@ function BottomPlayer({
         clearLoopRef.current();
       }
 
+      if (e.key === "+" || e.key === "=") {
+        e.preventDefault();
+        handleVolume(Math.min(100, volumeRef.current + 5));
+      }
+
+      if (e.key === "-") {
+        e.preventDefault();
+        handleVolume(Math.max(0, volumeRef.current - 5));
+      }
+
       if (e.key === "?") {
         e.preventDefault();
         setShowShortcutsHelp(prev => !prev);
@@ -997,7 +1002,7 @@ function BottomPlayer({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [track, handleOpenMarkerDialog]);
+  }, [track, handleOpenMarkerDialog, handleVolume]);
 
   // Handle marker label click to set/clear stop marker
   const handleMarkerLabelClick = useCallback((timestamp: number) => {
@@ -1177,6 +1182,11 @@ function BottomPlayer({
                   {preset}
                 </button>
               ))}
+              <button
+                onClick={() => handlePlaybackSpeed(playbackSpeed - 1)}
+                className="w-6 h-6 flex items-center justify-center bg-gray-700 hover:bg-gray-600 text-gray-300 hover:text-white rounded text-sm font-bold"
+                title="Decrease speed by 1%"
+              >−</button>
               <input
                 type="number"
                 min={10}
@@ -1202,6 +1212,11 @@ function BottomPlayer({
                 }}
                 className="w-12 sm:w-16 px-2 py-0.5 bg-gray-700 border border-gray-600 rounded text-center text-xs focus:outline-none focus:border-green-500"
               />
+              <button
+                onClick={() => handlePlaybackSpeed(playbackSpeed + 1)}
+                className="w-6 h-6 flex items-center justify-center bg-gray-700 hover:bg-gray-600 text-gray-300 hover:text-white rounded text-sm font-bold"
+                title="Increase speed by 1%"
+              >+</button>
               <span className="text-gray-500 text-xs">%</span>
             </div>
 
@@ -1245,20 +1260,6 @@ function BottomPlayer({
                 className="w-16 sm:w-20 h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-green-500"
               />
             </div>
-
-            {/* Split Channels Toggle */}
-            <button
-              onClick={() => setShowSplitChannels(!showSplitChannels)}
-              className={`flex items-center gap-1 px-3 py-1.5 rounded text-xs ${
-                showSplitChannels ? "bg-blue-600 text-white" : "bg-gray-700 hover:bg-gray-600 text-gray-300"
-              }`}
-              title={showSplitChannels ? "Show merged channels" : "Show split channels (L/R)"}
-            >
-              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-              </svg>
-              {showSplitChannels ? "Split" : "Mono"}
-            </button>
 
             {/* Volume Normalization Toggle - only show when track has LUFS data */}
             {track?.lufs != null && (
@@ -1310,10 +1311,8 @@ function BottomPlayer({
         </div>
 
           {/* Waveform - Responsive height */}
-          <div className={`relative pt-6 ${
-          compact
-            ? (showSplitChannels ? 'h-[180px]' : 'h-[80px]')
-            : (showSplitChannels ? 'h-[250px] sm:h-[300px]' : 'h-[140px] sm:h-[200px]')
+          <div className={`relative pt-6 overflow-hidden ${
+          compact ? 'h-[150px]' : 'h-[170px]'
         }`}>
             {/* Marker labels - positioned above waveform */}
             {track.markers.length > 0 && duration > 0 && !isLoading && containerWidth > 0 && (
@@ -1355,10 +1354,9 @@ function BottomPlayer({
             )}
             <div
               ref={waveformContainerRef}
-              className="overflow-x-auto rounded bg-gray-900"
-              style={{ contain: "inline-size" }}
+              className="overflow-hidden rounded bg-gray-900"
             >
-              <div ref={waveformRef} className="cursor-pointer" />
+              <div ref={waveformRef} className="cursor-pointer h-full" />
             </div>
             {isLoading && (
               <div className="absolute inset-0 top-5 flex items-center justify-center bg-gray-900 rounded">
@@ -1410,19 +1408,29 @@ function BottomPlayer({
                     .map((marker) => (
                       <div
                         key={marker.id}
-                        className="flex items-center gap-1 px-2 py-1 bg-gray-700 rounded text-xs group"
+                        onClick={() => {
+                          if (editingMarkerId !== marker.id) jumpToMarker(marker.timestamp);
+                        }}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(e) => {
+                          if (editingMarkerId === marker.id) return;
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            jumpToMarker(marker.timestamp);
+                          }
+                        }}
+                        className="flex items-center gap-1 px-2 py-1 bg-gray-700 rounded text-xs group cursor-pointer"
                       >
-                        <button
-                          onClick={() => jumpToMarker(marker.timestamp)}
-                          className="text-green-400 font-mono"
-                        >
+                        <span className="text-green-400 font-mono">
                           {formatTime(marker.timestamp)}
-                        </button>
+                        </span>
                         {editingMarkerId === marker.id ? (
                           <input
                             type="text"
                             value={editingMarkerName}
                             onChange={(e) => setEditingMarkerName(e.target.value)}
+                            onClick={(e) => e.stopPropagation()}
                             onKeyDown={(e) => {
                               if (e.key === "Enter" && editingMarkerName.trim()) {
                                 onMarkerRename(marker.id, editingMarkerName.trim());
@@ -1437,13 +1445,12 @@ function BottomPlayer({
                           />
                         ) : (
                           <>
-                            <button
-                              onClick={() => jumpToMarker(marker.timestamp)}
-                            >
+                            <span>
                               {marker.name}
-                            </button>
+                            </span>
                             <button
-                              onClick={() => {
+                              onClick={(e) => {
+                                e.stopPropagation();
                                 setEditingMarkerId(marker.id);
                                 setEditingMarkerName(marker.name);
                               }}
@@ -1457,7 +1464,10 @@ function BottomPlayer({
                           </>
                         )}
                         <button
-                          onClick={() => onMarkerDelete(marker.id)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onMarkerDelete(marker.id);
+                          }}
                           className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-300"
                         >
                           ×

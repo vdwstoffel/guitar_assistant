@@ -64,7 +64,7 @@ interface ScannedJamTrack {
   duration: number;
   filePath: string;
   lufs: number | null;
-  pdfFiles: { name: string; filePath: string }[];
+  gpFilePath: string | null;
 }
 
 interface ScannedVideo {
@@ -182,21 +182,17 @@ async function scanJamTracksFolder(): Promise<ScannedJamTrack[]> {
     const trackFolder = path.join(jamTracksPath, entry.name);
     const folderEntries = await fs.readdir(trackFolder, { withFileTypes: true });
 
-    // Find audio file and all PDF files in folder
     let audioFile: string | null = null;
-    const pdfFiles: { name: string; path: string }[] = [];
+    let gpFile: string | null = null;
+    const gpExtensions = [".gp", ".gp3", ".gp4", ".gp5", ".gpx", ".gp7"];
 
     for (const fileEntry of folderEntries) {
       if (!fileEntry.isFile()) continue;
-
       const ext = path.extname(fileEntry.name).toLowerCase();
       if (SUPPORTED_EXTENSIONS.includes(ext) && !audioFile) {
         audioFile = path.join(trackFolder, fileEntry.name);
-      } else if (ext === ".pdf") {
-        pdfFiles.push({
-          name: fileEntry.name.replace(/\.pdf$/i, ""),
-          path: path.join(trackFolder, fileEntry.name),
-        });
+      } else if (gpExtensions.includes(ext) && !gpFile) {
+        gpFile = path.join(trackFolder, fileEntry.name);
       }
     }
 
@@ -212,10 +208,7 @@ async function scanJamTracksFolder(): Promise<ScannedJamTrack[]> {
         duration,
         filePath: path.relative(musicPath, audioFile),
         lufs: null,
-        pdfFiles: pdfFiles.map(pdf => ({
-          name: pdf.name,
-          filePath: path.relative(musicPath, pdf.path),
-        })),
+        gpFilePath: gpFile ? path.relative(musicPath, gpFile) : null,
       });
     } catch (err) {
       console.error(`Error parsing jam track ${audioFile}:`, err);
@@ -377,6 +370,40 @@ async function discoverVideoOnlyBooks(): Promise<Map<string, Set<string>>> {
   return videoOnlyBooks;
 }
 
+async function discoverPdfOnlyBooks(): Promise<Map<string, Set<string>>> {
+  const musicPath = path.resolve(MUSIC_DIR);
+  const pdfBooks = new Map<string, Set<string>>();
+
+  try {
+    const authorDirs = await fs.readdir(musicPath, { withFileTypes: true });
+
+    for (const authorEntry of authorDirs) {
+      if (!authorEntry.isDirectory()) continue;
+      if (authorEntry.name === JAM_TRACKS_FOLDER) continue;
+
+      const authorPath = path.join(musicPath, authorEntry.name);
+      const bookDirs = await fs.readdir(authorPath, { withFileTypes: true });
+
+      for (const bookEntry of bookDirs) {
+        if (!bookEntry.isDirectory()) continue;
+
+        const bookPath = path.join(authorPath, bookEntry.name);
+        const pdfPath = await findPdfInFolder(bookPath);
+        if (pdfPath) {
+          if (!pdfBooks.has(authorEntry.name)) {
+            pdfBooks.set(authorEntry.name, new Set());
+          }
+          pdfBooks.get(authorEntry.name)!.add(bookEntry.name);
+        }
+      }
+    }
+  } catch (err) {
+    console.error("Error discovering PDF-only books:", err);
+  }
+
+  return pdfBooks;
+}
+
 export async function POST() {
   try {
     const musicPath = path.resolve(MUSIC_DIR);
@@ -384,6 +411,9 @@ export async function POST() {
 
     // Discover books that might have only videos (no audio tracks)
     const videoOnlyBooks = await discoverVideoOnlyBooks();
+
+    // Discover books that have a PDF (covers PDF-only books with no audio/video)
+    const pdfBooks = await discoverPdfOnlyBooks();
 
     // Group tracks by author and book
     const authorBookMap = new Map<
@@ -404,6 +434,19 @@ export async function POST() {
 
     // Add video-only books to the map with empty track arrays
     for (const [authorName, bookNames] of videoOnlyBooks) {
+      if (!authorBookMap.has(authorName)) {
+        authorBookMap.set(authorName, new Map());
+      }
+      const bookMap = authorBookMap.get(authorName)!;
+      for (const bookName of bookNames) {
+        if (!bookMap.has(bookName)) {
+          bookMap.set(bookName, []);
+        }
+      }
+    }
+
+    // Add PDF-only books to the map with empty track arrays
+    for (const [authorName, bookNames] of pdfBooks) {
       if (!authorBookMap.has(authorName)) {
         authorBookMap.set(authorName, new Map());
       }
@@ -732,50 +775,22 @@ export async function POST() {
     const jamTracks = await scanJamTracksFolder();
     let jamTracksRemoved = 0;
 
-    // Batch upsert all jam tracks and their PDFs in a single transaction
     await prisma.$transaction(async (tx) => {
       for (const jamTrack of jamTracks) {
-        const upsertedJamTrack = await tx.jamTrack.upsert({
+        await tx.jamTrack.upsert({
           where: { filePath: jamTrack.filePath },
           update: {
             title: jamTrack.title,
             duration: jamTrack.duration,
+            gpFilePath: jamTrack.gpFilePath,
           },
           create: {
             title: jamTrack.title,
             duration: jamTrack.duration,
             filePath: jamTrack.filePath,
+            gpFilePath: jamTrack.gpFilePath,
           },
         });
-
-        // Get existing PDFs for this jam track
-        const existingPdfs = await tx.jamTrackPdf.findMany({
-          where: { jamTrackId: upsertedJamTrack.id },
-        });
-        const existingPdfPaths = new Set(existingPdfs.map(p => p.filePath));
-
-        // Create new PDFs found on disk
-        let sortOrder = existingPdfs.length;
-        for (const pdfFile of jamTrack.pdfFiles) {
-          if (!existingPdfPaths.has(pdfFile.filePath)) {
-            await tx.jamTrackPdf.create({
-              data: {
-                name: pdfFile.name,
-                filePath: pdfFile.filePath,
-                sortOrder,
-                jamTrackId: upsertedJamTrack.id,
-              },
-            });
-            sortOrder++;
-          }
-        }
-
-        // Remove PDFs that no longer exist on disk (only check actual PDF files, not alphatex)
-        const scannedPdfPaths = new Set(jamTrack.pdfFiles.map(p => p.filePath));
-        const pdfsToDelete = existingPdfs.filter(p => p.fileType === "pdf" && !scannedPdfPaths.has(p.filePath));
-        for (const pdf of pdfsToDelete) {
-          await tx.jamTrackPdf.delete({ where: { id: pdf.id } });
-        }
       }
     });
 

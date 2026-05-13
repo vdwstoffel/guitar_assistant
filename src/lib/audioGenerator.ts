@@ -77,6 +77,7 @@ export function playNote(
   frequency: number,
   duration: number = DEFAULT_DURATION,
   waveform: OscillatorType = DEFAULT_WAVEFORM,
+  volume: number = 100,
 ): void {
   const ctx = getAudioContext();
   const now = ctx.currentTime;
@@ -87,10 +88,12 @@ export function playNote(
   osc.type = waveform;
   osc.frequency.setValueAtTime(frequency, now);
 
+  const peakGain = 0.3 * (volume / 100);
+
   // Envelope: quick attack, sustain, smooth release
   gain.gain.setValueAtTime(0, now);
-  gain.gain.linearRampToValueAtTime(0.3, now + 0.02);       // attack
-  gain.gain.setValueAtTime(0.3, now + duration * 0.7);      // sustain
+  gain.gain.linearRampToValueAtTime(peakGain, now + 0.02);       // attack
+  gain.gain.setValueAtTime(peakGain, now + duration * 0.7);      // sustain
   gain.gain.exponentialRampToValueAtTime(0.001, now + duration); // release
 
   osc.connect(gain);
@@ -111,9 +114,10 @@ export function playNoteByName(
   note: string,
   octave: number = DEFAULT_OCTAVE,
   duration: number = DEFAULT_DURATION,
+  volume: number = 100,
 ): void {
   const freq = noteToFrequency(note, octave);
-  playNote(freq, duration);
+  playNote(freq, duration, DEFAULT_WAVEFORM, volume);
 }
 
 /**

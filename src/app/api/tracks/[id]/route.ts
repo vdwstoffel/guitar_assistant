@@ -259,12 +259,13 @@ export async function PUT(
       }).catch(() => {}); // Ignore if video was deleted
     }
 
-    // Clean up empty books (no tracks AND no videos) and authors
+    // Clean up empty books (no tracks AND no videos AND no PDF) and authors
     await prisma.book.deleteMany({
       where: {
         AND: [
           { tracks: { none: {} } },
           { videos: { none: {} } },
+          { pdfPath: null },
         ],
       },
     });

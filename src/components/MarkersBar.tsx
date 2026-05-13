@@ -299,25 +299,28 @@ const MarkersBar = memo(function MarkersBar({
               return (
               <div
                 key={marker.id}
-                className={`flex items-center gap-1 px-2 py-1 rounded text-xs group transition-colors ${
+                onClick={() => onJumpToMarker(marker.timestamp)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    onJumpToMarker(marker.timestamp);
+                  }
+                }}
+                className={`flex items-center gap-1 px-2 py-1 rounded text-xs group transition-colors cursor-pointer ${
                   isPassed ? "bg-green-600" : "bg-gray-700"
                 }`}
               >
                 {shortcutKey && (
                   <span className="text-gray-300 font-mono text-[10px] min-w-[14px]">[{shortcutKey}]</span>
                 )}
-                <button
-                  onClick={() => onJumpToMarker(marker.timestamp)}
-                  className="text-green-400 font-mono"
-                >
+                <span className="text-green-400 font-mono">
                   {formatTime(marker.timestamp)}
-                </button>
-                <button
-                  onClick={() => onJumpToMarker(marker.timestamp)}
-                  className="truncate"
-                >
+                </span>
+                <span className="truncate">
                   {marker.name}
-                </button>
+                </span>
                 {markerPdfPage != null && (
                   <span className="text-[10px] text-blue-400 font-mono" title={`PDF page ${markerPdfPage}`}>
                     p.{markerPdfPage}
@@ -338,7 +341,10 @@ const MarkersBar = memo(function MarkersBar({
                   </button>
                 )}
                 <button
-                  onClick={() => handleOpenEditDialog(marker)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleOpenEditDialog(marker);
+                  }}
                   className={`p-0.5 text-white hover:text-white opacity-0 group-hover:opacity-100 transition-opacity${!(hasPdf && currentPdfPage) ? " ml-auto" : ""}`}
                   title="Edit marker"
                 >
@@ -347,7 +353,10 @@ const MarkersBar = memo(function MarkersBar({
                   </svg>
                 </button>
                 <button
-                  onClick={() => onDelete(marker.id)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDelete(marker.id);
+                  }}
                   className="opacity-0 group-hover:opacity-100 text-white hover:text-red-300"
                 >
                   ×

@@ -79,6 +79,7 @@ export interface Video {
   completed: boolean;
   inProgress: boolean;
   notes: string | null;
+  localPath: string | null;
   createdAt: string;
 }
 
@@ -113,24 +114,6 @@ export interface JamTrackMarker {
   id: string;
   name: string;
   timestamp: number;
-  jamTrackId: string;
-}
-
-export interface PageSyncPoint {
-  id: string;
-  timeInSeconds: number;
-  pageNumber: number;
-  jamTrackPdfId: string;
-}
-
-export interface JamTrackPdf {
-  id: string;
-  name: string;
-  filePath: string;
-  fileType: "pdf" | "alphatex";
-  sortOrder: number;
-  jamTrackId: string;
-  pageSyncPoints: PageSyncPoint[];
 }
 
 export interface JamTrack {
@@ -146,8 +129,12 @@ export interface JamTrack {
   playbackSpeed: number | null;
   volume: number | null;
   lufs: number | null;
+  gpFilePath: string | null;
+  /**
+   * Always empty in the simplified jam track model — kept only so the shared
+   * `BottomPlayer` code path can treat tracks and jam tracks uniformly.
+   */
   markers: JamTrackMarker[];
-  pdfs: JamTrackPdf[];
   createdAt: string;
 }
 

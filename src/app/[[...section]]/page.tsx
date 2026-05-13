@@ -14,7 +14,6 @@ import CircleOfFifths from "@/components/CircleOfFifths";
 import IntervalExplorer from "@/components/IntervalExplorer";
 import ChordBuilder from "@/components/ChordBuilder";
 
-import { sortPdfs } from "@/lib/formatting";
 import PdfViewer from "@/components/PdfViewer";
 import Videos from "@/components/Videos";
 import Tools from "@/components/Tools";
@@ -23,19 +22,20 @@ import MetricsView from "@/components/MetricsView";
 import KnowledgeView from "@/components/KnowledgeView";
 import GearView from "@/components/GearView";
 import ProgressionExplorer from "@/components/ProgressionExplorer";
+import CAGEDSystem from "@/components/CAGEDSystem";
 import HomeView from "@/components/HomeView";
-import PageSyncEditor from "@/components/PageSyncEditor";
+import GuitarProViewer from "@/components/GuitarProViewer";
 import UploadModal from "@/components/UploadModal";
 import VideoPlayer from "@/components/VideoPlayer";
-import { AuthorSummary, BookSummary, Book, Track, TrackTab, Marker, JamTrack, JamTrackMarker, BookVideo, SearchResultTrack, SearchResultBook, SearchResultJamTrack } from "@/types";
+import { AuthorSummary, BookSummary, Book, Track, TrackTab, Marker, JamTrack, BookVideo, SearchResultTrack, SearchResultBook, SearchResultJamTrack } from "@/types";
 import TrackTabsModal from "@/components/TrackTabsModal";
 
-type Section = 'home' | 'lessons' | 'videos' | 'fretboard' | 'intervals' | 'chords' | 'tools' | 'circle' | 'tabs' | 'jamtracks' | 'metrics' | 'knowledge' | 'gear' | 'progressions';
+type Section = 'home' | 'lessons' | 'videos' | 'fretboard' | 'intervals' | 'chords' | 'tools' | 'circle' | 'tabs' | 'jamtracks' | 'metrics' | 'knowledge' | 'gear' | 'progressions' | 'caged';
 
 const getSectionFromPath = (section: string[] | undefined): Section => {
   if (!section || section.length === 0) return 'home';
   const first = section[0];
-  if (first === 'home' || first === 'lessons' || first === 'videos' || first === 'fretboard' || first === 'intervals' || first === 'chords' || first === 'tools' || first === 'circle' || first === 'tabs' || first === 'jamtracks' || first === 'metrics' || first === 'knowledge' || first === 'gear' || first === 'progressions') {
+  if (first === 'home' || first === 'lessons' || first === 'videos' || first === 'fretboard' || first === 'intervals' || first === 'chords' || first === 'tools' || first === 'circle' || first === 'tabs' || first === 'jamtracks' || first === 'metrics' || first === 'knowledge' || first === 'gear' || first === 'progressions' || first === 'caged') {
     return first;
   }
   return 'home';
@@ -77,7 +77,6 @@ export default function Home() {
   const [isUploading, setIsUploading] = useState(false);
   const [isUploadingJamTracks, setIsUploadingJamTracks] = useState(false);
   const [isImportingFromYouTube, setIsImportingFromYouTube] = useState(false);
-  const [isImportingPsarc, setIsImportingPsarc] = useState(false);
   const [extractingVideoId, setExtractingVideoId] = useState<string | null>(null);
   const [pageFlipAnticipation, setPageFlipAnticipation] = useState(() => {
     if (typeof window !== "undefined") {
@@ -151,11 +150,6 @@ export default function Home() {
   const [audioIsPlaying, setAudioIsPlaying] = useState(false);
   const seekFnRef = useRef<((time: number) => void) | null>(null);
   const lastTrackAutoFlipPage = useRef<number>(0);
-
-  // Page sync state for jam track PDFs
-  const [pageSyncEditMode, setPageSyncEditMode] = useState(false);
-  const [activePdfId, setActivePdfId] = useState<string | null>(null);
-  const [activePdfPage, setActivePdfPage] = useState(1);
 
   // Mobile responsive state
   const [mobileView, setMobileView] = useState<'library' | 'player' | 'pdf'>('library');
@@ -412,13 +406,15 @@ export default function Home() {
     }
   };
 
-  const handleUpload = async (files: FileList) => {
+  const handleUpload = async (files: FileList, authorName?: string, bookName?: string) => {
     setIsUploading(true);
     try {
       const formData = new FormData();
       for (let i = 0; i < files.length; i++) {
         formData.append("files", files[i]);
       }
+      if (authorName) formData.append("authorName", authorName);
+      if (bookName) formData.append("bookName", bookName);
 
       const response = await fetch("/api/library/upload", {
         method: "POST",
@@ -506,31 +502,6 @@ export default function Home() {
     }
   };
 
-  const handlePsarcImport = async (file: File) => {
-    setIsImportingPsarc(true);
-    try {
-      const formData = new FormData();
-      formData.append("file", file);
-
-      const response = await fetch("/api/jamtracks/rocksmith", {
-        method: "POST",
-        body: formData,
-      });
-
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || "Failed to import .psarc file");
-      }
-
-      await fetchLibrary();
-    } catch (error) {
-      console.error("Error importing .psarc:", error);
-      throw error;
-    } finally {
-      setIsImportingPsarc(false);
-    }
-  };
-
   const handleTrackSelect = (track: Track) => {
     setCurrentTrack(track);
     setCurrentAuthorId(selectedAuthorId);
@@ -599,23 +570,8 @@ export default function Home() {
     setCurrentTrack(null);
     setCurrentAuthorId(null);
     setCurrentBookId(null);
-    setPageSyncEditMode(false);
-    setActivePdfId(null);
-    setActivePdfPage(1);
 
-    // Update URL with jam track selection
     updateJamTrackUrl(jamTrack.id);
-
-    // Fetch full jam track data (markers, sync points) - not loaded by library endpoint
-    try {
-      const res = await fetch(`/api/jamtracks/${jamTrack.id}`);
-      if (res.ok) {
-        const fullJamTrack = await res.json();
-        setJamTracks(prev => prev.map(jt => jt.id === jamTrack.id ? fullJamTrack : jt));
-      }
-    } catch (err) {
-      console.error("Failed to fetch jam track details:", err);
-    }
   };
 
   // Search result handlers
@@ -936,6 +892,25 @@ export default function Home() {
     }
   };
 
+  const handleCoverUploadFromUrl = async (bookId: string, url: string) => {
+    const response = await fetch(`/api/books/${bookId}/cover`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url }),
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data?.error || "Failed to upload cover from URL");
+    }
+    await fetchLibrary();
+    if (selectedBookId === bookId) {
+      const detailRes = await fetch(`/api/books/${bookId}/detail`);
+      if (detailRes.ok) {
+        setSelectedBookDetail(await detailRes.json());
+      }
+    }
+  };
+
   const handleCoverDelete = async (bookId: string) => {
     const response = await fetch(`/api/books/${bookId}/cover`, {
       method: "DELETE",
@@ -1129,6 +1104,24 @@ export default function Home() {
       }
     } catch (error) {
       console.error("Error deleting PDF:", error);
+    }
+  };
+
+  const handleAudioUploadForBook = async (bookId: string, files: FileList) => {
+    const formData = new FormData();
+    for (let i = 0; i < files.length; i++) {
+      formData.append("files", files[i]);
+    }
+    try {
+      const response = await fetch(`/api/books/${bookId}/tracks`, {
+        method: "POST",
+        body: formData,
+      });
+      if (response.ok) {
+        await fetchLibrary();
+      }
+    } catch (error) {
+      console.error("Error uploading audio for book:", error);
     }
   };
 
@@ -1406,322 +1399,78 @@ export default function Home() {
     }
   };
 
-  const handleJamTrackPdfUpload = async (jamTrackId: string, file: File, name: string) => {
+  const handleJamTrackGpUpload = async (jamTrackId: string, file: File) => {
     const formData = new FormData();
-    formData.append("pdf", file);
-    formData.append("name", name);
+    formData.append("file", file);
 
     try {
-      const response = await fetch(`/api/jamtracks/${jamTrackId}/pdf`, {
+      const response = await fetch(`/api/jamtracks/${jamTrackId}/gp`, {
         method: "POST",
         body: formData,
       });
 
       if (response.ok) {
-        const updatedJamTrack = await response.json();
-        setJamTracks((prev) =>
-          prev.map((jt) => (jt.id === jamTrackId ? updatedJamTrack : jt))
-        );
+        const updated = await response.json();
+        setJamTracks((prev) => prev.map((jt) => (jt.id === jamTrackId ? updated : jt)));
+      } else {
+        const data = await response.json().catch(() => ({}));
+        console.error("GP upload failed:", data);
       }
     } catch (error) {
-      console.error("Error uploading jam track PDF:", error);
+      console.error("Error uploading GP file:", error);
     }
   };
 
-  const handleJamTrackPdfDelete = async (jamTrackId: string, pdfId: string) => {
+  const handleJamTrackGpDelete = async (jamTrackId: string) => {
     try {
-      const response = await fetch(`/api/jamtracks/${jamTrackId}/pdf?pdfId=${pdfId}`, {
-        method: "DELETE",
-      });
-
-      if (response.ok) {
-        setJamTracks((prev) =>
-          prev.map((jt) =>
-            jt.id === jamTrackId
-              ? { ...jt, pdfs: jt.pdfs.filter((p) => p.id !== pdfId) }
-              : jt
-          )
-        );
-        if (activePdfId === pdfId) {
-          setActivePdfId(null);
-          setActivePdfPage(1);
-        }
-      }
-    } catch (error) {
-      console.error("Error deleting jam track PDF:", error);
-    }
-  };
-
-  // Page Sync Point handlers for jam track PDFs
-  const handleActivePdfChange = useCallback((pdfId: string, page: number) => {
-    setActivePdfId(pdfId);
-    setActivePdfPage(page);
-  }, []);
-
-  const handleAddPageSyncPoint = async () => {
-    if (!currentJamTrack || !activePdfId) return;
-
-    try {
-      const response = await fetch(
-        `/api/jamtracks/${currentJamTrack.id}/pdf/${activePdfId}/syncpoints`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            timeInSeconds: currentAudioTime,
-            pageNumber: activePdfPage,
-          }),
-        }
-      );
-
-      if (response.ok) {
-        const newSyncPoint = await response.json();
-        setJamTracks((prev) =>
-          prev.map((jt) =>
-            jt.id === currentJamTrack.id
-              ? {
-                  ...jt,
-                  pdfs: jt.pdfs.map((pdf) =>
-                    pdf.id === activePdfId
-                      ? { ...pdf, pageSyncPoints: [...pdf.pageSyncPoints, newSyncPoint] }
-                      : pdf
-                  ),
-                }
-              : jt
-          )
-        );
-      }
-    } catch (error) {
-      console.error("Error adding page sync point:", error);
-    }
-  };
-
-  const handleDeletePageSyncPoint = async (syncPointId: string) => {
-    if (!currentJamTrack || !activePdfId) return;
-
-    try {
-      const response = await fetch(
-        `/api/jamtracks/${currentJamTrack.id}/pdf/${activePdfId}/syncpoints?syncPointId=${syncPointId}`,
-        { method: "DELETE" }
-      );
-
-      if (response.ok) {
-        setJamTracks((prev) =>
-          prev.map((jt) =>
-            jt.id === currentJamTrack.id
-              ? {
-                  ...jt,
-                  pdfs: jt.pdfs.map((pdf) =>
-                    pdf.id === activePdfId
-                      ? { ...pdf, pageSyncPoints: pdf.pageSyncPoints.filter((sp) => sp.id !== syncPointId) }
-                      : pdf
-                  ),
-                }
-              : jt
-          )
-        );
-      }
-    } catch (error) {
-      console.error("Error deleting page sync point:", error);
-    }
-  };
-
-  const handleClearPageSyncPoints = async () => {
-    if (!currentJamTrack || !activePdfId) return;
-
-    try {
-      const response = await fetch(
-        `/api/jamtracks/${currentJamTrack.id}/pdf/${activePdfId}/syncpoints`,
-        { method: "DELETE" }
-      );
-
-      if (response.ok) {
-        setJamTracks((prev) =>
-          prev.map((jt) =>
-            jt.id === currentJamTrack.id
-              ? {
-                  ...jt,
-                  pdfs: jt.pdfs.map((pdf) =>
-                    pdf.id === activePdfId
-                      ? { ...pdf, pageSyncPoints: [] }
-                      : pdf
-                  ),
-                }
-              : jt
-          )
-        );
-      }
-    } catch (error) {
-      console.error("Error clearing page sync points:", error);
-    }
-  };
-
-  // Jam Track Marker handlers
-  const handleJamTrackMarkerAdd = async (
-    jamTrackId: string,
-    name: string,
-    timestamp: number
-  ) => {
-    try {
-      const response = await fetch(`/api/jamtracks/${jamTrackId}/markers`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, timestamp }),
-      });
-      if (response.ok) {
-        const newMarker: JamTrackMarker = await response.json();
-        setJamTracks((prev) =>
-          prev.map((jt) =>
-            jt.id === jamTrackId
-              ? { ...jt, markers: [...jt.markers, newMarker] }
-              : jt
-          )
-        );
-      }
-    } catch (error) {
-      console.error("Error adding jam track marker:", error);
-    }
-  };
-
-  const handleJamTrackMarkerUpdate = async (jamTrackId: string, markerId: string, timestamp: number) => {
-    try {
-      const response = await fetch(`/api/jamtracks/${jamTrackId}/markers`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ markerId, timestamp }),
-      });
-      if (response.ok) {
-        setJamTracks((prev) =>
-          prev.map((jt) =>
-            jt.id === jamTrackId
-              ? { ...jt, markers: jt.markers.map(m => m.id === markerId ? { ...m, timestamp } : m) }
-              : jt
-          )
-        );
-      }
-    } catch (error) {
-      console.error("Error updating jam track marker:", error);
-    }
-  };
-
-  const handleJamTrackMarkerRename = async (jamTrackId: string, markerId: string, name: string) => {
-    try {
-      const response = await fetch(`/api/jamtracks/${jamTrackId}/markers`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ markerId, name }),
-      });
-      if (response.ok) {
-        setJamTracks((prev) =>
-          prev.map((jt) =>
-            jt.id === jamTrackId
-              ? { ...jt, markers: jt.markers.map(m => m.id === markerId ? { ...m, name } : m) }
-              : jt
-          )
-        );
-      }
-    } catch (error) {
-      console.error("Error renaming jam track marker:", error);
-    }
-  };
-
-  const handleJamTrackMarkerDelete = async (jamTrackId: string, markerId: string) => {
-    try {
-      const response = await fetch(`/api/jamtracks/${jamTrackId}/markers?markerId=${markerId}`, {
+      const response = await fetch(`/api/jamtracks/${jamTrackId}/gp`, {
         method: "DELETE",
       });
       if (response.ok) {
-        setJamTracks((prev) =>
-          prev.map((jt) =>
-            jt.id === jamTrackId
-              ? { ...jt, markers: jt.markers.filter(m => m.id !== markerId) }
-              : jt
-          )
-        );
+        const updated = await response.json();
+        setJamTracks((prev) => prev.map((jt) => (jt.id === jamTrackId ? updated : jt)));
       }
     } catch (error) {
-      console.error("Error deleting jam track marker:", error);
+      console.error("Error removing GP file:", error);
     }
   };
 
-  const handleJamTrackMarkersClear = async (jamTrackId: string) => {
-    try {
-      const response = await fetch(`/api/jamtracks/${jamTrackId}/markers`, {
-        method: "DELETE",
-      });
-      if (response.ok) {
-        setJamTracks((prev) =>
-          prev.map((jt) =>
-            jt.id === jamTrackId ? { ...jt, markers: [] } : jt
-          )
-        );
-      }
-    } catch (error) {
-      console.error("Error clearing jam track markers:", error);
-    }
-  };
-
-  // Refs for handler functions so useCallback wrappers stay stable
+  // Refs for handler functions so useCallback wrappers stay stable.
+  // Jam tracks no longer support markers — these handlers only run for regular tracks.
   const handleMarkerAddRef = useRef(handleMarkerAdd);
   handleMarkerAddRef.current = handleMarkerAdd;
-  const handleJamTrackMarkerAddRef = useRef(handleJamTrackMarkerAdd);
-  handleJamTrackMarkerAddRef.current = handleJamTrackMarkerAdd;
   const handleMarkerUpdateRef = useRef(handleMarkerUpdate);
   handleMarkerUpdateRef.current = handleMarkerUpdate;
-  const handleJamTrackMarkerUpdateRef = useRef(handleJamTrackMarkerUpdate);
-  handleJamTrackMarkerUpdateRef.current = handleJamTrackMarkerUpdate;
   const handleMarkerRenameRef = useRef(handleMarkerRename);
   handleMarkerRenameRef.current = handleMarkerRename;
-  const handleJamTrackMarkerRenameRef = useRef(handleJamTrackMarkerRename);
-  handleJamTrackMarkerRenameRef.current = handleJamTrackMarkerRename;
   const handleMarkerDeleteRef = useRef(handleMarkerDelete);
   handleMarkerDeleteRef.current = handleMarkerDelete;
-  const handleJamTrackMarkerDeleteRef = useRef(handleJamTrackMarkerDelete);
-  handleJamTrackMarkerDeleteRef.current = handleJamTrackMarkerDelete;
   const handleMarkersClearRef = useRef(handleMarkersClear);
   handleMarkersClearRef.current = handleMarkersClear;
-  const handleJamTrackMarkersClearRef = useRef(handleJamTrackMarkersClear);
-  handleJamTrackMarkersClearRef.current = handleJamTrackMarkersClear;
 
-  // Stable callbacks for BottomPlayer (never change reference, read from refs)
   const stableOnMarkerAdd = useCallback((trackId: string, name: string, timestamp: number, pdfPage?: number | null) => {
-    if (currentJamTrackRef.current) {
-      handleJamTrackMarkerAddRef.current(trackId, name, timestamp);
-    } else {
-      handleMarkerAddRef.current(trackId, name, timestamp, pdfPage);
-    }
+    if (currentJamTrackRef.current) return;
+    handleMarkerAddRef.current(trackId, name, timestamp, pdfPage);
   }, []);
 
   const stableOnMarkerUpdate = useCallback((markerId: string, timestamp: number) => {
-    if (currentJamTrackRef.current) {
-      handleJamTrackMarkerUpdateRef.current(currentJamTrackRef.current.id, markerId, timestamp);
-    } else {
-      handleMarkerUpdateRef.current(markerId, timestamp);
-    }
+    if (currentJamTrackRef.current) return;
+    handleMarkerUpdateRef.current(markerId, timestamp);
   }, []);
 
   const stableOnMarkerRename = useCallback((markerId: string, name: string, pdfPage?: number | null) => {
-    if (currentJamTrackRef.current) {
-      handleJamTrackMarkerRenameRef.current(currentJamTrackRef.current.id, markerId, name);
-    } else {
-      handleMarkerRenameRef.current(markerId, name, pdfPage);
-    }
+    if (currentJamTrackRef.current) return;
+    handleMarkerRenameRef.current(markerId, name, pdfPage);
   }, []);
 
   const stableOnMarkerDelete = useCallback((markerId: string) => {
-    if (currentJamTrackRef.current) {
-      handleJamTrackMarkerDeleteRef.current(currentJamTrackRef.current.id, markerId);
-    } else {
-      handleMarkerDeleteRef.current(markerId);
-    }
+    if (currentJamTrackRef.current) return;
+    handleMarkerDeleteRef.current(markerId);
   }, []);
 
   const stableOnMarkersClear = useCallback((trackId: string) => {
-    if (currentJamTrackRef.current) {
-      handleJamTrackMarkersClearRef.current(trackId);
-    } else {
-      handleMarkersClearRef.current(trackId);
-    }
+    if (currentJamTrackRef.current) return;
+    handleMarkersClearRef.current(trackId);
   }, []);
 
   const stableOnTimeUpdate = useCallback((time: number, playing: boolean) => {
@@ -1838,6 +1587,7 @@ export default function Home() {
                     }}
                     onBookUpdate={handleBookUpdate}
                     onCoverUpload={handleCoverUpload}
+                    onCoverUploadFromUrl={handleCoverUploadFromUrl}
                     onCoverDelete={handleCoverDelete}
                     onBookDelete={handleBookDelete}
                     onTrackUpdate={handleMetadataUpdate}
@@ -1858,6 +1608,7 @@ export default function Home() {
                     onVideoInProgress={handleVideoInProgress}
                     onTrackNotesUpdate={handleTrackNotesUpdate}
                     onVideoNotesUpdate={handleVideoNotesUpdate}
+                    onAudioUpload={handleAudioUploadForBook}
                     onLibraryRefresh={fetchLibrary}
                     onExtractAudio={handleExtractAudio}
                     extractingVideoId={extractingVideoId}
@@ -1906,36 +1657,6 @@ export default function Home() {
                 <div className="flex-1 overflow-hidden">
                   <VideoPlayer video={selectedVideo} />
                 </div>
-              ) : currentJamTrack && currentJamTrack.pdfs.length > 0 ? (
-                <>
-                  {(() => {
-                    const activePdf = currentJamTrack.pdfs.find(p => p.id === activePdfId) || currentJamTrack.pdfs[0];
-                    return activePdf ? (
-                      <PageSyncEditor
-                        pdfId={activePdf.id}
-                        pdfName={activePdf.name}
-                        syncPoints={activePdf.pageSyncPoints ?? []}
-                        syncEditMode={pageSyncEditMode}
-                        onToggleSyncEditMode={() => setPageSyncEditMode(!pageSyncEditMode)}
-                        currentAudioTime={currentAudioTime}
-                        currentVisiblePage={activePdfPage}
-                        onAddSyncPoint={handleAddPageSyncPoint}
-                        onDeleteSyncPoint={handleDeletePageSyncPoint}
-                        onClearSyncPoints={handleClearPageSyncPoints}
-                      />
-                    ) : null;
-                  })()}
-                  <div className="flex-1 overflow-hidden">
-                    <PdfViewer
-                      pdfs={sortPdfs(currentJamTrack.pdfs)}
-                      currentAudioTime={currentAudioTime}
-                      audioIsPlaying={audioIsPlaying}
-                      onActivePdfChange={handleActivePdfChange}
-                      pageFlipAnticipation={pageFlipAnticipation}
-                      onPageFlipAnticipationChange={handlePageFlipAnticipationChange}
-                    />
-                  </div>
-                </>
               ) : pdfPath ? (
                 <div className="flex flex-1 min-h-0">
                   <div className="flex-1 min-w-0">
@@ -1967,30 +1688,13 @@ export default function Home() {
                         }}
                         onEditNameChange={markerBarState.setEditingMarkerName}
                         onSaveEdit={(markerId, name, markerPdfPage) => {
-                          if (currentJamTrack) {
-                            handleJamTrackMarkerRename(currentJamTrack.id, markerId, name);
-                          } else {
-                            handleMarkerRename(markerId, name, markerPdfPage);
-                          }
+                          handleMarkerRename(markerId, name, markerPdfPage);
                           markerBarState.setEditingMarkerId(null);
                         }}
                         onCancelEdit={() => markerBarState.setEditingMarkerId(null)}
-                        onDelete={(markerId) => {
-                          if (currentJamTrack) {
-                            handleJamTrackMarkerDelete(currentJamTrack.id, markerId);
-                          } else {
-                            handleMarkerDelete(markerId);
-                          }
-                        }}
+                        onDelete={(markerId) => handleMarkerDelete(markerId)}
                         onClearAll={() => {
-                          const activeTrack = currentTrack || currentJamTrack;
-                          if (activeTrack) {
-                            if (currentJamTrack) {
-                              handleJamTrackMarkersClear(activeTrack.id);
-                            } else {
-                              handleMarkersClear(activeTrack.id);
-                            }
-                          }
+                          if (currentTrack) handleMarkersClear(currentTrack.id);
                         }}
                         formatTime={markerBarState.formatTime}
                         isCountingIn={markerBarState.isCountingIn}
@@ -2000,7 +1704,7 @@ export default function Home() {
                         trackTimeSignature={markerBarState.trackTimeSignature}
                         onTempoChange={handleTempoChange}
                         currentPdfPage={pdfPage}
-                        hasPdf={!!pdfPath && !currentJamTrack}
+                        hasPdf={!!pdfPath}
                         pageFlipAnticipation={pageFlipAnticipation}
                         onPageFlipAnticipationChange={handlePageFlipAnticipationChange}
                       />
@@ -2038,30 +1742,13 @@ export default function Home() {
               }}
               onEditNameChange={markerBarState.setEditingMarkerName}
               onSaveEdit={(markerId, name, markerPdfPage) => {
-                if (currentJamTrack) {
-                  handleJamTrackMarkerRename(currentJamTrack.id, markerId, name);
-                } else {
-                  handleMarkerRename(markerId, name, markerPdfPage);
-                }
+                handleMarkerRename(markerId, name, markerPdfPage);
                 markerBarState.setEditingMarkerId(null);
               }}
               onCancelEdit={() => markerBarState.setEditingMarkerId(null)}
-              onDelete={(markerId) => {
-                if (currentJamTrack) {
-                  handleJamTrackMarkerDelete(currentJamTrack.id, markerId);
-                } else {
-                  handleMarkerDelete(markerId);
-                }
-              }}
+              onDelete={(markerId) => handleMarkerDelete(markerId)}
               onClearAll={() => {
-                const activeTrack = currentTrack || currentJamTrack;
-                if (activeTrack) {
-                  if (currentJamTrack) {
-                    handleJamTrackMarkersClear(activeTrack.id);
-                  } else {
-                    handleMarkersClear(activeTrack.id);
-                  }
-                }
+                if (currentTrack) handleMarkersClear(currentTrack.id);
               }}
               formatTime={markerBarState.formatTime}
               isCountingIn={markerBarState.isCountingIn}
@@ -2071,7 +1758,7 @@ export default function Home() {
               trackTimeSignature={markerBarState.trackTimeSignature}
               onTempoChange={handleTempoChange}
               currentPdfPage={pdfPage}
-              hasPdf={!!pdfPath && !currentJamTrack}
+              hasPdf={!!pdfPath}
               pageFlipAnticipation={pageFlipAnticipation}
               onPageFlipAnticipationChange={handlePageFlipAnticipationChange}
             />
@@ -2107,9 +1794,9 @@ export default function Home() {
               <button
                 className={`flex-1 flex flex-col items-center justify-center py-3 gap-1 ${
                   mobileView === 'pdf' ? 'text-blue-400' : 'text-gray-400'
-                } ${!pdfPath && (!currentJamTrack || currentJamTrack.pdfs.length === 0) ? 'opacity-50' : ''}`}
-                onClick={() => (pdfPath || (currentJamTrack && currentJamTrack.pdfs.length > 0)) ? setMobileView('pdf') : null}
-                disabled={!pdfPath && (!currentJamTrack || currentJamTrack.pdfs.length === 0)}
+                } ${!pdfPath ? 'opacity-50' : ''}`}
+                onClick={() => pdfPath ? setMobileView('pdf') : null}
+                disabled={!pdfPath}
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -2136,14 +1823,12 @@ export default function Home() {
                     onJamTrackInProgress={handleJamTrackInProgress}
                     onJamTrackFavorite={handleJamTrackFavorite}
                     onJamTrackDelete={handleJamTrackDelete}
-                    onPdfUpload={handleJamTrackPdfUpload}
-                    onPdfDelete={handleJamTrackPdfDelete}
+                    onGpUpload={handleJamTrackGpUpload}
+                    onGpDelete={handleJamTrackGpDelete}
                     onUpload={handleJamTrackUpload}
                     isUploading={isUploadingJamTracks}
                     onYouTubeImport={handleYouTubeImport}
                     isImportingFromYouTube={isImportingFromYouTube}
-                    onPsarcImport={handlePsarcImport}
-                    isImportingPsarc={isImportingPsarc}
                   />
                 </div>
               </div>
@@ -2172,8 +1857,6 @@ export default function Home() {
                   isUploading={isUploadingJamTracks}
                   onYouTubeImport={handleYouTubeImport}
                   isImportingFromYouTube={isImportingFromYouTube}
-                  onPsarcImport={handlePsarcImport}
-                  isImportingPsarc={isImportingPsarc}
                 />
               </div>
 
@@ -2187,99 +1870,32 @@ export default function Home() {
                   onJamTrackComplete={handleJamTrackComplete}
                   onJamTrackInProgress={handleJamTrackInProgress}
                   onJamTrackDelete={handleJamTrackDelete}
-                  onPdfUpload={handleJamTrackPdfUpload}
-                  onPdfDelete={handleJamTrackPdfDelete}
+                  onGpUpload={handleJamTrackGpUpload}
+                  onGpDelete={handleJamTrackGpDelete}
                   onUpload={handleJamTrackUpload}
                   isUploading={isUploadingJamTracks}
                   onYouTubeImport={handleYouTubeImport}
                   isImportingFromYouTube={isImportingFromYouTube}
-                  onPsarcImport={handlePsarcImport}
-                  isImportingPsarc={isImportingPsarc}
                 />
               </div>
 
-              {/* Middle: PDF Viewer + Markers Sidebar - Desktop */}
+              {/* Middle: Guitar Pro tab viewer */}
               <div className="hidden xl:flex flex-1 min-h-0 overflow-hidden" style={{ maxHeight: 'calc(100vh - 280px)' }}>
-                {/* PDF Viewer - Left side */}
                 <div className="flex-1 flex flex-col overflow-hidden">
-                  {currentJamTrack.pdfs.length > 0 ? (
-                    <>
-                      {(() => {
-                        const activePdf = currentJamTrack.pdfs.find(p => p.id === activePdfId) || currentJamTrack.pdfs[0];
-                        return activePdf ? (
-                          <PageSyncEditor
-                            pdfId={activePdf.id}
-                            pdfName={activePdf.name}
-                            syncPoints={activePdf.pageSyncPoints ?? []}
-                            syncEditMode={pageSyncEditMode}
-                            onToggleSyncEditMode={() => setPageSyncEditMode(!pageSyncEditMode)}
-                            currentAudioTime={currentAudioTime}
-                            currentVisiblePage={activePdfPage}
-                            onAddSyncPoint={handleAddPageSyncPoint}
-                            onDeleteSyncPoint={handleDeletePageSyncPoint}
-                            onClearSyncPoints={handleClearPageSyncPoints}
-                          />
-                        ) : null;
-                      })()}
-                      <div className="flex-1 overflow-hidden">
-                        <PdfViewer
-                          pdfs={sortPdfs(currentJamTrack.pdfs)}
-                          currentAudioTime={currentAudioTime}
-                          audioIsPlaying={audioIsPlaying}
-                          onActivePdfChange={handleActivePdfChange}
-                          pageFlipAnticipation={pageFlipAnticipation}
-                          onPageFlipAnticipationChange={handlePageFlipAnticipationChange}
-                        />
-                      </div>
-                    </>
+                  {currentJamTrack.gpFilePath ? (
+                    <GuitarProViewer filePath={currentJamTrack.gpFilePath} />
                   ) : (
                     <div className="h-full flex items-center justify-center bg-gray-900 text-gray-500">
                       <div className="text-center">
                         <svg className="w-16 h-16 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                         </svg>
-                        <p className="text-lg">No tabs or sheets available for this track</p>
+                        <p className="text-lg">No Guitar Pro tab attached</p>
+                        <p className="text-sm mt-2">Use &quot;Add Guitar Pro tab&quot; on the track row to attach a .gp / .gpx / .gp5 file.</p>
                       </div>
                     </div>
                   )}
                 </div>
-
-                {/* Markers Sidebar - Right side */}
-                {markerBarState && (
-                  <div className="w-80 border-l border-gray-700 bg-gray-900 flex flex-col overflow-hidden">
-                    <MarkersBar
-                      markers={currentJamTrack.markers}
-                      visible={true}
-                      leadIn={markerBarState.leadIn}
-                      editingMarkerId={markerBarState.editingMarkerId}
-                      editingMarkerName={markerBarState.editingMarkerName}
-                      currentTime={markerBarState.currentTime}
-                      onLeadInChange={markerBarState.setLeadIn}
-                      onAddMarker={markerBarState.addMarker}
-                      onJumpToMarker={markerBarState.jumpToMarker}
-                      onStartEdit={(id, name) => {
-                        markerBarState.setEditingMarkerId(id);
-                        markerBarState.setEditingMarkerName(name);
-                      }}
-                      onEditNameChange={markerBarState.setEditingMarkerName}
-                      onSaveEdit={(markerId, name) => {
-                        handleJamTrackMarkerRename(currentJamTrack.id, markerId, name);
-                        markerBarState.setEditingMarkerId(null);
-                      }}
-                      onCancelEdit={() => markerBarState.setEditingMarkerId(null)}
-                      onDelete={(markerId) => handleJamTrackMarkerDelete(currentJamTrack.id, markerId)}
-                      onClearAll={() => handleJamTrackMarkersClear(currentJamTrack.id)}
-                      formatTime={markerBarState.formatTime}
-                      isCountingIn={markerBarState.isCountingIn}
-                      currentCountInBeat={markerBarState.currentCountInBeat}
-                      totalCountInBeats={markerBarState.totalCountInBeats}
-                      trackTempo={markerBarState.trackTempo}
-                      trackTimeSignature={markerBarState.trackTimeSignature}
-                      onTempoChange={handleTempoChange}
-                      hasPdf={false}
-                    />
-                  </div>
-                )}
               </div>
 
               {/* Bottom: Player - compact on desktop, full on mobile */}
@@ -2324,9 +1940,9 @@ export default function Home() {
                 <span className="text-xs">Player</span>
               </button>
               <button
-                className={`flex-1 flex flex-col items-center py-3 gap-1 ${mobileView === 'pdf' ? 'text-blue-400' : 'text-gray-400'} ${!currentJamTrack || !currentJamTrack.pdfs.length ? 'opacity-50' : ''}`}
-                onClick={() => currentJamTrack && currentJamTrack.pdfs.length > 0 && setMobileView('pdf')}
-                disabled={!currentJamTrack || !currentJamTrack.pdfs.length}
+                className={`flex-1 flex flex-col items-center py-3 gap-1 ${mobileView === 'pdf' ? 'text-blue-400' : 'text-gray-400'} ${!currentJamTrack?.gpFilePath ? 'opacity-50' : ''}`}
+                onClick={() => currentJamTrack?.gpFilePath && setMobileView('pdf')}
+                disabled={!currentJamTrack?.gpFilePath}
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -2356,6 +1972,8 @@ export default function Home() {
         <GearView />
       ) : activeSection === 'progressions' ? (
         <ProgressionExplorer />
+      ) : activeSection === 'caged' ? (
+        <CAGEDSystem />
       ) : (
         <Fretboard />
       )}

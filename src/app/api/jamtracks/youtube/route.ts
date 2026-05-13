@@ -158,12 +158,11 @@ export async function POST(request: NextRequest) {
       where: { filePath: relativePath },
       update: { title, duration },
       create: { title, duration, filePath: relativePath },
-      include: { markers: true, pdfs: { include: { pageSyncPoints: { orderBy: { timeInSeconds: "asc" } } } } },
     });
 
     return NextResponse.json({
       message: `Successfully imported "${title}" from YouTube`,
-      jamTrack,
+      jamTrack: { ...jamTrack, markers: [] },
     });
   } catch (error) {
     console.error("Error importing from YouTube:", error);

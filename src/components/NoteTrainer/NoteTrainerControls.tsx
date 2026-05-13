@@ -136,6 +136,20 @@ export default function NoteTrainerControls({
           </button>
         </div>
 
+        {/* Volume */}
+        <div className="flex items-center gap-2">
+          <label className="text-amber-200/70 text-sm">Vol</label>
+          <input
+            type="range"
+            min={0}
+            max={100}
+            value={config.volume}
+            onChange={(e) => onUpdateConfig({ volume: parseInt(e.target.value) })}
+            className="w-20 h-1 bg-amber-900/50 rounded-lg appearance-none cursor-pointer accent-amber-500"
+          />
+          <span className="text-amber-200/50 text-xs w-7 text-right">{config.volume}</span>
+        </div>
+
         {/* Note pool toggle */}
         <div className="flex items-center gap-2">
           <label className="text-amber-200/70 text-sm">Notes</label>
@@ -153,6 +167,22 @@ export default function NoteTrainerControls({
             } disabled:opacity-50`}
           >
             {config.notePool === 'natural' ? 'Natural' : 'All 12'}
+          </button>
+        </div>
+
+        {/* Voice toggle */}
+        <div className="flex items-center gap-2">
+          <label className="text-amber-200/70 text-sm">Voice</label>
+          <button
+            onClick={() => onUpdateConfig({ voiceEnabled: !config.voiceEnabled })}
+            className={`px-3 py-1 rounded text-sm transition-colors ${
+              config.voiceEnabled
+                ? 'bg-amber-600 text-white'
+                : 'bg-amber-900/50 text-amber-200 hover:bg-amber-800/50'
+            }`}
+            title="Speak the note name out loud at the start of each cycle"
+          >
+            {config.voiceEnabled ? 'On' : 'Off'}
           </button>
         </div>
       </div>

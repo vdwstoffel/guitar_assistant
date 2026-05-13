@@ -6,7 +6,7 @@ import GlobalSearch from './GlobalSearch';
 import PracticeNextDropdown from './PracticeNextDropdown';
 import { SearchResultTrack, SearchResultBook, SearchResultJamTrack } from '@/types';
 
-type Section = 'home' | 'lessons' | 'videos' | 'fretboard' | 'intervals' | 'chords' | 'tools' | 'circle' | 'tabs' | 'jamtracks' | 'metrics' | 'knowledge' | 'gear' | 'progressions';
+type Section = 'home' | 'lessons' | 'videos' | 'fretboard' | 'intervals' | 'chords' | 'tools' | 'circle' | 'tabs' | 'jamtracks' | 'metrics' | 'knowledge' | 'gear' | 'progressions' | 'caged';
 type TimeSignature = '4/4' | '3/4' | '2/4' | '6/8';
 
 interface TopNavProps {
@@ -26,16 +26,17 @@ const TopNav = memo(function TopNav({ activeSection, onSectionChange, onSearchTr
   const [bpm, setBpm] = useState(120);
   const [timeSignature, setTimeSignature] = useState<TimeSignature>('4/4');
   const [currentBeat, setCurrentBeat] = useState(0);
-  const [volume, setVolume] = useState(100);
+  const [volume, setVolume] = useState(25);
 
   const audioContextRef = useRef<AudioContext | null>(null);
   const nextNoteTimeRef = useRef(0);
   const timerIdRef = useRef<number | null>(null);
   const currentBeatRef = useRef(0);
-  const volumeRef = useRef(100);
+  const volumeRef = useRef(25);
   const bpmRef = useRef(bpm);
   const timeSignatureRef = useRef(timeSignature);
   const theoryDropdownRef = useRef<HTMLDivElement>(null);
+  const tapTimesRef = useRef<number[]>([]);
 
   const theoryItems: { id: Section; label: string; href: string }[] = [
     { id: 'fretboard', label: 'Fretboard', href: '/fretboard' },
@@ -43,11 +44,12 @@ const TopNav = memo(function TopNav({ activeSection, onSectionChange, onSearchTr
     { id: 'chords', label: 'Chords', href: '/chords' },
     { id: 'circle', label: 'Circle of 5ths', href: '/circle' },
     { id: 'progressions', label: 'Progressions', href: '/progressions' },
+    { id: 'caged', label: 'CAGED System', href: '/caged' },
     { id: 'knowledge', label: 'Theory Notes', href: '/knowledge' },
     { id: 'gear', label: 'Gear', href: '/gear' },
   ];
 
-  const isTheoryActive = activeSection === 'fretboard' || activeSection === 'intervals' || activeSection === 'chords' || activeSection === 'circle' || activeSection === 'progressions' || activeSection === 'knowledge' || activeSection === 'gear';
+  const isTheoryActive = activeSection === 'fretboard' || activeSection === 'intervals' || activeSection === 'chords' || activeSection === 'circle' || activeSection === 'progressions' || activeSection === 'caged' || activeSection === 'knowledge' || activeSection === 'gear';
 
   // Close theory dropdown on click outside
   useEffect(() => {
@@ -155,6 +157,23 @@ const TopNav = memo(function TopNav({ activeSection, onSectionChange, onSearchTr
     const clampedValue = Math.min(300, Math.max(20, value));
     setBpm(clampedValue);
   };
+
+  const handleTap = useCallback(() => {
+    const now = performance.now();
+    const taps = tapTimesRef.current;
+    if (taps.length > 0 && now - taps[taps.length - 1] > 2000) {
+      tapTimesRef.current = [now];
+      return;
+    }
+    taps.push(now);
+    if (taps.length > 8) taps.shift();
+    if (taps.length < 2) return;
+    let sum = 0;
+    for (let i = 1; i < taps.length; i++) sum += taps[i] - taps[i - 1];
+    const avg = sum / (taps.length - 1);
+    const newBpm = Math.round(60000 / avg);
+    setBpm(Math.min(300, Math.max(20, newBpm)));
+  }, []);
 
   const beatsPerMeasure = getBeatsPerMeasure(timeSignature);
 
@@ -421,6 +440,13 @@ const TopNav = memo(function TopNav({ activeSection, onSectionChange, onSearchTr
                 +
               </button>
               <span className="text-gray-400 text-sm">BPM</span>
+              <button
+                onClick={handleTap}
+                title="Tap to set tempo"
+                className="px-2 h-10 sm:h-7 flex items-center justify-center bg-gray-700 hover:bg-gray-600 active:bg-blue-600 rounded text-white text-xs font-semibold"
+              >
+                TAP
+              </button>
             </div>
 
             {/* BPM Slider - Hide on mobile */}

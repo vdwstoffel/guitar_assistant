@@ -20,6 +20,9 @@ export interface AlphaTabRendererRef {
   play: () => void;
   pause: () => void;
   stop: () => void;
+  setPlaybackSpeed: (speed: number) => void;
+  setVolume: (volume: number) => void;
+  setLooping: (loop: boolean) => void;
 }
 
 const AlphaTabRenderer = forwardRef<AlphaTabRendererRef, AlphaTabRendererProps>(
@@ -52,14 +55,27 @@ const AlphaTabRenderer = forwardRef<AlphaTabRendererRef, AlphaTabRendererProps>(
 
       const initAlphaTab = async () => {
         try {
-          const { AlphaTabApi, Settings, LayoutMode } = await import('@coderline/alphatab');
+          const alphaTab = await import('@coderline/alphatab');
+          const { AlphaTabApi, Settings, Environment } = alphaTab;
+
+          // Initialize web worker and audio worklet for synthesizer playback
+          if (!Environment.isRunningInWorker) {
+            Environment.initializeMain(
+              () => new Worker("/alphaTab.worker.mjs", { type: "module" }),
+              (ctx: AudioContext) => ctx.audioWorklet.addModule("/alphaTab.worklet.mjs")
+            );
+          }
 
           const settings = new Settings();
           settings.core.fontDirectory = '/font/';
-          settings.core.useWorkers = false;
-          settings.display.layoutMode = LayoutMode.Page;
+          settings.display.layoutMode = alphaTab.LayoutMode.Page;
           settings.display.stretchForce = 0.95;
           settings.display.scale = 0.98;
+          settings.player.playerMode = alphaTab.PlayerMode.EnabledSynthesizer;
+          settings.player.soundFont = "/soundfont/sonivox.sf2";
+          settings.player.enableCursor = true;
+          settings.player.scrollMode = alphaTab.ScrollMode.Continuous;
+          settings.player.scrollElement = containerRef.current!;
 
           apiRef.current = new AlphaTabApi(containerRef.current!, settings);
 
@@ -136,17 +152,17 @@ const AlphaTabRenderer = forwardRef<AlphaTabRendererRef, AlphaTabRendererProps>(
     }, [trackKey, selectedTrackIndices]);
 
     useImperativeHandle(ref, () => ({
-      play: () => {
-        console.log('AlphaTab: play() called');
-        apiRef.current?.play();
+      play: () => apiRef.current?.play(),
+      pause: () => apiRef.current?.pause(),
+      stop: () => apiRef.current?.stop(),
+      setPlaybackSpeed: (speed: number) => {
+        if (apiRef.current) apiRef.current.playbackSpeed = speed;
       },
-      pause: () => {
-        console.log('AlphaTab: pause() called');
-        apiRef.current?.pause();
+      setVolume: (volume: number) => {
+        if (apiRef.current) apiRef.current.masterVolume = volume;
       },
-      stop: () => {
-        console.log('AlphaTab: stop() called');
-        apiRef.current?.stop();
+      setLooping: (loop: boolean) => {
+        if (apiRef.current) apiRef.current.isLooping = loop;
       },
     }));
 
@@ -165,6 +181,16 @@ const AlphaTabRenderer = forwardRef<AlphaTabRendererRef, AlphaTabRendererProps>(
             display: block;
             width: 100% !important;
             height: auto;
+          }
+          .at-cursor-bar {
+            background: rgba(255, 242, 0, 0.25);
+          }
+          .at-beat-cursor {
+            background: rgba(64, 64, 255, 0.75);
+            width: 3px;
+          }
+          .at-selection div {
+            background: rgba(64, 64, 255, 0.1);
           }
         `}</style>
         <div

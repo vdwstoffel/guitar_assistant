@@ -10,11 +10,12 @@ export interface BookEditModalProps {
   onClose: () => void;
   onSave: (bookId: string, bookName: string, authorName: string) => Promise<void>;
   onCoverUpload?: (bookId: string, file: File) => Promise<void>;
+  onCoverUploadFromUrl?: (bookId: string, url: string) => Promise<void>;
   onCoverDelete?: (bookId: string) => Promise<void>;
   onDelete?: (bookId: string) => Promise<void>;
 }
 
-export default function BookEditModal({ book, authorName, onClose, onSave, onCoverUpload, onCoverDelete, onDelete }: BookEditModalProps) {
+export default function BookEditModal({ book, authorName, onClose, onSave, onCoverUpload, onCoverUploadFromUrl, onCoverDelete, onDelete }: BookEditModalProps) {
   const [editBookName, setEditBookName] = useState(book.name);
   const [editAuthorName, setEditAuthorName] = useState(authorName);
   const [isSaving, setIsSaving] = useState(false);
@@ -22,6 +23,9 @@ export default function BookEditModal({ book, authorName, onClose, onSave, onCov
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isUploadingCover, setIsUploadingCover] = useState(false);
   const [coverPreview, setCoverPreview] = useState<string | null>(null);
+  const [showUrlInput, setShowUrlInput] = useState(false);
+  const [coverUrl, setCoverUrl] = useState("");
+  const [urlError, setUrlError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const currentCoverUrl = coverPreview || getBookCoverUrl(book);
@@ -69,6 +73,24 @@ export default function BookEditModal({ book, authorName, onClose, onSave, onCov
       console.error("Failed to delete book:", error);
     } finally {
       setIsDeleting(false);
+    }
+  };
+
+  const handleCoverUrlSubmit = async () => {
+    if (!onCoverUploadFromUrl || !coverUrl.trim()) return;
+    setUrlError(null);
+    setIsUploadingCover(true);
+    setCoverPreview(coverUrl.trim());
+    try {
+      await onCoverUploadFromUrl(book.id, coverUrl.trim());
+      setShowUrlInput(false);
+      setCoverUrl("");
+    } catch (error) {
+      console.error("Failed to upload cover from URL:", error);
+      setCoverPreview(null);
+      setUrlError(error instanceof Error ? error.message : "Failed to upload");
+    } finally {
+      setIsUploadingCover(false);
     }
   };
 
@@ -121,6 +143,16 @@ export default function BookEditModal({ book, authorName, onClose, onSave, onCov
             >
               Upload Cover
             </button>
+            {onCoverUploadFromUrl && (
+              <button
+                type="button"
+                onClick={() => { setShowUrlInput((v) => !v); setUrlError(null); }}
+                disabled={isUploadingCover}
+                className="px-3 py-1.5 text-sm bg-gray-700 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed rounded text-gray-300 hover:text-white transition-colors"
+              >
+                {showUrlInput ? "Cancel URL" : "From URL"}
+              </button>
+            )}
             {book.customCoverPath && onCoverDelete && (
               <button
                 type="button"
@@ -140,6 +172,33 @@ export default function BookEditModal({ book, authorName, onClose, onSave, onCov
             onChange={handleCoverSelect}
           />
         </div>
+
+        {showUrlInput && onCoverUploadFromUrl && (
+          <div className="mb-4">
+            <label className="block text-sm text-gray-400 mb-1">Image URL</label>
+            <div className="flex gap-2">
+              <input
+                type="url"
+                value={coverUrl}
+                onChange={(e) => setCoverUrl(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") handleCoverUrlSubmit(); }}
+                placeholder="https://example.com/cover.jpg"
+                className="flex-1 px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:border-green-500 text-sm"
+                disabled={isUploadingCover}
+                autoFocus
+              />
+              <button
+                type="button"
+                onClick={handleCoverUrlSubmit}
+                disabled={isUploadingCover || !coverUrl.trim()}
+                className="px-3 py-2 text-sm bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded font-medium text-white transition-colors"
+              >
+                {isUploadingCover ? "Fetching..." : "Fetch"}
+              </button>
+            </div>
+            {urlError && <p className="text-xs text-red-400 mt-1">{urlError}</p>}
+          </div>
+        )}
 
         <p className="text-sm text-gray-400 mb-4">
           This will update all {book.trackCount} track{book.trackCount !== 1 ? "s" : ""} in this book.

@@ -65,6 +65,7 @@ interface TrackListViewProps {
   onBookInProgress?: (bookId: string, inProgress: boolean) => Promise<void>;
   onShowPdf?: (pdfPath: string, page?: number) => void;
   onCoverUpload?: (bookId: string, file: File) => Promise<void>;
+  onCoverUploadFromUrl?: (bookId: string, url: string) => Promise<void>;
   onCoverDelete?: (bookId: string) => Promise<void>;
   onBookDelete?: (bookId: string) => Promise<void>;
   onPdfUpload?: (bookId: string, file: File) => Promise<void>;
@@ -79,6 +80,7 @@ interface TrackListViewProps {
   onVideoInProgress?: (bookId: string, videoId: string, inProgress: boolean) => Promise<void>;
   onTrackNotesUpdate?: (trackId: string, notes: string | null) => Promise<void>;
   onVideoNotesUpdate?: (bookId: string, videoId: string, notes: string | null) => Promise<void>;
+  onAudioUpload?: (bookId: string, files: FileList) => Promise<void>;
   onLibraryRefresh?: () => Promise<void>;
   onExtractAudio?: (video: BookVideo) => void;
   extractingVideoId?: string | null;
@@ -102,6 +104,7 @@ export default memo(function TrackListView({
   onBookInProgress,
   onShowPdf,
   onCoverUpload,
+  onCoverUploadFromUrl,
   onCoverDelete,
   onBookDelete,
   onPdfUpload,
@@ -116,6 +119,7 @@ export default memo(function TrackListView({
   onVideoInProgress,
   onTrackNotesUpdate,
   onVideoNotesUpdate,
+  onAudioUpload,
   onLibraryRefresh,
   onExtractAudio,
   extractingVideoId,
@@ -129,6 +133,15 @@ export default memo(function TrackListView({
 
   // Chapter management state
   const [expandedChapters, setExpandedChapters] = useState<Set<string>>(new Set());
+  const [uncategorizedExpanded, setUncategorizedExpanded] = useState(() => {
+    if (typeof window === "undefined") return false;
+    const hasInProgress = (book.tracks ?? []).some(t => t.inProgress);
+    // Always expand if there are in-progress tracks, regardless of saved state
+    if (hasInProgress) return true;
+    const saved = localStorage.getItem(`uncategorized-expanded-${book.id}`);
+    if (saved !== null) return saved === "true";
+    return false;
+  });
   const [showAddChapter, setShowAddChapter] = useState(false);
   const [editingChapter, setEditingChapter] = useState<Chapter | null>(null);
   const [newChapterName, setNewChapterName] = useState("");
@@ -138,14 +151,20 @@ export default memo(function TrackListView({
 
   // Load expanded state from localStorage
   useEffect(() => {
+    const chapters = book.chapters ?? [];
     const saved = localStorage.getItem(`expanded-chapters-${book.id}`);
-    if (saved) {
-      setExpandedChapters(new Set(JSON.parse(saved)));
-    } else {
-      // Default: expand the first chapter
-      const firstChapter = book.chapters?.[0];
-      setExpandedChapters(firstChapter ? new Set([firstChapter.id]) : new Set());
+    const savedSet = saved ? new Set<string>(JSON.parse(saved)) : null;
+
+    // If we have a saved state with at least one chapter open, use it
+    if (savedSet && savedSet.size > 0) {
+      setExpandedChapters(savedSet);
+      return;
     }
+
+    // Otherwise (no saved state, or all collapsed): expand first in-progress chapter
+    const inProgressChapter = chapters.find(ch => ch.tracks.some(t => t.inProgress));
+    const defaultChapter = inProgressChapter ?? chapters[0];
+    setExpandedChapters(defaultChapter ? new Set([defaultChapter.id]) : new Set());
   }, [book.id, book.chapters]);
 
   // Auto-expand chapter containing the current track
@@ -164,6 +183,11 @@ export default memo(function TrackListView({
       JSON.stringify(Array.from(expandedChapters))
     );
   }, [expandedChapters, book.id]);
+
+  // Save uncategorized expanded state to localStorage
+  useEffect(() => {
+    localStorage.setItem(`uncategorized-expanded-${book.id}`, String(uncategorizedExpanded));
+  }, [uncategorizedExpanded, book.id]);
 
   // Determine if the book has both audio tracks and videos (to show tabs)
   const allBookVideos = useMemo(() => {
@@ -346,6 +370,7 @@ export default memo(function TrackListView({
           onClose={() => setEditingBook(false)}
           onSave={onBookUpdate}
           onCoverUpload={onCoverUpload}
+          onCoverUploadFromUrl={onCoverUploadFromUrl}
           onCoverDelete={onCoverDelete}
           onDelete={onBookDelete}
         />
@@ -646,6 +671,26 @@ export default memo(function TrackListView({
 
       {/* Action Buttons */}
       <div className="flex gap-2 mb-4">
+        {(!hasMediaTabs || mediaTab === "audio") && onAudioUpload && (
+          <label className="flex items-center gap-2 px-3 py-2 bg-green-600 hover:bg-green-700 rounded text-white transition-colors cursor-pointer">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            Upload Audio
+            <input
+              type="file"
+              multiple
+              accept=".mp3,.flac,.wav,.ogg,.m4a,.aac"
+              className="hidden"
+              onChange={(e) => {
+                if (e.target.files && e.target.files.length > 0) {
+                  onAudioUpload(book.id, e.target.files);
+                }
+                e.target.value = '';
+              }}
+            />
+          </label>
+        )}
         {hasMediaTabs && mediaTab === "video" && onVideoUpload && (
           <label className="flex items-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-700 rounded text-white transition-colors cursor-pointer">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -732,8 +777,22 @@ export default memo(function TrackListView({
 
         return (
           <>
-            <h3 className="text-sm font-semibold text-gray-400 mb-2 px-3">Uncategorized</h3>
-            <div className="flex flex-col gap-1">
+            <button
+              onClick={() => setUncategorizedExpanded(prev => !prev)}
+              className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-gray-800 rounded transition-colors group"
+            >
+              <svg
+                className={`w-3 h-3 text-gray-500 transition-transform shrink-0 ${uncategorizedExpanded ? "rotate-90" : ""}`}
+                fill="currentColor" viewBox="0 0 24 24"
+              >
+                <path d="M8 5l8 7-8 7V5z" />
+              </svg>
+              <span className="text-sm font-semibold text-gray-400">Uncategorized</span>
+              <span className="text-xs text-gray-600 ml-1">
+                ({uncategorizedTracks.length + uncategorizedVideos.length})
+              </span>
+            </button>
+            {uncategorizedExpanded && <div className="flex flex-col gap-1">
               {/* Audio Tracks */}
               {uncategorizedTracks
                 .sort((a, b) => (a.trackNumber || 0) - (b.trackNumber || 0))
@@ -1222,7 +1281,7 @@ export default memo(function TrackListView({
                     )}
                   </div>
                 ))}
-            </div>
+            </div>}
           </>
         );
       })()}

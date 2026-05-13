@@ -1,9 +1,19 @@
 "use client";
 
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { Video } from "@/types";
 import { usePracticeSessionTracker } from "@/hooks/usePracticeSessionTracker";
 import NotesModal from "./modals/NotesModal";
+import MarkerNameDialog from "./MarkerNameDialog";
+import { formatDurationLong } from "@/lib/formatting";
+
+interface VideoMarker {
+  id: string;
+  name: string;
+  timestamp: number;
+  videoId: string;
+}
 
 // CategorySection component (mirrors ChapterSection pattern)
 interface CategorySectionProps {
@@ -31,6 +41,9 @@ interface CategorySectionProps {
   onCategoryDragEnd: () => void;
   onToggleInProgress: (video: Video) => void;
   onNotesOpen: (video: Video) => void;
+  onDownload: (video: Video) => void;
+  onRemoveDownload: (video: Video) => void;
+  downloadingIds: Set<string>;
 }
 
 function CategorySection({
@@ -58,6 +71,9 @@ function CategorySection({
   onCategoryDragEnd,
   onToggleInProgress,
   onNotesOpen,
+  onDownload,
+  onRemoveDownload,
+  downloadingIds,
 }: CategorySectionProps) {
   return (
     <div>
@@ -207,6 +223,42 @@ function CategorySection({
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
                     </svg>
                   </button>
+                  {downloadingIds.has(video.id) ? (
+                    <span
+                      className="p-1 text-blue-400"
+                      title="Downloading..."
+                    >
+                      <svg className="w-3.5 h-3.5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                    </span>
+                  ) : video.localPath ? (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onRemoveDownload(video);
+                      }}
+                      className="p-1 text-emerald-400 hover:text-red-400"
+                      title="Downloaded — click to remove local copy"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="currentColor" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                    </button>
+                  ) : (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onDownload(video);
+                      }}
+                      className="p-1 text-gray-500 hover:text-blue-400 opacity-0 group-hover:opacity-100"
+                      title="Download for offline playback"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3" />
+                      </svg>
+                    </button>
+                  )}
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
@@ -243,6 +295,7 @@ interface VideosProps {
 }
 
 export default function Videos({ initialVideoId }: VideosProps) {
+  const router = useRouter();
   const [videos, setVideos] = useState<Video[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showAddForm, setShowAddForm] = useState(false);
@@ -265,8 +318,29 @@ export default function Videos({ initialVideoId }: VideosProps) {
   const dragOverCategoryIndex = useRef<number | null>(null);
   const playerRef = useRef<YT.Player | null>(null);
   const playerContainerRef = useRef<HTMLDivElement | null>(null);
+  const htmlVideoRef = useRef<HTMLVideoElement | null>(null);
   const ytApiReady = useRef(false);
   const pendingVideoId = useRef<string | null>(null);
+  const [downloadingIds, setDownloadingIds] = useState<Set<string>>(new Set());
+  const [showMarkerDialog, setShowMarkerDialog] = useState(false);
+  const [pendingMarkerTimestamp, setPendingMarkerTimestamp] = useState(0);
+  const [leadIn, setLeadIn] = useState(2);
+  const wasPlayingBeforeDialogRef = useRef(false);
+
+  useEffect(() => {
+    const saved = localStorage.getItem("videoMarkerLeadIn");
+    if (saved !== null) {
+      const parsed = parseInt(saved, 10);
+      if (!Number.isNaN(parsed)) setLeadIn(Math.max(0, parsed));
+    }
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem("videoMarkerLeadIn", String(leadIn));
+  }, [leadIn]);
+  const [markers, setMarkers] = useState<VideoMarker[]>([]);
+  const [editingMarkerId, setEditingMarkerId] = useState<string | null>(null);
+  const [editMarkerName, setEditMarkerName] = useState("");
 
   // Get unique categories from existing videos for suggestions
   const existingCategories = useMemo(() => {
@@ -372,6 +446,11 @@ export default function Videos({ initialVideoId }: VideosProps) {
     fetchVideos();
   }, []);
 
+  useEffect(() => {
+    const url = activeVideoId ? `/videos?video=${activeVideoId}` : "/videos";
+    router.replace(url, { scroll: false });
+  }, [activeVideoId, router]);
+
   const fetchVideos = async () => {
     try {
       const response = await fetch("/api/videos");
@@ -449,6 +528,44 @@ export default function Videos({ initialVideoId }: VideosProps) {
       }
     } catch (err) {
       console.error("Error deleting video:", err);
+    }
+  };
+
+  const handleDownload = async (video: Video) => {
+    if (downloadingIds.has(video.id) || video.localPath) return;
+    setDownloadingIds((prev) => new Set(prev).add(video.id));
+    try {
+      const res = await fetch(`/api/videos/${video.id}/download`, { method: "POST" });
+      if (res.ok) {
+        const updated = await res.json();
+        setVideos((prev) => prev.map((v) => (v.id === video.id ? updated : v)));
+      } else {
+        const data = await res.json().catch(() => ({}));
+        alert(data.error || "Failed to download video");
+      }
+    } catch (err) {
+      console.error("Error downloading video:", err);
+      alert("Failed to download video");
+    } finally {
+      setDownloadingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(video.id);
+        return next;
+      });
+    }
+  };
+
+  const handleRemoveDownload = async (video: Video) => {
+    if (!video.localPath) return;
+    if (!confirm(`Remove the local copy of "${video.title}"? Playback will fall back to YouTube streaming.`)) return;
+    try {
+      const res = await fetch(`/api/videos/${video.id}/download`, { method: "DELETE" });
+      if (res.ok) {
+        const updated = await res.json();
+        setVideos((prev) => prev.map((v) => (v.id === video.id ? updated : v)));
+      }
+    } catch (err) {
+      console.error("Error removing downloaded video:", err);
     }
   };
 
@@ -575,6 +692,175 @@ export default function Videos({ initialVideoId }: VideosProps) {
 
   const activeVideo = videos.find((v) => v.id === activeVideoId);
 
+  // Fetch markers for the active video
+  useEffect(() => {
+    if (!activeVideoId) {
+      setMarkers([]);
+      return;
+    }
+    let cancelled = false;
+    fetch(`/api/videos/${activeVideoId}/markers`)
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data) => { if (!cancelled) setMarkers(data); })
+      .catch(() => { if (!cancelled) setMarkers([]); });
+    return () => { cancelled = true; };
+  }, [activeVideoId]);
+
+  const getPlayerCurrentTime = (): number | null => {
+    if (htmlVideoRef.current) return htmlVideoRef.current.currentTime;
+    if (playerRef.current) {
+      try { return playerRef.current.getCurrentTime(); } catch { return null; }
+    }
+    return null;
+  };
+
+  const seekPlayerTo = (timestamp: number) => {
+    const target = Math.max(0, timestamp - leadIn);
+    if (htmlVideoRef.current) {
+      htmlVideoRef.current.currentTime = target;
+      htmlVideoRef.current.play().catch(() => { /* play may be blocked */ });
+      return;
+    }
+    if (playerRef.current) {
+      try {
+        playerRef.current.seekTo(target, true);
+        playerRef.current.playVideo();
+      } catch { /* player may not be ready */ }
+    }
+  };
+
+  const isPlayerPlaying = (): boolean => {
+    if (htmlVideoRef.current) return !htmlVideoRef.current.paused;
+    if (playerRef.current) {
+      try { return playerRef.current.getPlayerState() === 1; } catch { return false; }
+    }
+    return false;
+  };
+
+  const pausePlayer = () => {
+    if (htmlVideoRef.current) { htmlVideoRef.current.pause(); return; }
+    if (playerRef.current) { try { playerRef.current.pauseVideo(); } catch { /* ignore */ } }
+  };
+
+  const playPlayer = () => {
+    if (htmlVideoRef.current) { htmlVideoRef.current.play().catch(() => { /* ignore */ }); return; }
+    if (playerRef.current) { try { playerRef.current.playVideo(); } catch { /* ignore */ } }
+  };
+
+  const handleAddMarker = () => {
+    if (!activeVideoId) return;
+    const timestamp = getPlayerCurrentTime();
+    if (timestamp === null) return;
+    wasPlayingBeforeDialogRef.current = isPlayerPlaying();
+    pausePlayer();
+    setPendingMarkerTimestamp(timestamp);
+    setShowMarkerDialog(true);
+  };
+
+  const handleSaveMarker = async (name: string) => {
+    if (!activeVideoId) return;
+    const timestamp = pendingMarkerTimestamp;
+    setShowMarkerDialog(false);
+    if (wasPlayingBeforeDialogRef.current) playPlayer();
+    wasPlayingBeforeDialogRef.current = false;
+    try {
+      const res = await fetch(`/api/videos/${activeVideoId}/markers`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, timestamp }),
+      });
+      if (res.ok) {
+        const marker = await res.json();
+        setMarkers((prev) => [...prev, marker].sort((a, b) => a.timestamp - b.timestamp));
+      }
+    } catch (err) {
+      console.error("Error adding marker:", err);
+    }
+  };
+
+  const handleCancelMarker = () => {
+    setShowMarkerDialog(false);
+    if (wasPlayingBeforeDialogRef.current) playPlayer();
+    wasPlayingBeforeDialogRef.current = false;
+  };
+
+  const addMarkerRef = useRef(handleAddMarker);
+  addMarkerRef.current = handleAddMarker;
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (showMarkerDialog) return;
+      if (!activeVideoId) return;
+
+      if (e.code === "Space") {
+        e.preventDefault();
+        if (isPlayerPlaying()) pausePlayer();
+        else playPlayer();
+        return;
+      }
+
+      if (e.code === "KeyM") {
+        e.preventDefault();
+        addMarkerRef.current();
+        return;
+      }
+
+      // 1-9 jump to markers 1-9, 0 jumps to marker 10
+      if (e.key >= "0" && e.key <= "9") {
+        const sorted = [...markers].sort((a, b) => a.timestamp - b.timestamp);
+        const index = e.key === "0" ? 9 : parseInt(e.key, 10) - 1;
+        if (index < sorted.length) {
+          e.preventDefault();
+          seekPlayerTo(sorted[index].timestamp);
+        }
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [activeVideoId, showMarkerDialog, markers]);
+
+  const handleSeekToMarker = (marker: VideoMarker) => {
+    seekPlayerTo(marker.timestamp);
+  };
+
+  const handleDeleteMarker = async (markerId: string) => {
+    if (!activeVideoId) return;
+    try {
+      const res = await fetch(`/api/videos/${activeVideoId}/markers/${markerId}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        setMarkers((prev) => prev.filter((m) => m.id !== markerId));
+      }
+    } catch (err) {
+      console.error("Error deleting marker:", err);
+    }
+  };
+
+  const handleRenameMarker = async (markerId: string) => {
+    if (!activeVideoId || !editMarkerName.trim()) {
+      setEditingMarkerId(null);
+      return;
+    }
+    try {
+      const res = await fetch(`/api/videos/${activeVideoId}/markers/${markerId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: editMarkerName.trim() }),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setMarkers((prev) => prev.map((m) => (m.id === markerId ? updated : m)));
+      }
+    } catch (err) {
+      console.error("Error renaming marker:", err);
+    } finally {
+      setEditingMarkerId(null);
+      setEditMarkerName("");
+    }
+  };
+
   // Practice session tracking
   const { onPlay, onPause, onFinish } = usePracticeSessionTracker(activeVideo ?? null, 100);
   const trackerRef = useRef({ onPlay, onPause, onFinish });
@@ -607,7 +893,7 @@ export default function Videos({ initialVideoId }: VideosProps) {
 
   const createPlayer = useCallback((youtubeId: string) => {
     if (playerRef.current) {
-      playerRef.current.destroy();
+      try { playerRef.current.destroy(); } catch (err) { console.warn("YT destroy failed:", err); }
       playerRef.current = null;
     }
     if (volumePollRef.current) {
@@ -650,15 +936,21 @@ export default function Videos({ initialVideoId }: VideosProps) {
     });
   }, []);
 
-  // Create/update player when active video changes
+  // Create/update YT player when active video changes (skipped if downloaded)
   useEffect(() => {
-    if (!activeVideo) {
-      if (playerRef.current) {
-        playerRef.current.destroy();
-        playerRef.current = null;
-      }
-      return;
+    // Always tear down the previous YT player first
+    if (volumePollRef.current) {
+      clearInterval(volumePollRef.current);
+      volumePollRef.current = null;
     }
+    if (playerRef.current) {
+      try { playerRef.current.destroy(); } catch (err) { console.warn("YT destroy failed:", err); }
+      playerRef.current = null;
+    }
+    pendingVideoId.current = null;
+
+    // No active video, or playing from local file: nothing to set up here
+    if (!activeVideo || activeVideo.localPath) return;
 
     if (ytApiReady.current) {
       createPlayer(activeVideo.youtubeId);
@@ -676,7 +968,7 @@ export default function Videos({ initialVideoId }: VideosProps) {
         playerRef.current = null;
       }
     };
-  }, [activeVideo?.id, createPlayer]);
+  }, [activeVideo?.id, activeVideo?.localPath, createPlayer]);
 
   // Handle initialVideoId from URL
   useEffect(() => {
@@ -798,6 +1090,9 @@ export default function Videos({ initialVideoId }: VideosProps) {
                   onCategoryDragEnd={handleCategoryDragEnd}
                   onToggleInProgress={handleToggleInProgress}
                   onNotesOpen={(video) => setNotesVideo(video)}
+                  onDownload={handleDownload}
+                  onRemoveDownload={handleRemoveDownload}
+                  downloadingIds={downloadingIds}
                 />
               ))}
             </div>
@@ -808,10 +1103,125 @@ export default function Videos({ initialVideoId }: VideosProps) {
       {/* Main Area - Video Player */}
       <div className="flex-1 flex items-start justify-center p-6">
         {activeVideo ? (
-          <div className="w-full max-h-[calc(100vh-180px)]" style={{ maxWidth: 'calc((100vh - 180px) * 16 / 9)' }}>
-            <h2 className="text-xl font-semibold text-white mb-4">{activeVideo.title}</h2>
-            <div className="aspect-video rounded-lg overflow-hidden bg-black">
-              <div ref={playerContainerRef} className="w-full h-full" />
+          <div className="w-full max-h-[calc(100vh-280px)]" style={{ maxWidth: 'calc((100vh - 280px) * 16 / 9)' }}>
+            <h2 className="text-xl font-semibold text-white mb-4">
+              {activeVideo.title}
+              {activeVideo.localPath && (
+                <span className="ml-2 text-xs font-normal text-emerald-400 align-middle">● downloaded</span>
+              )}
+            </h2>
+            <div className="aspect-video rounded-lg overflow-hidden bg-black relative">
+              {/* YT container is always mounted so YT.destroy() can clean up its iframe before React unmounts. Hidden when a local file is playing. */}
+              <div
+                ref={playerContainerRef}
+                className={`absolute inset-0 w-full h-full ${activeVideo.localPath ? "hidden" : ""}`}
+              />
+              {activeVideo.localPath && (
+                <video
+                  key={activeVideo.id}
+                  ref={htmlVideoRef}
+                  className="absolute inset-0 w-full h-full"
+                  controls
+                  src={`/api/video/${activeVideo.localPath.split("/").map(encodeURIComponent).join("/")}`}
+                  onPlay={() => trackerRef.current.onPlay()}
+                  onPause={() => trackerRef.current.onPause()}
+                  onEnded={() => trackerRef.current.onFinish()}
+                  onLoadedMetadata={(e) => {
+                    const saved = localStorage.getItem("youtubeLocalVolume");
+                    if (saved !== null) e.currentTarget.volume = parseFloat(saved);
+                  }}
+                  onVolumeChange={(e) => {
+                    localStorage.setItem("youtubeLocalVolume", String(e.currentTarget.volume));
+                  }}
+                />
+              )}
+            </div>
+
+            {/* Markers */}
+            <div className="mt-4">
+              <div className="flex items-center gap-3 mb-2">
+                <h3 className="text-sm font-semibold text-gray-300">Markers</h3>
+                <button
+                  onClick={handleAddMarker}
+                  className="px-2 py-1 text-xs bg-green-600 hover:bg-green-700 rounded text-white font-medium transition-colors"
+                  title="Add marker at current time"
+                >
+                  + Add at current time
+                </button>
+                <div className="flex items-center gap-1 ml-auto">
+                  <label className="text-xs text-gray-400">Lead-in:</label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={30}
+                    value={leadIn}
+                    onChange={(e) => setLeadIn(Math.max(0, parseInt(e.target.value) || 0))}
+                    className="w-12 px-1 py-0.5 bg-gray-700 border border-gray-600 rounded text-xs text-center text-white focus:outline-none focus:border-green-500"
+                    title="Seconds to seek back when jumping to a marker"
+                  />
+                  <span className="text-xs text-gray-500">sec</span>
+                </div>
+              </div>
+              {markers.length === 0 ? (
+                <p className="text-xs text-gray-500">No markers yet. Use the button above to capture a timestamp.</p>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {markers.map((marker) => {
+                    const isEditing = editingMarkerId === marker.id;
+                    return (
+                      <div
+                        key={marker.id}
+                        onClick={() => { if (!isEditing) handleSeekToMarker(marker); }}
+                        className={`group flex items-center gap-1 bg-gray-800 hover:bg-gray-700 rounded px-2 py-1 text-xs border border-gray-700 ${isEditing ? "" : "cursor-pointer"}`}
+                        title={isEditing ? undefined : "Click to jump to marker"}
+                      >
+                        {isEditing ? (
+                          <input
+                            type="text"
+                            value={editMarkerName}
+                            onChange={(e) => setEditMarkerName(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") handleRenameMarker(marker.id);
+                              if (e.key === "Escape") { setEditingMarkerId(null); setEditMarkerName(""); }
+                            }}
+                            onBlur={() => handleRenameMarker(marker.id)}
+                            onClick={(e) => e.stopPropagation()}
+                            autoFocus
+                            className="px-1 py-0.5 bg-gray-700 border border-gray-600 rounded text-white text-xs focus:outline-none focus:border-green-500 w-32"
+                          />
+                        ) : (
+                          <>
+                            <span className="text-green-400 font-mono">{formatDurationLong(marker.timestamp)}</span>
+                            <span className="text-gray-300">{marker.name}</span>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditingMarkerId(marker.id);
+                                setEditMarkerName(marker.name);
+                              }}
+                              className="text-gray-500 hover:text-blue-400 opacity-0 group-hover:opacity-100 transition-opacity ml-1"
+                              title="Rename marker"
+                            >
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                              </svg>
+                            </button>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleDeleteMarker(marker.id); }}
+                              className="text-gray-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                              title="Delete marker"
+                            >
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
         ) : (
@@ -823,6 +1233,14 @@ export default function Videos({ initialVideoId }: VideosProps) {
           </div>
         )}
       </div>
+
+      <MarkerNameDialog
+        isOpen={showMarkerDialog}
+        timestamp={pendingMarkerTimestamp}
+        formatTime={formatDurationLong}
+        onSave={(name) => handleSaveMarker(name)}
+        onCancel={handleCancelMarker}
+      />
 
       {/* Notes Modal */}
       {notesVideo && (

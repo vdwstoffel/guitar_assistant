@@ -358,11 +358,12 @@ export async function PUT(
         }
       }
 
-      // Move PDF
+      // Move PDF (and rename file to match new book name)
       if (targetBook.pdfPath) {
         const oldPdfFullPath = path.join(musicPath, targetBook.pdfPath);
-        const pdfFilename = path.basename(targetBook.pdfPath);
-        const newPdfRelativePath = path.join(newAuthorDir, newBookDir, pdfFilename);
+        const pdfExt = path.extname(targetBook.pdfPath) || ".pdf";
+        const newPdfFilename = `${sanitizeFilename(bookName.trim())}${pdfExt}`;
+        const newPdfRelativePath = path.join(newAuthorDir, newBookDir, newPdfFilename);
         const newPdfFullPath = path.join(musicPath, newPdfRelativePath);
 
         try {
@@ -420,9 +421,15 @@ export async function PUT(
       }
     }
 
-    // Clean up empty books (no tracks AND no videos) and authors
+    // Clean up empty books (no tracks AND no videos AND no PDF) and authors
     await prisma.book.deleteMany({
-      where: { tracks: { none: {} }, videos: { none: {} } },
+      where: {
+        AND: [
+          { tracks: { none: {} } },
+          { videos: { none: {} } },
+          { pdfPath: null },
+        ],
+      },
     });
     await prisma.author.deleteMany({
       where: { books: { none: {} } },

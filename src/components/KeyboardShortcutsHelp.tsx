@@ -13,6 +13,8 @@ const shortcuts = [
     items: [
       { keys: ["Space"], description: "Play / Pause" },
       { keys: ["\u2190"], description: "Jump to start & play" },
+      { keys: ["+"], description: "Volume up (+5)" },
+      { keys: ["-"], description: "Volume down (-5)" },
     ],
   },
   {
