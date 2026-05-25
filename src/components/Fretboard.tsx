@@ -342,12 +342,14 @@ export default function Fretboard() {
                       const info = enhancements.getNoteDisplayInfo(stringIndex, fret);
                       const noteAtPosition = getNoteAtFret(stringIndex, fret);
 
-                      // Trainer mode overrides normal display logic
+                      // Trainer mode overrides normal display logic.
+                      // Limit reveals to the first octave so audio pitch and visual position match.
                       const isTrainerReveal =
                         trainer.isRunning &&
                         trainer.phase === 'revealing' &&
                         noteAtPosition === trainer.currentNote &&
-                        trainer.config.enabledStrings[stringIndex];
+                        trainer.config.enabledStrings[stringIndex] &&
+                        fret <= 12;
 
                       const shouldShow = trainer.isRunning
                         ? isTrainerReveal

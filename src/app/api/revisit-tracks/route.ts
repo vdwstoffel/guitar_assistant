@@ -3,7 +3,10 @@ import { prisma } from "@/lib/prisma";
 
 export async function GET() {
   try {
-    const [tracks, jamTracks] = await Promise.all([
+    const startOfToday = new Date();
+    startOfToday.setUTCHours(0, 0, 0, 0);
+
+    const [tracks, jamTracks, todayTrackSessions, todayJamSessions] = await Promise.all([
       prisma.track.findMany({
         where: { completed: true },
         select: {
@@ -17,7 +20,10 @@ export async function GET() {
               author: { select: { name: true } },
             },
           },
+          // Most recent practice session BEFORE today — keeps ranking stable
+          // even after the user practices a track during the day.
           practiceSessions: {
+            where: { startTime: { lt: startOfToday } },
             orderBy: { startTime: "desc" },
             take: 1,
             select: { startTime: true },
@@ -30,18 +36,32 @@ export async function GET() {
           id: true,
           title: true,
           practiceSessions: {
+            where: { startTime: { lt: startOfToday } },
             orderBy: { startTime: "desc" },
             take: 1,
             select: { startTime: true },
           },
         },
       }),
+      prisma.practiceSession.findMany({
+        where: { startTime: { gte: startOfToday }, trackId: { not: null } },
+        select: { trackId: true },
+        distinct: ["trackId"],
+      }),
+      prisma.practiceSession.findMany({
+        where: { startTime: { gte: startOfToday }, jamTrackId: { not: null } },
+        select: { jamTrackId: true },
+        distinct: ["jamTrackId"],
+      }),
     ]);
+
+    const practicedTodayTrackIds = new Set(todayTrackSessions.map((s) => s.trackId!));
+    const practicedTodayJamTrackIds = new Set(todayJamSessions.map((s) => s.jamTrackId!));
 
     const items = [
       ...tracks.map((t) => ({
         trackId: t.id,
-        jamTrackId: null,
+        jamTrackId: null as string | null,
         title: t.title,
         bookName: t.book.name,
         authorId: t.book.authorId,
@@ -49,7 +69,7 @@ export async function GET() {
         lastPracticed: t.practiceSessions[0]?.startTime.toISOString() ?? null,
       })),
       ...jamTracks.map((jt) => ({
-        trackId: null,
+        trackId: null as string | null,
         jamTrackId: jt.id,
         title: jt.title,
         bookName: null,
@@ -94,7 +114,14 @@ export async function GET() {
       [combined[i], combined[j]] = [combined[j], combined[i]];
     }
 
-    return NextResponse.json(combined);
+    // Drop items already practiced today so the user sees only what's left.
+    const remainingForToday = combined.filter((item) => {
+      if (item.trackId && practicedTodayTrackIds.has(item.trackId)) return false;
+      if (item.jamTrackId && practicedTodayJamTrackIds.has(item.jamTrackId)) return false;
+      return true;
+    });
+
+    return NextResponse.json(remainingForToday);
   } catch (error) {
     console.error("Error fetching revisit tracks:", error);
     return NextResponse.json(

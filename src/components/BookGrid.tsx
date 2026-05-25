@@ -121,10 +121,18 @@ const BookGrid = memo(function BookGrid({
     });
   };
 
-  const { inProgressBooks, otherBooks } = useMemo(() => {
-    const ip = books.filter(({ book }) => book.inProgress);
-    const other = books.filter(({ book }) => !book.inProgress);
-    return { inProgressBooks: sortBooks(ip), otherBooks: sortBooks(other) };
+  const isCompleted = (book: BookSummary) =>
+    !!book.totalCount && book.totalCount > 0 && (book.completedCount || 0) >= book.totalCount;
+
+  const { inProgressBooks, otherBooks, completedBooks } = useMemo(() => {
+    const ip = books.filter(({ book }) => book.inProgress && !isCompleted(book));
+    const done = books.filter(({ book }) => isCompleted(book) && !book.inProgress);
+    const other = books.filter(({ book }) => !book.inProgress && !isCompleted(book));
+    return {
+      inProgressBooks: sortBooks(ip),
+      otherBooks: sortBooks(other),
+      completedBooks: sortBooks(done),
+    };
   }, [books, sortBy]);
 
   const totalTracks = useMemo(() =>
@@ -234,11 +242,32 @@ const BookGrid = memo(function BookGrid({
 
           {otherBooks.length > 0 && (
             <div>
-              {inProgressBooks.length > 0 && (
+              {(inProgressBooks.length > 0 || completedBooks.length > 0) && (
                 <h2 className="text-sm font-medium text-gray-400 mb-3">All Books</h2>
               )}
               <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,200px))] gap-2 sm:gap-3">
                 {otherBooks.map(({ book, author }) => (
+                  <BookCard
+                    key={book.id}
+                    book={book}
+                    authorName={author.name}
+                    onClick={() => onBookSelect(book, author)}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {completedBooks.length > 0 && (
+            <div>
+              <h2 className="text-sm font-medium text-green-400 mb-3 flex items-center gap-1.5">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                Completed ({completedBooks.length})
+              </h2>
+              <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,200px))] gap-2 sm:gap-3 opacity-70">
+                {completedBooks.map(({ book, author }) => (
                   <BookCard
                     key={book.id}
                     book={book}

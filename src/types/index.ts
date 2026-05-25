@@ -114,6 +114,7 @@ export interface JamTrackMarker {
   id: string;
   name: string;
   timestamp: number;
+  jamTrackId: string;
 }
 
 export interface JamTrack {
@@ -130,10 +131,6 @@ export interface JamTrack {
   volume: number | null;
   lufs: number | null;
   gpFilePath: string | null;
-  /**
-   * Always empty in the simplified jam track model — kept only so the shared
-   * `BottomPlayer` code path can treat tracks and jam tracks uniformly.
-   */
   markers: JamTrackMarker[];
   createdAt: string;
 }

@@ -161,8 +161,19 @@ model JamTrack {
   volume        Int?
   lufs          Float?
   gpFilePath    String?
+  markers           JamTrackMarker[]
   practiceSessions  PracticeSession[]
   createdAt         DateTime         @default(now())
+}
+
+model JamTrackMarker {
+  id         String   @id @default(uuid())
+  name       String
+  timestamp  Float
+  jamTrackId String
+  jamTrack   JamTrack @relation(fields: [jamTrackId], references: [id], onDelete: Cascade)
+
+  @@index([jamTrackId])
 }
 
 model GuitarTab {

@@ -36,6 +36,7 @@ interface ChapterSectionProps {
   showVideo?: boolean;
   onExtractAudio?: (video: BookVideo) => void;
   extractingVideoId?: string | null;
+  onAssignToChapter?: (itemType: "track" | "video", itemId: string, chapterId: string | null) => Promise<void>;
 }
 
 export default memo(function ChapterSection({
@@ -69,8 +70,37 @@ export default memo(function ChapterSection({
   mediaFilter,
   onExtractAudio,
   extractingVideoId,
+  onAssignToChapter,
 }: ChapterSectionProps) {
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false);
+
+  const handleDragOver = (e: React.DragEvent) => {
+    if (!onAssignToChapter) return;
+    if (!e.dataTransfer.types.includes("application/x-guitar-item")) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    if (!isDragOver) setIsDragOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+    setIsDragOver(false);
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    if (!onAssignToChapter) return;
+    e.preventDefault();
+    setIsDragOver(false);
+    try {
+      const raw = e.dataTransfer.getData("application/x-guitar-item");
+      if (!raw) return;
+      const { type, id } = JSON.parse(raw) as { type: "track" | "video"; id: string };
+      await onAssignToChapter(type, id, chapter.id);
+    } catch (err) {
+      console.error("Drop failed:", err);
+    }
+  };
 
   const sortedTracks = useMemo(() =>
     mediaFilter === "video" ? [] : [...chapter.tracks]
@@ -129,11 +159,17 @@ export default memo(function ChapterSection({
   return (
     <div className="mb-4">
       {/* Chapter Header */}
-      <div className={`flex items-center gap-2 px-3 py-2 rounded-t group transition-colors ${
-        allCompleted
-          ? "bg-green-900/40 hover:bg-green-900/50"
-          : "bg-gray-800 hover:bg-gray-750"
-      }`}>
+      <div
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+        className={`flex items-center gap-2 px-3 py-2 rounded-t group transition-colors ${
+          isDragOver
+            ? "bg-purple-700 ring-2 ring-purple-400"
+            : allCompleted
+              ? "bg-green-900/40 hover:bg-green-900/50"
+              : "bg-gray-800 hover:bg-gray-750"
+        }`}>
         <button
           onClick={onToggleExpanded}
           className="flex items-center gap-2 flex-1 text-left"
@@ -209,6 +245,14 @@ export default memo(function ChapterSection({
           {sortedTracks.map((track) => (
             <div
               key={track.id}
+              draggable={!!onAssignToChapter}
+              onDragStart={(e) => {
+                e.dataTransfer.effectAllowed = "move";
+                e.dataTransfer.setData(
+                  "application/x-guitar-item",
+                  JSON.stringify({ type: "track", id: track.id })
+                );
+              }}
               onClick={() => onTrackSelect(track, author, book)}
               onKeyDown={(e) => e.key === "Enter" && onTrackSelect(track, author, book)}
               role="button"
@@ -418,6 +462,14 @@ export default memo(function ChapterSection({
           {sortedVideos.map((video) => (
             <div
               key={video.id}
+              draggable={!!onAssignToChapter}
+              onDragStart={(e) => {
+                e.dataTransfer.effectAllowed = "move";
+                e.dataTransfer.setData(
+                  "application/x-guitar-item",
+                  JSON.stringify({ type: "video", id: video.id })
+                );
+              }}
               onClick={() => onVideoSelect(video)}
               onKeyDown={(e) => e.key === "Enter" && onVideoSelect(video)}
               role="button"

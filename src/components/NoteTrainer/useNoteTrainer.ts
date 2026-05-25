@@ -1,7 +1,29 @@
 import { useState, useRef, useCallback } from 'react';
-import { NOTES } from '@/lib/musicTheory';
+import { NOTES, getNoteIndex } from '@/lib/musicTheory';
 import { playCountIn } from '@/lib/clickGenerator';
 import { playNoteByName } from '@/lib/audioGenerator';
+
+// MIDI of each open string in standard tuning (low E → high E)
+const OPEN_STRING_MIDI = [40, 45, 50, 55, 59, 64] as const;
+
+// Find the lowest (string, fret) match for a note within frets 1-12 on enabled strings,
+// and return the corresponding octave so audio pitch matches the visible position.
+function findRevealOctave(note: string, enabledStrings: boolean[]): number {
+  const targetPc = getNoteIndex(note);
+  let lowestMidi = Infinity;
+  for (let s = 0; s < 6; s++) {
+    if (!enabledStrings[s]) continue;
+    for (let fret = 1; fret <= 12; fret++) {
+      const midi = OPEN_STRING_MIDI[s] + fret;
+      if (((midi % 12) + 12) % 12 === targetPc) {
+        if (midi < lowestMidi) lowestMidi = midi;
+        break;
+      }
+    }
+  }
+  if (lowestMidi === Infinity) return 3;
+  return Math.floor(lowestMidi / 12) - 1;
+}
 import {
   TrainerPhase,
   NoteTrainerConfig,
@@ -84,7 +106,8 @@ export function useNoteTrainer() {
 
     // 3. Reveal phase - show note positions and play sound
     setPhase('revealing');
-    playNoteByName(note, 3, 2.0, cfg.volume);
+    const octave = findRevealOctave(note, cfg.enabledStrings);
+    playNoteByName(note, octave, 2.0, cfg.volume);
 
     // 4. Hold reveal
     const revealMs = (60 / cfg.bpm) * cfg.revealBeats * 1000;

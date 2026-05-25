@@ -345,6 +345,75 @@ export default memo(function TrackListView({
     }
   };
 
+  const handleAssignToChapter = async (
+    itemType: "track" | "video",
+    itemId: string,
+    chapterId: string | null
+  ) => {
+    try {
+      if (itemType === "track") {
+        const res = await fetch(`/api/tracks/${itemId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ chapterId }),
+        });
+        if (!res.ok) throw new Error("Failed to assign track to chapter");
+      } else {
+        const video = allBookVideos.find((v) => v.id === itemId);
+        if (!video) return;
+        const res = await fetch(`/api/books/${book.id}/videos/${itemId}/update`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            filename: video.filename,
+            sortOrder: video.sortOrder,
+            title: video.title,
+            trackNumber: video.trackNumber,
+            pdfPage: video.pdfPage,
+            chapterId,
+          }),
+        });
+        if (!res.ok) throw new Error("Failed to assign video to chapter");
+      }
+      if (chapterId) {
+        setExpandedChapters(new Set([chapterId]));
+      } else {
+        setUncategorizedExpanded(true);
+      }
+      await onLibraryRefresh?.();
+    } catch (error) {
+      console.error("Failed to assign chapter:", error);
+      alert("Failed to move item to chapter");
+    }
+  };
+
+  const [uncategorizedDragOver, setUncategorizedDragOver] = useState(false);
+
+  const handleUncategorizedDragOver = (e: React.DragEvent) => {
+    if (!e.dataTransfer.types.includes("application/x-guitar-item")) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    if (!uncategorizedDragOver) setUncategorizedDragOver(true);
+  };
+
+  const handleUncategorizedDragLeave = (e: React.DragEvent) => {
+    if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+    setUncategorizedDragOver(false);
+  };
+
+  const handleUncategorizedDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    setUncategorizedDragOver(false);
+    try {
+      const raw = e.dataTransfer.getData("application/x-guitar-item");
+      if (!raw) return;
+      const { type, id } = JSON.parse(raw) as { type: "track" | "video"; id: string };
+      await handleAssignToChapter(type, id, null);
+    } catch (err) {
+      console.error("Drop failed:", err);
+    }
+  };
+
   const handleDeleteChapter = async (chapterId: string) => {
     try {
       const res = await fetch(`/api/chapters/${chapterId}`, {
@@ -762,6 +831,7 @@ export default memo(function TrackListView({
                 showVideo={showVideo}
                 onExtractAudio={onExtractAudio}
                 extractingVideoId={extractingVideoId}
+                onAssignToChapter={handleAssignToChapter}
               />
             ))}
         </div>
@@ -779,7 +849,12 @@ export default memo(function TrackListView({
           <>
             <button
               onClick={() => setUncategorizedExpanded(prev => !prev)}
-              className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-gray-800 rounded transition-colors group"
+              onDragOver={handleUncategorizedDragOver}
+              onDragLeave={handleUncategorizedDragLeave}
+              onDrop={handleUncategorizedDrop}
+              className={`w-full flex items-center gap-2 px-3 py-2 text-left rounded transition-colors group ${
+                uncategorizedDragOver ? "bg-purple-700 ring-2 ring-purple-400" : "hover:bg-gray-800"
+              }`}
             >
               <svg
                 className={`w-3 h-3 text-gray-500 transition-transform shrink-0 ${uncategorizedExpanded ? "rotate-90" : ""}`}
@@ -799,6 +874,14 @@ export default memo(function TrackListView({
                 .map((track) => (
                   <div
                     key={track.id}
+                    draggable
+                    onDragStart={(e) => {
+                      e.dataTransfer.effectAllowed = "move";
+                      e.dataTransfer.setData(
+                        "application/x-guitar-item",
+                        JSON.stringify({ type: "track", id: track.id })
+                      );
+                    }}
                     onClick={() => onTrackSelect(track, author, book)}
                     onKeyDown={(e) => e.key === "Enter" && onTrackSelect(track, author, book)}
                     role="button"
@@ -1019,6 +1102,14 @@ export default memo(function TrackListView({
             .map((video) => (
                   <div
                     key={video.id}
+                    draggable
+                    onDragStart={(e) => {
+                      e.dataTransfer.effectAllowed = "move";
+                      e.dataTransfer.setData(
+                        "application/x-guitar-item",
+                        JSON.stringify({ type: "video", id: video.id })
+                      );
+                    }}
                     onClick={() => onVideoSelect(video)}
                     onKeyDown={(e) => e.key === "Enter" && onVideoSelect(video)}
                     role="button"

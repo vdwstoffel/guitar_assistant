@@ -24,11 +24,14 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const jamTrack = await prisma.jamTrack.findUnique({ where: { id } });
+    const jamTrack = await prisma.jamTrack.findUnique({
+      where: { id },
+      include: { markers: { orderBy: { timestamp: "asc" } } },
+    });
     if (!jamTrack) {
       return NextResponse.json({ error: "Jam track not found" }, { status: 404 });
     }
-    return NextResponse.json({ ...jamTrack, markers: [] });
+    return NextResponse.json(jamTrack);
   } catch (error) {
     console.error("Error fetching jam track:", error);
     return NextResponse.json(
@@ -90,8 +93,9 @@ export async function PATCH(
     const updatedJamTrack = await prisma.jamTrack.update({
       where: { id },
       data: updateData,
+      include: { markers: { orderBy: { timestamp: "asc" } } },
     });
-    return NextResponse.json({ ...updatedJamTrack, markers: [] });
+    return NextResponse.json(updatedJamTrack);
   } catch (error) {
     console.error("Error updating jam track:", error);
     return NextResponse.json(

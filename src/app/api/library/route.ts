@@ -34,6 +34,7 @@ export async function GET() {
       }),
       prisma.jamTrack.findMany({
         orderBy: { title: "asc" },
+        include: { markers: { orderBy: { timestamp: "asc" } } },
       }),
     ]);
 
@@ -77,7 +78,7 @@ export async function GET() {
 
     return NextResponse.json({
       authors,
-      jamTracks: jamTracks.map((jt) => ({ ...jt, markers: [] })),
+      jamTracks,
     });
   } catch (error) {
     console.error("Error fetching library:", error);

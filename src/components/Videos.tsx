@@ -44,6 +44,10 @@ interface CategorySectionProps {
   onDownload: (video: Video) => void;
   onRemoveDownload: (video: Video) => void;
   downloadingIds: Set<string>;
+  category: string | null;
+  onAssignVideoToCategory: (videoId: string, newCategory: string | null) => Promise<void>;
+  isEmptyCustom: boolean;
+  onDeleteEmptyCategory?: () => void;
 }
 
 function CategorySection({
@@ -74,7 +78,42 @@ function CategorySection({
   onDownload,
   onRemoveDownload,
   downloadingIds,
+  category,
+  onAssignVideoToCategory,
+  isEmptyCustom,
+  onDeleteEmptyCategory,
 }: CategorySectionProps) {
+  const [isDragOver, setIsDragOver] = useState(false);
+
+  const handleHeaderDragOver = (e: React.DragEvent) => {
+    if (e.dataTransfer.types.includes("application/x-guitar-video")) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      if (!isDragOver) setIsDragOver(true);
+    } else {
+      e.preventDefault();
+    }
+  };
+
+  const handleHeaderDragLeave = (e: React.DragEvent) => {
+    if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+    setIsDragOver(false);
+  };
+
+  const handleHeaderDrop = async (e: React.DragEvent) => {
+    setIsDragOver(false);
+    const raw = e.dataTransfer.getData("application/x-guitar-video");
+    if (!raw) return;
+    e.preventDefault();
+    try {
+      const { id, fromCategory } = JSON.parse(raw) as { id: string; fromCategory: string | null };
+      if (fromCategory === category) return;
+      await onAssignVideoToCategory(id, category);
+    } catch (err) {
+      console.error("Failed to move video to category:", err);
+    }
+  };
+
   return (
     <div>
       {/* Category Header */}
@@ -83,10 +122,14 @@ function CategorySection({
         onDragStart={() => onCategoryDragStart(categoryIndex)}
         onDragEnter={() => onCategoryDragEnter(categoryIndex)}
         onDragEnd={onCategoryDragEnd}
-        onDragOver={(e) => e.preventDefault()}
-        className={`flex items-center gap-2 px-3 py-2 rounded-t bg-gray-800 hover:bg-gray-750 transition-colors ${
-          label !== "Uncategorized" ? "cursor-move" : ""
-        }`}
+        onDragOver={handleHeaderDragOver}
+        onDragLeave={handleHeaderDragLeave}
+        onDrop={handleHeaderDrop}
+        className={`flex items-center gap-2 px-3 py-2 rounded-t transition-colors ${
+          isDragOver
+            ? "bg-purple-700 ring-2 ring-purple-400"
+            : "bg-gray-800 hover:bg-gray-750"
+        } ${label !== "Uncategorized" ? "cursor-move" : ""}`}
       >
         <button
           onClick={onToggleExpanded}
@@ -107,11 +150,27 @@ function CategorySection({
             ({videos.length} video{videos.length !== 1 ? "s" : ""})
           </span>
         </button>
+        {isEmptyCustom && onDeleteEmptyCategory && (
+          <button
+            onClick={onDeleteEmptyCategory}
+            className="p-1 text-gray-500 hover:text-red-400 transition-colors"
+            title="Delete empty category"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+          </button>
+        )}
       </div>
 
       {/* Category Content */}
       {isExpanded && (
         <div className="border-l-2 border-gray-700 ml-3 pl-2">
+          {videos.length === 0 && (
+            <div className="px-3 py-2 text-xs text-gray-500 italic">
+              Drag a video here to add to this category
+            </div>
+          )}
           {videos.map((video, index) => (
             <div
               key={video.id}
@@ -129,6 +188,11 @@ function CategorySection({
                 draggable
                 onDragStart={(e) => {
                   e.stopPropagation();
+                  e.dataTransfer.effectAllowed = "move";
+                  e.dataTransfer.setData(
+                    "application/x-guitar-video",
+                    JSON.stringify({ id: video.id, fromCategory: category })
+                  );
                   onDragStart(index);
                 }}
                 onDragEnd={onDragEnd}
@@ -303,6 +367,9 @@ export default function Videos({ initialVideoId }: VideosProps) {
   const [newUrl, setNewUrl] = useState("");
   const [newCategory, setNewCategory] = useState<string | null>(null);
   const [isAdding, setIsAdding] = useState(false);
+  const [showAddCategoryForm, setShowAddCategoryForm] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [customCategories, setCustomCategories] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
@@ -367,6 +434,13 @@ export default function Videos({ initialVideoId }: VideosProps) {
       grouped.get(cat)!.push(video);
     });
 
+    // Ensure user-created empty categories are present
+    customCategories.forEach((cat) => {
+      if (!grouped.has(cat)) {
+        grouped.set(cat, []);
+      }
+    });
+
     // Sort within each category by sortOrder
     grouped.forEach((vids) => {
       vids.sort((a, b) => a.sortOrder - b.sortOrder);
@@ -404,13 +478,17 @@ export default function Videos({ initialVideoId }: VideosProps) {
       label: cat || "Uncategorized",
       videos: grouped.get(cat)!,
     }));
-  }, [videos, categoryOrder]);
+  }, [videos, categoryOrder, customCategories]);
 
   // Load category order from localStorage
   useEffect(() => {
     const savedOrder = localStorage.getItem("video-category-order");
     if (savedOrder) {
       setCategoryOrder(JSON.parse(savedOrder));
+    }
+    const savedCustom = localStorage.getItem("video-custom-categories");
+    if (savedCustom) {
+      try { setCustomCategories(JSON.parse(savedCustom)); } catch { /* ignore */ }
     }
   }, []);
 
@@ -420,6 +498,11 @@ export default function Videos({ initialVideoId }: VideosProps) {
       localStorage.setItem("video-category-order", JSON.stringify(categoryOrder));
     }
   }, [categoryOrder]);
+
+  // Save custom categories to localStorage
+  useEffect(() => {
+    localStorage.setItem("video-custom-categories", JSON.stringify(customCategories));
+  }, [customCategories]);
 
   // Load expanded state from localStorage
   useEffect(() => {
@@ -606,6 +689,43 @@ export default function Videos({ initialVideoId }: VideosProps) {
       }
     } catch (err) {
       console.error("Error updating video:", err);
+    }
+  };
+
+  const handleAddCustomCategory = () => {
+    const name = newCategoryName.trim();
+    if (!name) return;
+    setCustomCategories((prev) => (prev.includes(name) ? prev : [...prev, name]));
+    setExpandedCategories(new Set([name]));
+    setNewCategoryName("");
+    setShowAddCategoryForm(false);
+  };
+
+  const handleDeleteEmptyCategory = (categoryName: string) => {
+    setCustomCategories((prev) => prev.filter((c) => c !== categoryName));
+    setCategoryOrder((prev) => prev.filter((c) => c !== categoryName));
+  };
+
+  const handleAssignVideoToCategory = async (videoId: string, newCategoryValue: string | null) => {
+    const video = videos.find((v) => v.id === videoId);
+    if (!video) return;
+    try {
+      const response = await fetch(`/api/videos/${videoId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: video.title, category: newCategoryValue }),
+      });
+      if (response.ok) {
+        const updated = await response.json();
+        setVideos((prev) => prev.map((v) => (v.id === videoId ? updated : v)));
+        setExpandedCategories(new Set([newCategoryValue || "Uncategorized"]));
+        if (newCategoryValue) {
+          setCustomCategories((prev) => prev.filter((c) => c !== newCategoryValue));
+        }
+      }
+    } catch (err) {
+      console.error("Error assigning video to category:", err);
+      alert("Failed to move video to category");
     }
   };
 
@@ -996,13 +1116,45 @@ export default function Videos({ initialVideoId }: VideosProps) {
       {/* Sidebar - Video List */}
       <div className="w-72 border-r border-gray-700 flex flex-col">
         {/* Sidebar Header */}
-        <div className="p-3 border-b border-gray-700">
+        <div className="p-3 border-b border-gray-700 space-y-2">
           <button
             onClick={() => setShowAddForm(!showAddForm)}
             className="w-full px-3 py-2 bg-green-600 hover:bg-green-700 rounded text-sm font-medium text-white"
           >
             {showAddForm ? "Cancel" : "Add Video"}
           </button>
+          <button
+            onClick={() => setShowAddCategoryForm((v) => !v)}
+            className="w-full px-3 py-2 bg-purple-600 hover:bg-purple-700 rounded text-sm font-medium text-white"
+          >
+            {showAddCategoryForm ? "Cancel" : "Add Category"}
+          </button>
+          {showAddCategoryForm && (
+            <div className="space-y-2 pt-1">
+              <input
+                type="text"
+                value={newCategoryName}
+                onChange={(e) => setNewCategoryName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleAddCustomCategory();
+                  if (e.key === "Escape") {
+                    setShowAddCategoryForm(false);
+                    setNewCategoryName("");
+                  }
+                }}
+                placeholder="Category name"
+                autoFocus
+                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm focus:outline-none focus:border-purple-500"
+              />
+              <button
+                onClick={handleAddCustomCategory}
+                disabled={!newCategoryName.trim()}
+                className="w-full px-3 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 rounded text-sm font-medium text-white"
+              >
+                Create
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Add Form */}
@@ -1056,7 +1208,7 @@ export default function Videos({ initialVideoId }: VideosProps) {
             </div>
           ) : (
             <div className="p-2 space-y-2">
-              {videosByCategory.map(({ label, videos: categoryVideos }, index) => (
+              {videosByCategory.map(({ label, category, videos: categoryVideos }, index) => (
                 <CategorySection
                   key={label}
                   label={label}
@@ -1093,6 +1245,18 @@ export default function Videos({ initialVideoId }: VideosProps) {
                   onDownload={handleDownload}
                   onRemoveDownload={handleRemoveDownload}
                   downloadingIds={downloadingIds}
+                  category={category}
+                  onAssignVideoToCategory={handleAssignVideoToCategory}
+                  isEmptyCustom={
+                    category !== null &&
+                    customCategories.includes(category) &&
+                    categoryVideos.length === 0
+                  }
+                  onDeleteEmptyCategory={
+                    category !== null && customCategories.includes(category) && categoryVideos.length === 0
+                      ? () => handleDeleteEmptyCategory(category)
+                      : undefined
+                  }
                 />
               ))}
             </div>

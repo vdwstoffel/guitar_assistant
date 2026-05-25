@@ -174,11 +174,12 @@ const JamTracksView = memo(function JamTracksView({
     }
   };
 
-  const handleDelete = async (jamTrackId: string) => {
+  const handleDelete = async (jamTrack: JamTrack) => {
     if (!onJamTrackDelete) return;
-    setDeletingId(jamTrackId);
+    if (!confirm(`Delete jam track "${jamTrack.title}"? This cannot be undone.`)) return;
+    setDeletingId(jamTrack.id);
     try {
-      await onJamTrackDelete(jamTrackId);
+      await onJamTrackDelete(jamTrack.id);
     } finally {
       setDeletingId(null);
     }
@@ -470,6 +471,22 @@ const JamTracksView = memo(function JamTracksView({
                     </svg>
                   </button>
                 )}
+
+                {onJamTrackDelete && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDelete(jamTrack);
+                    }}
+                    disabled={deletingId === jamTrack.id}
+                    className="p-1 text-gray-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 disabled:opacity-50"
+                    title="Delete jam track"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a2 2 0 012-2h2a2 2 0 012 2v3" />
+                    </svg>
+                  </button>
+                )}
               </div>
 
               {currentJamTrack?.id === jamTrack.id && (
@@ -514,7 +531,7 @@ const JamTracksView = memo(function JamTracksView({
 
                   {onJamTrackDelete && (
                     <button
-                      onClick={() => handleDelete(jamTrack.id)}
+                      onClick={() => handleDelete(jamTrack)}
                       disabled={deletingId === jamTrack.id}
                       className="ml-auto text-xs text-red-400 hover:text-red-300 disabled:text-gray-500"
                     >

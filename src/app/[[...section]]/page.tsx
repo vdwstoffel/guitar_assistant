@@ -27,7 +27,7 @@ import HomeView from "@/components/HomeView";
 import GuitarProViewer from "@/components/GuitarProViewer";
 import UploadModal from "@/components/UploadModal";
 import VideoPlayer from "@/components/VideoPlayer";
-import { AuthorSummary, BookSummary, Book, Track, TrackTab, Marker, JamTrack, BookVideo, SearchResultTrack, SearchResultBook, SearchResultJamTrack } from "@/types";
+import { AuthorSummary, BookSummary, Book, Track, TrackTab, Marker, JamTrack, JamTrackMarker, BookVideo, SearchResultTrack, SearchResultBook, SearchResultJamTrack } from "@/types";
 import TrackTabsModal from "@/components/TrackTabsModal";
 
 type Section = 'home' | 'lessons' | 'videos' | 'fretboard' | 'intervals' | 'chords' | 'tools' | 'circle' | 'tabs' | 'jamtracks' | 'metrics' | 'knowledge' | 'gear' | 'progressions' | 'caged';
@@ -617,7 +617,22 @@ export default function Home() {
     timestamp: number,
     pdfPage?: number | null
   ) => {
+    const isJamTrack = jamTracks.some(jt => jt.id === trackId);
     try {
+      if (isJamTrack) {
+        const response = await fetch(`/api/jamtracks/${trackId}/markers`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name, timestamp }),
+        });
+        if (response.ok) {
+          const newMarker: JamTrackMarker = await response.json();
+          setJamTracks(prev =>
+            prev.map(jt => jt.id === trackId ? { ...jt, markers: [...jt.markers, newMarker] } : jt)
+          );
+        }
+        return;
+      }
       const response = await fetch("/api/markers", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -635,8 +650,27 @@ export default function Home() {
     }
   };
 
+  const findJamTrackForMarker = (markerId: string): JamTrack | undefined =>
+    jamTracks.find(jt => jt.markers.some(m => m.id === markerId));
+
   const handleMarkerUpdate = async (markerId: string, timestamp: number) => {
+    const owningJamTrack = findJamTrackForMarker(markerId);
     try {
+      if (owningJamTrack) {
+        const response = await fetch(`/api/jamtracks/${owningJamTrack.id}/markers/${markerId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ timestamp }),
+        });
+        if (response.ok) {
+          setJamTracks(prev => prev.map(jt =>
+            jt.id === owningJamTrack.id
+              ? { ...jt, markers: jt.markers.map(m => m.id === markerId ? { ...m, timestamp } : m) }
+              : jt
+          ));
+        }
+        return;
+      }
       const response = await fetch(`/api/markers/${markerId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -656,7 +690,23 @@ export default function Home() {
   };
 
   const handleMarkerRename = async (markerId: string, name: string, pdfPage?: number | null) => {
+    const owningJamTrack = findJamTrackForMarker(markerId);
     try {
+      if (owningJamTrack) {
+        const response = await fetch(`/api/jamtracks/${owningJamTrack.id}/markers/${markerId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name }),
+        });
+        if (response.ok) {
+          setJamTracks(prev => prev.map(jt =>
+            jt.id === owningJamTrack.id
+              ? { ...jt, markers: jt.markers.map(m => m.id === markerId ? { ...m, name } : m) }
+              : jt
+          ));
+        }
+        return;
+      }
       const body: Record<string, unknown> = { name };
       if (pdfPage !== undefined) body.pdfPage = pdfPage;
       const response = await fetch(`/api/markers/${markerId}`, {
@@ -678,7 +728,21 @@ export default function Home() {
   };
 
   const handleMarkerDelete = async (markerId: string) => {
+    const owningJamTrack = findJamTrackForMarker(markerId);
     try {
+      if (owningJamTrack) {
+        const response = await fetch(`/api/jamtracks/${owningJamTrack.id}/markers/${markerId}`, {
+          method: "DELETE",
+        });
+        if (response.ok) {
+          setJamTracks(prev => prev.map(jt =>
+            jt.id === owningJamTrack.id
+              ? { ...jt, markers: jt.markers.filter(m => m.id !== markerId) }
+              : jt
+          ));
+        }
+        return;
+      }
       const response = await fetch(`/api/markers/${markerId}`, {
         method: "DELETE",
       });
@@ -695,7 +759,19 @@ export default function Home() {
   };
 
   const handleMarkersClear = async (trackId: string) => {
+    const isJamTrack = jamTracks.some(jt => jt.id === trackId);
     try {
+      if (isJamTrack) {
+        const response = await fetch(`/api/jamtracks/${trackId}/markers/clear`, {
+          method: "DELETE",
+        });
+        if (response.ok) {
+          setJamTracks(prev => prev.map(jt =>
+            jt.id === trackId ? { ...jt, markers: [] } : jt
+          ));
+        }
+        return;
+      }
       const response = await fetch(`/api/markers/clear/${trackId}`, {
         method: "DELETE",
       });
@@ -1436,7 +1512,7 @@ export default function Home() {
   };
 
   // Refs for handler functions so useCallback wrappers stay stable.
-  // Jam tracks no longer support markers — these handlers only run for regular tracks.
+  // Handlers internally branch on whether the target is a track or jam track.
   const handleMarkerAddRef = useRef(handleMarkerAdd);
   handleMarkerAddRef.current = handleMarkerAdd;
   const handleMarkerUpdateRef = useRef(handleMarkerUpdate);
@@ -1449,27 +1525,22 @@ export default function Home() {
   handleMarkersClearRef.current = handleMarkersClear;
 
   const stableOnMarkerAdd = useCallback((trackId: string, name: string, timestamp: number, pdfPage?: number | null) => {
-    if (currentJamTrackRef.current) return;
     handleMarkerAddRef.current(trackId, name, timestamp, pdfPage);
   }, []);
 
   const stableOnMarkerUpdate = useCallback((markerId: string, timestamp: number) => {
-    if (currentJamTrackRef.current) return;
     handleMarkerUpdateRef.current(markerId, timestamp);
   }, []);
 
   const stableOnMarkerRename = useCallback((markerId: string, name: string, pdfPage?: number | null) => {
-    if (currentJamTrackRef.current) return;
     handleMarkerRenameRef.current(markerId, name, pdfPage);
   }, []);
 
   const stableOnMarkerDelete = useCallback((markerId: string) => {
-    if (currentJamTrackRef.current) return;
     handleMarkerDeleteRef.current(markerId);
   }, []);
 
   const stableOnMarkersClear = useCallback((trackId: string) => {
-    if (currentJamTrackRef.current) return;
     handleMarkersClearRef.current(trackId);
   }, []);
 
@@ -1879,9 +1950,9 @@ export default function Home() {
                 />
               </div>
 
-              {/* Middle: Guitar Pro tab viewer */}
+              {/* Middle: Guitar Pro tab viewer + optional markers sidebar */}
               <div className="hidden xl:flex flex-1 min-h-0 overflow-hidden" style={{ maxHeight: 'calc(100vh - 280px)' }}>
-                <div className="flex-1 flex flex-col overflow-hidden">
+                <div className="flex-1 flex flex-col overflow-hidden min-w-0">
                   {currentJamTrack.gpFilePath ? (
                     <GuitarProViewer filePath={currentJamTrack.gpFilePath} />
                   ) : (
@@ -1896,6 +1967,41 @@ export default function Home() {
                     </div>
                   )}
                 </div>
+                {markerBarState && markerBarState.showMarkers && (
+                  <div className="w-64 border-l border-gray-700 bg-gray-900 flex flex-col overflow-hidden">
+                    <MarkersBar
+                      markers={currentJamTrack.markers}
+                      visible={true}
+                      layout="vertical"
+                      leadIn={markerBarState.leadIn}
+                      editingMarkerId={markerBarState.editingMarkerId}
+                      editingMarkerName={markerBarState.editingMarkerName}
+                      currentTime={markerBarState.currentTime}
+                      onLeadInChange={markerBarState.setLeadIn}
+                      onAddMarker={markerBarState.addMarker}
+                      onJumpToMarker={markerBarState.jumpToMarker}
+                      onStartEdit={(id, name) => {
+                        markerBarState.setEditingMarkerId(id);
+                        markerBarState.setEditingMarkerName(name);
+                      }}
+                      onEditNameChange={markerBarState.setEditingMarkerName}
+                      onSaveEdit={(markerId, name) => {
+                        handleMarkerRename(markerId, name);
+                        markerBarState.setEditingMarkerId(null);
+                      }}
+                      onCancelEdit={() => markerBarState.setEditingMarkerId(null)}
+                      onDelete={(markerId) => handleMarkerDelete(markerId)}
+                      onClearAll={() => handleMarkersClear(currentJamTrack.id)}
+                      formatTime={markerBarState.formatTime}
+                      isCountingIn={markerBarState.isCountingIn}
+                      currentCountInBeat={markerBarState.currentCountInBeat}
+                      totalCountInBeats={markerBarState.totalCountInBeats}
+                      trackTempo={markerBarState.trackTempo}
+                      trackTimeSignature={markerBarState.trackTimeSignature}
+                      onTempoChange={handleTempoChange}
+                    />
+                  </div>
+                )}
               </div>
 
               {/* Bottom: Player - compact on desktop, full on mobile */}
@@ -1914,6 +2020,42 @@ export default function Home() {
                   onSeekReady={stableOnSeekReady}
                 />
               </div>
+
+              {/* Markers Bar - mobile only (desktop uses sidebar above) */}
+              {currentJamTrack && markerBarState && (
+                <div className="xl:hidden">
+                  <MarkersBar
+                    markers={currentJamTrack.markers}
+                    visible={markerBarState.showMarkers}
+                    leadIn={markerBarState.leadIn}
+                    editingMarkerId={markerBarState.editingMarkerId}
+                    editingMarkerName={markerBarState.editingMarkerName}
+                    currentTime={markerBarState.currentTime}
+                    onLeadInChange={markerBarState.setLeadIn}
+                    onAddMarker={markerBarState.addMarker}
+                    onJumpToMarker={markerBarState.jumpToMarker}
+                    onStartEdit={(id, name) => {
+                      markerBarState.setEditingMarkerId(id);
+                      markerBarState.setEditingMarkerName(name);
+                    }}
+                    onEditNameChange={markerBarState.setEditingMarkerName}
+                    onSaveEdit={(markerId, name) => {
+                      handleMarkerRename(markerId, name);
+                      markerBarState.setEditingMarkerId(null);
+                    }}
+                    onCancelEdit={() => markerBarState.setEditingMarkerId(null)}
+                    onDelete={(markerId) => handleMarkerDelete(markerId)}
+                    onClearAll={() => handleMarkersClear(currentJamTrack.id)}
+                    formatTime={markerBarState.formatTime}
+                    isCountingIn={markerBarState.isCountingIn}
+                    currentCountInBeat={markerBarState.currentCountInBeat}
+                    totalCountInBeats={markerBarState.totalCountInBeats}
+                    trackTempo={markerBarState.trackTempo}
+                    trackTimeSignature={markerBarState.trackTimeSignature}
+                    onTempoChange={handleTempoChange}
+                  />
+                </div>
+              )}
             </div>
           )}
 
