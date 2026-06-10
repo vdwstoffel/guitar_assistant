@@ -3,6 +3,8 @@ services:
     build: .
     ports:
       - "3000:3000"
+    expose:
+      - "3000"
     environment:
       - DATABASE_URL=file:/app/prisma/guitar_assistant.db
       - MUSIC_DIR=/app/music
@@ -10,3 +12,20 @@ services:
       - .:/app
       - /app/node_modules
       - ./music:/app/music
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - nextjs-app
+
+volumes:
+  caddy_data:
+  caddy_config:

@@ -1261,52 +1261,67 @@ function BottomPlayer({
               />
             </div>
 
-            {/* Volume Normalization Toggle - only show when track has LUFS data */}
-            {track?.lufs != null && (
-              <button
-                onClick={() => {
-                  const newValue = !normalizeVolume;
-                  setNormalizeVolume(newValue);
-                  localStorage.setItem('normalizeVolume', newValue.toString());
-                }}
-                className={`flex items-center gap-1 px-3 py-1.5 rounded text-xs ${
-                  normalizeVolume ? "bg-purple-600 text-white" : "bg-gray-700 hover:bg-gray-600 text-gray-300"
-                }`}
-                title={normalizeVolume ? "Volume normalization ON - tracks play at consistent loudness" : "Volume normalization OFF - click to enable"}
-              >
-                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2z" />
-                </svg>
-                Normalize
-              </button>
-            )}
+            {/* Secondary toggles: normalize, markers, tabs — icon-only with badges */}
+            <div className="flex items-center gap-1 pl-2 sm:pl-3 ml-1 sm:ml-2 border-l border-gray-700">
+                {track?.lufs != null && (
+                  <button
+                    onClick={() => {
+                      const newValue = !normalizeVolume;
+                      setNormalizeVolume(newValue);
+                      localStorage.setItem('normalizeVolume', newValue.toString());
+                    }}
+                    className={`w-7 h-7 flex items-center justify-center rounded transition-colors ${
+                      normalizeVolume ? "bg-purple-600 text-white" : "text-gray-400 hover:text-white hover:bg-gray-700"
+                    }`}
+                    title={normalizeVolume ? "Normalize: ON" : "Normalize: OFF (click to enable)"}
+                    aria-pressed={normalizeVolume}
+                    aria-label="Toggle volume normalization"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 12h3l3-8 4 16 3-8h3" />
+                    </svg>
+                  </button>
+                )}
 
-            {/* Markers Toggle */}
-            <button
-              onClick={() => setShowMarkers(!showMarkers)}
-              className={`flex items-center gap-1 px-3 py-1.5 rounded text-xs ${
-                showMarkers ? "bg-yellow-600 text-white" : "bg-gray-700 hover:bg-gray-600 text-gray-300"
-              }`}
-            >
-              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
-              </svg>
-              Markers ({track.markers.length})
-            </button>
+                {/* Markers toggle */}
+                <button
+                  onClick={() => setShowMarkers(!showMarkers)}
+                  className={`relative w-7 h-7 flex items-center justify-center rounded transition-colors ${
+                    showMarkers ? "bg-yellow-600 text-white" : "text-gray-400 hover:text-white hover:bg-gray-700"
+                  }`}
+                  title={`Markers (${track.markers.length})`}
+                  aria-pressed={showMarkers}
+                  aria-label={`Toggle markers, ${track.markers.length} total`}
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+                  </svg>
+                  {track.markers.length > 0 && (
+                    <span className="absolute -top-1 -right-1 min-w-4 h-4 px-1 flex items-center justify-center rounded-full bg-yellow-500 text-[9px] font-bold text-black">
+                      {track.markers.length}
+                    </span>
+                  )}
+                </button>
 
-            {/* Guitar Tabs */}
-            {onTrackTabs && (
-              <button
-                onClick={onTrackTabs}
-                className="flex items-center gap-1 px-3 py-1.5 rounded text-xs bg-gray-700 hover:bg-gray-600 text-gray-300"
-                title="Guitar tabs for this track"
-              >
-                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
-                </svg>
-                Tabs ({trackTabsCount})
-              </button>
-            )}
+                {/* Guitar Tabs */}
+                {onTrackTabs && (
+                  <button
+                    onClick={onTrackTabs}
+                    className="relative w-7 h-7 flex items-center justify-center rounded text-gray-400 hover:text-white hover:bg-gray-700 transition-colors"
+                    title={`Guitar tabs (${trackTabsCount ?? 0})`}
+                    aria-label={`Open guitar tabs, ${trackTabsCount ?? 0} available`}
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+                    </svg>
+                    {(trackTabsCount ?? 0) > 0 && (
+                      <span className="absolute -top-1 -right-1 min-w-4 h-4 px-1 flex items-center justify-center rounded-full bg-blue-500 text-[9px] font-bold text-white">
+                        {trackTabsCount}
+                      </span>
+                    )}
+                  </button>
+                )}
+              </div>
           </div>
         </div>
 

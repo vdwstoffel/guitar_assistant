@@ -1,0 +1,33 @@
+# Caddyfile — HTTPS reverse proxy in front of the Next.js app.
+#
+# `tls internal` makes Caddy issue a self-signed cert from its own local CA.
+# Browsers will warn the first time you visit; accept the warning once per
+# device and getUserMedia / MediaRecorder will work (HTTPS is a secure context).
+#
+# To get a warning-free experience, replace `:443` with your hostname (e.g.
+# `guitar.local:443`), generate a cert for that hostname with mkcert, install
+# the mkcert root CA on each client device, and swap `tls internal` for
+# `tls /etc/caddy/cert.pem /etc/caddy/key.pem` (mounting the files in via the
+# docker-compose `caddy` service).
+
+{
+	admin off
+	# If the client doesn't send SNI (some browsers/clients omit it for raw
+	# IPs), fall back to the LAN IP cert so the handshake still succeeds.
+	default_sni 192.168.129.11
+}
+
+# Add additional hostnames/IPs here as needed.
+https://192.168.129.11, https://localhost {
+	tls internal
+
+	# Stream large audio/PDF files without buffering them in memory.
+	reverse_proxy nextjs-app:3000 {
+		flush_interval -1
+	}
+}
+
+# Redirect plain HTTP to HTTPS so people can type the bare IP/hostname.
+:80 {
+	redir https://{host}{uri} permanent
+}

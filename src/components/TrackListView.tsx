@@ -130,6 +130,8 @@ export default memo(function TrackListView({
   const [notesTarget, setNotesTarget] = useState<{ type: 'track' | 'bookVideo'; id: string; title: string; notes: string | null } | null>(null);
   const [isConverting, setIsConverting] = useState(false);
   const [mediaTab, setMediaTab] = useState<"audio" | "video">("audio");
+  const [pdfMenuOpen, setPdfMenuOpen] = useState(false);
+  const [trackFilter, setTrackFilter] = useState("");
 
   // Chapter management state
   const [expandedChapters, setExpandedChapters] = useState<Set<string>>(new Set());
@@ -659,29 +661,61 @@ export default memo(function TrackListView({
                   </svg>
                   {showVideo ? "View PDF" : (selectedVideo ? "View Video" : "View PDF")}
                 </button>
-                {onPdfConvert && (
-                  <button
-                    onClick={async () => {
-                      setIsConverting(true);
-                      try {
-                        await onPdfConvert(book.id);
-                      } finally {
-                        setIsConverting(false);
-                      }
-                    }}
-                    disabled={isConverting}
-                    className="text-xs text-yellow-400 hover:text-yellow-300 disabled:text-gray-500"
-                    title="Convert PDF to fix rendering issues"
-                  >
-                    {isConverting ? "Converting..." : "Fix PDF"}
-                  </button>
+                {(onPdfConvert || onPdfDelete) && (
+                  <div className="relative">
+                    <button
+                      onClick={() => setPdfMenuOpen(v => !v)}
+                      onBlur={() => setTimeout(() => setPdfMenuOpen(false), 150)}
+                      className="p-1 text-gray-400 hover:text-white hover:bg-gray-700 rounded transition-colors"
+                      title="PDF actions"
+                      aria-haspopup="menu"
+                      aria-expanded={pdfMenuOpen}
+                    >
+                      <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                        <circle cx="5" cy="12" r="1.75" />
+                        <circle cx="12" cy="12" r="1.75" />
+                        <circle cx="19" cy="12" r="1.75" />
+                      </svg>
+                    </button>
+                    {pdfMenuOpen && (
+                      <div
+                        role="menu"
+                        className="absolute left-0 top-full mt-1 z-10 min-w-35 bg-gray-800 border border-gray-700 rounded-md shadow-lg py-1"
+                      >
+                        {onPdfConvert && (
+                          <button
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={async () => {
+                              setPdfMenuOpen(false);
+                              setIsConverting(true);
+                              try {
+                                await onPdfConvert(book.id);
+                              } finally {
+                                setIsConverting(false);
+                              }
+                            }}
+                            disabled={isConverting}
+                            className="w-full text-left px-3 py-1.5 text-xs text-gray-200 hover:bg-gray-700 disabled:text-gray-500"
+                          >
+                            {isConverting ? "Converting..." : "Fix PDF"}
+                          </button>
+                        )}
+                        {onPdfDelete && (
+                          <button
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => {
+                              setPdfMenuOpen(false);
+                              onPdfDelete(book.id);
+                            }}
+                            className="w-full text-left px-3 py-1.5 text-xs text-red-400 hover:bg-gray-700"
+                          >
+                            Remove PDF
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 )}
-                <button
-                  onClick={() => onPdfDelete?.(book.id)}
-                  className="text-xs text-red-400 hover:text-red-300"
-                >
-                  Remove
-                </button>
               </>
             ) : onPdfUpload && (
               <label className="flex items-center gap-1 px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded text-xs text-gray-300 cursor-pointer">
@@ -789,6 +823,38 @@ export default memo(function TrackListView({
         </button>
       </div>
 
+      {/* Search filter */}
+      {(allBookTracks.length > 0 || allBookVideos.length > 0) && (
+        <div className="relative mb-3">
+          <svg
+            className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z" />
+          </svg>
+          <input
+            type="text"
+            value={trackFilter}
+            onChange={(e) => setTrackFilter(e.target.value)}
+            placeholder="Filter tracks…"
+            className="w-full pl-8 pr-8 py-1.5 bg-gray-800 border border-gray-700 rounded text-sm text-white placeholder-gray-500 focus:outline-none focus:border-purple-500"
+          />
+          {trackFilter && (
+            <button
+              onClick={() => setTrackFilter("")}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white"
+              title="Clear filter"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Chapters */}
       {book.chapters && book.chapters.length > 0 && (
         <div className="mb-4">
@@ -804,8 +870,9 @@ export default memo(function TrackListView({
                 selectedVideo={selectedVideo}
                 bookHasPdf={!!book.pdfPath}
                 currentPdfPage={currentPdfPage}
-                isExpanded={expandedChapters.has(chapter.id)}
+                isExpanded={trackFilter ? true : expandedChapters.has(chapter.id)}
                 mediaFilter={mediaFilter}
+                titleFilter={trackFilter}
                 onToggleExpanded={() => toggleChapterExpanded(chapter.id)}
                 onTrackSelect={onTrackSelect}
                 onVideoSelect={onVideoSelect}
@@ -839,8 +906,12 @@ export default memo(function TrackListView({
 
       {/* Uncategorized Tracks and Videos */}
       {(() => {
-        const uncategorizedTracks = mediaFilter === "video" ? [] : book.tracks;
-        const uncategorizedVideos = mediaFilter === "audio" ? [] : (book.videos || []);
+        const filterLower = trackFilter.trim().toLowerCase();
+        const matchesFilter = (text: string) => !filterLower || text.toLowerCase().includes(filterLower);
+        const uncategorizedTracks = (mediaFilter === "video" ? [] : book.tracks)
+          .filter(t => matchesFilter(t.title));
+        const uncategorizedVideos = (mediaFilter === "audio" ? [] : (book.videos || []))
+          .filter(v => matchesFilter(v.title || v.filename));
         const hasUncategorized = uncategorizedTracks.length > 0 || uncategorizedVideos.length > 0;
 
         if (!hasUncategorized) return null;
@@ -867,7 +938,7 @@ export default memo(function TrackListView({
                 ({uncategorizedTracks.length + uncategorizedVideos.length})
               </span>
             </button>
-            {uncategorizedExpanded && <div className="flex flex-col gap-1">
+            {(uncategorizedExpanded || filterLower) && <div className="flex flex-col gap-1">
               {/* Audio Tracks */}
               {uncategorizedTracks
                 .sort((a, b) => (a.trackNumber || 0) - (b.trackNumber || 0))
@@ -935,74 +1006,76 @@ export default memo(function TrackListView({
                 </button>
               )}
 
-              {/* In Progress indicator */}
-              <InProgressIndicator
-                trackId={track.id}
-                completed={track.completed}
-                playbackSpeed={track.playbackSpeed}
-              />
+              {/* Status cluster: practice %, favorite, in-progress, complete */}
+              <div className="flex items-center gap-1.5 xl:gap-1.5 flex-shrink-0">
+                <InProgressIndicator
+                  trackId={track.id}
+                  completed={track.completed}
+                  playbackSpeed={track.playbackSpeed}
+                />
 
-              {/* Favorite star */}
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onTrackFavorite?.(track.id, !track.favorite);
-                }}
-                className={`w-5 h-5 flex-shrink-0 transition-colors ${
-                  track.favorite
-                    ? "text-yellow-400"
-                    : "text-gray-600 hover:text-yellow-400"
-                }`}
-                title={track.favorite ? "Remove from favorites" : "Add to favorites"}
-              >
-                <svg className="w-full h-full" fill={track.favorite ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
-                </svg>
-              </button>
-
-              {/* In progress circle - Larger touch target on mobile */}
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onTrackInProgress?.(track.id, !track.inProgress);
-                }}
-                className={`w-11 h-11 xl:w-6 xl:h-6 rounded-full flex items-center justify-center flex-shrink-0 transition-colors ${
-                  track.inProgress
-                    ? "bg-amber-500"
-                    : "bg-gray-700 hover:bg-gray-600"
-                }`}
-                title={track.inProgress ? "Mark as not in progress" : "Mark as in progress"}
-              >
-                <div className={`w-5 h-5 xl:w-full xl:h-full rounded-full border-2 flex items-center justify-center ${
-                  track.inProgress ? "bg-amber-500 border-amber-500" : "border-gray-500"
-                }`}>
-                  <svg className={`w-3 h-3 xl:w-full xl:h-full transition-opacity ${track.inProgress ? "text-white opacity-100" : "text-amber-500 opacity-20"}`} fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M8 5v14l11-7z" />
+                {/* Favorite star */}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onTrackFavorite?.(track.id, !track.favorite);
+                  }}
+                  className={`w-5 h-5 transition-colors ${
+                    track.favorite
+                      ? "text-yellow-400"
+                      : "text-gray-600 hover:text-yellow-400"
+                  }`}
+                  title={track.favorite ? "Remove from favorites" : "Add to favorites"}
+                >
+                  <svg className="w-full h-full" fill={track.favorite ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
                   </svg>
-                </div>
-              </button>
+                </button>
 
-              {/* Completion circle - Larger touch target on mobile */}
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onTrackComplete?.(track.id, !track.completed);
-                }}
-                className={`w-11 h-11 xl:w-6 xl:h-6 rounded-full flex items-center justify-center flex-shrink-0 transition-colors ${
-                  track.completed
-                    ? "bg-green-500"
-                    : "bg-gray-700 hover:bg-gray-600"
-                }`}
-                title={track.completed ? "Mark as not completed" : "Mark as completed"}
-              >
-                <div className={`w-5 h-5 xl:w-full xl:h-full rounded-full border-2 ${
-                  track.completed ? "bg-green-500 border-green-500" : "border-gray-500"
-                }`}>
-                  <svg className={`w-full h-full transition-opacity ${track.completed ? "text-white opacity-100" : "text-green-500 opacity-20"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                  </svg>
-                </div>
-              </button>
+                {/* In progress circle - Larger touch target on mobile */}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onTrackInProgress?.(track.id, !track.inProgress);
+                  }}
+                  className={`w-11 h-11 xl:w-6 xl:h-6 rounded-full flex items-center justify-center transition-colors ${
+                    track.inProgress
+                      ? "bg-amber-500"
+                      : "bg-gray-700 hover:bg-gray-600"
+                  }`}
+                  title={track.inProgress ? "Mark as not in progress" : "Mark as in progress"}
+                >
+                  <div className={`w-5 h-5 xl:w-full xl:h-full rounded-full border-2 flex items-center justify-center ${
+                    track.inProgress ? "bg-amber-500 border-amber-500" : "border-gray-500"
+                  }`}>
+                    <svg className={`w-3 h-3 xl:w-full xl:h-full transition-opacity ${track.inProgress ? "text-white opacity-100" : "text-amber-500 opacity-20"}`} fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M8 5v14l11-7z" />
+                    </svg>
+                  </div>
+                </button>
+
+                {/* Completion circle - Larger touch target on mobile */}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onTrackComplete?.(track.id, !track.completed);
+                  }}
+                  className={`w-11 h-11 xl:w-6 xl:h-6 rounded-full flex items-center justify-center transition-colors ${
+                    track.completed
+                      ? "bg-green-500"
+                      : "bg-gray-700 hover:bg-gray-600"
+                  }`}
+                  title={track.completed ? "Mark as not completed" : "Mark as completed"}
+                >
+                  <div className={`w-5 h-5 xl:w-full xl:h-full rounded-full border-2 ${
+                    track.completed ? "bg-green-500 border-green-500" : "border-gray-500"
+                  }`}>
+                    <svg className={`w-full h-full transition-opacity ${track.completed ? "text-white opacity-100" : "text-green-500 opacity-20"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                    </svg>
+                  </div>
+                </button>
+              </div>
 
               {/* Duration and PDF page */}
               <div className="flex items-center gap-1 flex-shrink-0">

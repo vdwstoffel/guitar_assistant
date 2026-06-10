@@ -15,6 +15,7 @@ interface ChapterSectionProps {
   currentPdfPage?: number;
   isExpanded: boolean;
   mediaFilter?: "audio" | "video";
+  titleFilter?: string;
   onToggleExpanded: () => void;
   onTrackSelect: (track: Track, author: AuthorSummary, book: Book) => void;
   onVideoSelect: (video: BookVideo) => void;
@@ -68,6 +69,7 @@ export default memo(function ChapterSection({
   onToggleVideo,
   showVideo,
   mediaFilter,
+  titleFilter,
   onExtractAudio,
   extractingVideoId,
   onAssignToChapter,
@@ -102,17 +104,23 @@ export default memo(function ChapterSection({
     }
   };
 
-  const sortedTracks = useMemo(() =>
-    mediaFilter === "video" ? [] : [...chapter.tracks]
-      .sort((a, b) => (a.trackNumber || 0) - (b.trackNumber || 0)),
-    [chapter.tracks, mediaFilter]
-  );
+  const filterLower = (titleFilter ?? "").trim().toLowerCase();
 
-  const sortedVideos = useMemo(() =>
-    mediaFilter === "audio" ? [] : [...chapter.videos]
-      .sort((a, b) => (a.trackNumber || a.sortOrder || 0) - (b.trackNumber || b.sortOrder || 0)),
-    [chapter.videos, mediaFilter]
-  );
+  const sortedTracks = useMemo(() => {
+    if (mediaFilter === "video") return [];
+    const filtered = filterLower
+      ? chapter.tracks.filter(t => t.title.toLowerCase().includes(filterLower))
+      : chapter.tracks;
+    return [...filtered].sort((a, b) => (a.trackNumber || 0) - (b.trackNumber || 0));
+  }, [chapter.tracks, mediaFilter, filterLower]);
+
+  const sortedVideos = useMemo(() => {
+    if (mediaFilter === "audio") return [];
+    const filtered = filterLower
+      ? chapter.videos.filter(v => (v.title || v.filename).toLowerCase().includes(filterLower))
+      : chapter.videos;
+    return [...filtered].sort((a, b) => (a.trackNumber || a.sortOrder || 0) - (b.trackNumber || b.sortOrder || 0));
+  }, [chapter.videos, mediaFilter, filterLower]);
 
   // Build lookup maps from ALL chapter tracks/videos (not filtered ones)
   const videoById = useMemo(() => {
@@ -154,7 +162,10 @@ export default memo(function ChapterSection({
     }
   };
 
-  if (totalItems === 0) return null;
+  // Hide only when an active filter has excluded all of this chapter's items.
+  // Genuinely empty chapters stay visible so the user can drag items into them.
+  const chapterHasContent = chapter.tracks.length > 0 || chapter.videos.length > 0;
+  if (chapterHasContent && totalItems === 0) return null;
 
   return (
     <div className="mb-4">
@@ -241,6 +252,11 @@ export default memo(function ChapterSection({
       {/* Chapter Content */}
       {isExpanded && (
         <div className="border-l-2 border-gray-700 ml-3 pl-2">
+          {!chapterHasContent && (
+            <div className="px-3 py-3 text-xs text-gray-500 italic">
+              Empty chapter — drag tracks or videos here to add them.
+            </div>
+          )}
           {/* Tracks */}
           {sortedTracks.map((track) => (
             <div
@@ -310,75 +326,77 @@ export default memo(function ChapterSection({
                 </div>
               )}
 
-              {/* In Progress indicator */}
-              <InProgressIndicator
-                trackId={track.id}
-                completed={track.completed}
-                playbackSpeed={track.playbackSpeed}
-              />
+              {/* Status cluster: practice %, favorite, in-progress, complete */}
+              <div className="flex items-center gap-1.5 flex-shrink-0">
+                <InProgressIndicator
+                  trackId={track.id}
+                  completed={track.completed}
+                  playbackSpeed={track.playbackSpeed}
+                />
 
-              {/* Favorite star */}
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onTrackFavorite?.(track.id, !track.favorite);
-                }}
-                className={`w-5 h-5 flex-shrink-0 transition-colors ${
-                  track.favorite
-                    ? "text-yellow-400"
-                    : "text-gray-600 hover:text-yellow-400"
-                }`}
-                title={track.favorite ? "Remove from favorites" : "Add to favorites"}
-              >
-                <svg className="w-full h-full" fill={track.favorite ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
-                </svg>
-              </button>
-
-              {/* In progress circle */}
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onTrackInProgress?.(track.id, !track.inProgress);
-                }}
-                className={`w-5 h-5 rounded-full border-2 flex-shrink-0 transition-colors ${
-                  track.inProgress
-                    ? "bg-amber-500 border-amber-500"
-                    : "border-gray-500 hover:border-amber-400"
-                }`}
-                title={track.inProgress ? "Mark as not in progress" : "Mark as in progress"}
-              >
-                <svg
-                  className={`w-full h-full transition-opacity ${track.inProgress ? "text-white opacity-100" : "text-amber-500 opacity-20"}`}
-                  fill="currentColor"
-                  viewBox="0 0 24 24"
+                {/* Favorite star */}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onTrackFavorite?.(track.id, !track.favorite);
+                  }}
+                  className={`w-5 h-5 transition-colors ${
+                    track.favorite
+                      ? "text-yellow-400"
+                      : "text-gray-600 hover:text-yellow-400"
+                  }`}
+                  title={track.favorite ? "Remove from favorites" : "Add to favorites"}
                 >
-                  <path d="M8 5v14l11-7z" />
-                </svg>
-              </button>
+                  <svg className="w-full h-full" fill={track.favorite ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                  </svg>
+                </button>
 
-              {/* Completion circle */}
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onTrackComplete?.(track.id, !track.completed);
-                }}
-                className={`w-5 h-5 rounded-full border-2 flex-shrink-0 transition-colors ${
-                  track.completed
-                    ? "bg-green-500 border-green-500"
-                    : "border-gray-500 hover:border-green-400"
-                }`}
-                title={track.completed ? "Mark as not completed" : "Mark as completed"}
-              >
-                <svg
-                  className={`w-full h-full transition-opacity ${track.completed ? "text-white opacity-100" : "text-green-500 opacity-20"}`}
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
+                {/* In progress circle */}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onTrackInProgress?.(track.id, !track.inProgress);
+                  }}
+                  className={`w-5 h-5 rounded-full border-2 transition-colors ${
+                    track.inProgress
+                      ? "bg-amber-500 border-amber-500"
+                      : "border-gray-500 hover:border-amber-400"
+                  }`}
+                  title={track.inProgress ? "Mark as not in progress" : "Mark as in progress"}
                 >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                </svg>
-              </button>
+                  <svg
+                    className={`w-full h-full transition-opacity ${track.inProgress ? "text-white opacity-100" : "text-amber-500 opacity-20"}`}
+                    fill="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path d="M8 5v14l11-7z" />
+                  </svg>
+                </button>
+
+                {/* Completion circle */}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onTrackComplete?.(track.id, !track.completed);
+                  }}
+                  className={`w-5 h-5 rounded-full border-2 transition-colors ${
+                    track.completed
+                      ? "bg-green-500 border-green-500"
+                      : "border-gray-500 hover:border-green-400"
+                  }`}
+                  title={track.completed ? "Mark as not completed" : "Mark as completed"}
+                >
+                  <svg
+                    className={`w-full h-full transition-opacity ${track.completed ? "text-white opacity-100" : "text-green-500 opacity-20"}`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                  </svg>
+                </button>
+              </div>
 
               {/* Duration and PDF page */}
               <div className="flex items-center gap-1 flex-shrink-0">

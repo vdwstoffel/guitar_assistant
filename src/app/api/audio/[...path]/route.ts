@@ -31,6 +31,8 @@ export async function GET(
       ".ogg": "audio/ogg",
       ".m4a": "audio/mp4",
       ".aac": "audio/aac",
+      ".webm": "audio/webm",
+      ".mp4": "audio/mp4",
     };
     const contentType = mimeTypes[ext] || "application/octet-stream";
 

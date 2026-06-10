@@ -48,7 +48,11 @@ function SinglePdfViewerInner({
   const [error, setError] = useState<string | null>(null);
   const [containerWidth, setContainerWidth] = useState<number>(0);
   const [containerHeight, setContainerHeight] = useState<number>(0);
-  const [fitToPage, setFitToPage] = useState(true);
+  const [fitToPage, setFitToPage] = useState(() => {
+    if (typeof window === "undefined") return true;
+    const saved = localStorage.getItem("pdfViewer.fitToPage");
+    return saved === null ? true : saved === "true";
+  });
   const [visiblePage, setVisiblePage] = useState(1);
   const containerRef = useRef<HTMLDivElement>(null);
   const pageRefs = useRef<Map<number, HTMLDivElement>>(new Map());
@@ -340,38 +344,31 @@ function SinglePdfViewerInner({
       {/* Controls */}
       <div className="flex items-center justify-between px-3 py-2 bg-gray-800 border-b border-gray-700">
         <div className="flex items-center gap-1 text-xs">
-          {fitToPage && (
-            <button
-              onClick={() => goToPage(visiblePage - 1)}
-              disabled={visiblePage <= 1}
-              className="px-1.5 py-1 bg-gray-700 border border-gray-600 rounded text-gray-300 hover:bg-gray-600 disabled:opacity-30 disabled:cursor-not-allowed"
-            >
-              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
-            </button>
-          )}
-          <input
-            type="number"
-            min={1}
-            max={numPages || 1}
-            value={visiblePage}
-            onChange={(e) => goToPage(parseInt(e.target.value, 10) || 1)}
-            className="w-12 px-1 py-1 bg-gray-700 border border-gray-600 rounded text-center text-xs focus:outline-none focus:border-green-500"
-          />
-          <span className="text-gray-400">/ {numPages}</span>
-          {fitToPage && (
-            <button
-              onClick={() => goToPage(visiblePage + 1)}
-              disabled={visiblePage >= numPages}
-              className="px-1.5 py-1 bg-gray-700 border border-gray-600 rounded text-gray-300 hover:bg-gray-600 disabled:opacity-30 disabled:cursor-not-allowed"
-            >
-              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-            </button>
-          )}
+          <button
+            onClick={() => goToPage(visiblePage - 1)}
+            disabled={visiblePage <= 1}
+            className="px-1.5 py-1 bg-gray-700 border border-gray-600 rounded text-gray-300 hover:bg-gray-600 disabled:opacity-30 disabled:cursor-not-allowed"
+            title="Previous page"
+          >
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+          </button>
+          <span className="min-w-12 px-1 py-1 text-center text-gray-200 tabular-nums">
+            {visiblePage} <span className="text-gray-400">/ {numPages}</span>
+          </span>
+          <button
+            onClick={() => goToPage(visiblePage + 1)}
+            disabled={visiblePage >= numPages}
+            className="px-1.5 py-1 bg-gray-700 border border-gray-600 rounded text-gray-300 hover:bg-gray-600 disabled:opacity-30 disabled:cursor-not-allowed"
+            title="Next page"
+          >
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+          </button>
         </div>
         <button
           onClick={() => {
             const next = !fitToPage;
             setFitToPage(next);
+            localStorage.setItem("pdfViewer.fitToPage", String(next));
             onFitToPageChange?.(next);
           }}
           className={`flex items-center gap-1 px-2 py-1 text-xs rounded transition-colors ${

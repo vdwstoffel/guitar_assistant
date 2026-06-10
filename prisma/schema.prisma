@@ -188,6 +188,18 @@ model GuitarTab {
   updatedAt     DateTime @updatedAt
 }
 
+model Recording {
+  id        String   @id @default(uuid())
+  title     String
+  filePath  String   @unique
+  duration  Float
+  mimeType  String
+  notes     String?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}
+
 model PracticeSession {
   id               String     @id @default(uuid())
   trackId          String?

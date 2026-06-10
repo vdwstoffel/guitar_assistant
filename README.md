@@ -40,6 +40,13 @@ Standalone play-along tracks (backing tracks, songs) that live outside the book 
 - **Drag-and-drop reordering** - Reorganize both categories and videos within categories
 - Upload book-specific videos, optionally linked to chapters or PDF pages
 
+### Recordings
+- Capture yourself playing guitar straight from the browser to review later
+- Pick the input device (laptop mic, USB mic, audio interface) each time
+- Live duration and input-level meter while recording
+- Recordings are saved server-side under `music/Recordings/` and stream via the existing audio pipeline
+- Rename, play back, and delete recordings from the **Recordings** tab
+
 ## Getting Started
 
 ### Docker (Recommended)

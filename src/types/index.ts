@@ -155,6 +155,16 @@ export interface AuthorSummary {
   books: BookSummary[];
 }
 
+export interface Recording {
+  id: string;
+  title: string;
+  filePath: string;
+  duration: number;
+  mimeType: string;
+  notes: string | null;
+  createdAt: string;
+}
+
 export interface PracticeSession {
   id: string;
   trackId: string | null;
