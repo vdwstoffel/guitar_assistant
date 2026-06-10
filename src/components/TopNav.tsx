@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useState, useEffect, useRef, useCallback, memo } from 'react';
 import GlobalSearch from './GlobalSearch';
 import PracticeNextDropdown from './PracticeNextDropdown';
+import Tuner from './Tuner';
 import { SearchResultTrack, SearchResultBook, SearchResultJamTrack } from '@/types';
 import { useAudioRecorder } from '@/hooks/useAudioRecorder';
 
@@ -21,6 +22,7 @@ interface TopNavProps {
 
 const TopNav = memo(function TopNav({ activeSection, onSectionChange, onSearchTrackSelect, onSearchBookSelect, onSearchJamTrackSelect, onGoToTrack }: TopNavProps) {
   const [showMetronome, setShowMetronome] = useState(false);
+  const [showTuner, setShowTuner] = useState(false);
   const [showRecorder, setShowRecorder] = useState(false);
   const [recorderUploading, setRecorderUploading] = useState(false);
   const [showTheory, setShowTheory] = useState(false);
@@ -232,6 +234,21 @@ const TopNav = memo(function TopNav({ activeSection, onSectionChange, onSearchTr
             {isPlaying && (
               <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
             )}
+          </button>
+
+          {/* Tuner button */}
+          <button
+            onClick={() => setShowTuner(!showTuner)}
+            className={`flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+              showTuner
+                ? 'bg-blue-600 text-white'
+                : 'text-gray-400 hover:text-white hover:bg-gray-700/50'
+            }`}
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19a3 3 0 11-6 0 3 3 0 016 0zm12-3a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+            <span className="hidden sm:inline">Tuner</span>
           </button>
 
           {/* Recordings button */}
@@ -568,6 +585,9 @@ const TopNav = memo(function TopNav({ activeSection, onSectionChange, onSearchTr
           </div>
         </div>
       )}
+
+      {/* Tuner Panel */}
+      <Tuner show={showTuner} />
 
       {/* Mini Recorder Panel */}
       {showRecorder && (

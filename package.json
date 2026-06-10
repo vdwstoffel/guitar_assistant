@@ -20,6 +20,7 @@
     "node-id3": "^0.2.9",
     "node-taglib-sharp": "^6.0.1",
     "pdf-lib": "^1.17.1",
+    "pitchy": "^4.1.0",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-markdown": "^10.1.0",
