@@ -8,12 +8,9 @@ interface MetricsSummary {
   lastPracticeDate: string | null;
 }
 
-function formatDuration(seconds: number): string {
-  if (seconds < 60) return `${Math.round(seconds)}s`;
-  const hours = Math.floor(seconds / 3600);
-  const mins = Math.floor((seconds % 3600) / 60);
-  if (hours > 0) return `${hours}h ${mins}m`;
-  return `${mins}m`;
+interface HistoryDataPoint {
+  date: string;
+  sessionCount: number;
 }
 
 function formatRelativeDate(iso: string): string {
@@ -30,26 +27,31 @@ function formatRelativeDate(iso: string): string {
 
 interface Props {
   summary: MetricsSummary | null;
+  history: HistoryDataPoint[];
+  periodDays: number;
   isLoading: boolean;
 }
 
-export default function MetricsSummaryCards({ summary, isLoading }: Props) {
+export default function MetricsSummaryCards({ summary, history, periodDays, isLoading }: Props) {
+  const daysPracticed = history.filter((d) => d.sessionCount > 0).length;
+
   const cards = [
     {
-      label: "Today",
-      value: formatDuration(summary?.todayPracticeTimeSeconds ?? 0),
+      label: "Days Practiced",
+      value: `${daysPracticed} / ${periodDays}`,
       icon: (
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
         </svg>
       ),
     },
     {
-      label: "Practice Time",
-      value: formatDuration(summary?.totalPracticeTimeSeconds ?? 0),
+      label: "Current Streak",
+      value: summary?.currentStreak ? `${summary.currentStreak} day${summary.currentStreak !== 1 ? "s" : ""}` : "0 days",
       icon: (
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.879 16.121A3 3 0 1012.015 11L11 14H9c0 .768.293 1.536.879 2.121z" />
         </svg>
       ),
     },
@@ -63,12 +65,11 @@ export default function MetricsSummaryCards({ summary, isLoading }: Props) {
       ),
     },
     {
-      label: "Current Streak",
-      value: summary?.currentStreak ? `${summary.currentStreak} day${summary.currentStreak !== 1 ? "s" : ""}` : "0 days",
+      label: "Last Practiced",
+      value: summary?.lastPracticeDate ? formatRelativeDate(summary.lastPracticeDate) : "Never",
       icon: (
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z" />
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.879 16.121A3 3 0 1012.015 11L11 14H9c0 .768.293 1.536.879 2.121z" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
         </svg>
       ),
     },
@@ -98,11 +99,6 @@ export default function MetricsSummaryCards({ summary, isLoading }: Props) {
           <div className="text-2xl font-bold text-white">{card.value}</div>
         </div>
       ))}
-      {summary?.lastPracticeDate && (
-        <div className="col-span-2 lg:col-span-4 text-sm text-gray-500">
-          Last practiced: {formatRelativeDate(summary.lastPracticeDate)}
-        </div>
-      )}
     </div>
   );
 }

@@ -135,7 +135,12 @@ export default function MetricsView({ onGoToTrack }: Props) {
         </div>
 
         {/* Summary Cards */}
-        <MetricsSummaryCards summary={summary} isLoading={isLoading} />
+        <MetricsSummaryCards
+          summary={summary}
+          history={history}
+          periodDays={parseInt(period, 10)}
+          isLoading={isLoading}
+        />
 
         {/* Practice History Chart */}
         <PracticeHistoryChart data={history} isLoading={isLoading} />
