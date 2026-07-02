@@ -25,6 +25,7 @@ import GearView from "@/components/GearView";
 import ProgressionExplorer from "@/components/ProgressionExplorer";
 import CAGEDSystem from "@/components/CAGEDSystem";
 import ScalePracticeGenerator from "@/components/ScalePractice";
+import { BackingTracksView } from "@/components/BackingTracks";
 import HomeView from "@/components/HomeView";
 import GuitarProViewer from "@/components/GuitarProViewer";
 import UploadModal from "@/components/UploadModal";
@@ -32,12 +33,12 @@ import VideoPlayer from "@/components/VideoPlayer";
 import { AuthorSummary, BookSummary, Book, Track, TrackTab, Marker, JamTrack, JamTrackMarker, BookVideo, SearchResultTrack, SearchResultBook, SearchResultJamTrack } from "@/types";
 import TrackTabsModal from "@/components/TrackTabsModal";
 
-type Section = 'home' | 'lessons' | 'videos' | 'fretboard' | 'intervals' | 'chords' | 'tools' | 'circle' | 'tabs' | 'jamtracks' | 'recordings' | 'metrics' | 'knowledge' | 'gear' | 'progressions' | 'caged' | 'scales';
+type Section = 'home' | 'lessons' | 'videos' | 'fretboard' | 'intervals' | 'chords' | 'tools' | 'circle' | 'tabs' | 'jamtracks' | 'recordings' | 'metrics' | 'knowledge' | 'gear' | 'progressions' | 'caged' | 'scales' | 'backing-tracks';
 
 const getSectionFromPath = (section: string[] | undefined): Section => {
   if (!section || section.length === 0) return 'home';
   const first = section[0];
-  if (first === 'home' || first === 'lessons' || first === 'videos' || first === 'fretboard' || first === 'intervals' || first === 'chords' || first === 'tools' || first === 'circle' || first === 'tabs' || first === 'jamtracks' || first === 'recordings' || first === 'metrics' || first === 'knowledge' || first === 'gear' || first === 'progressions' || first === 'caged' || first === 'scales') {
+  if (first === 'home' || first === 'lessons' || first === 'videos' || first === 'fretboard' || first === 'intervals' || first === 'chords' || first === 'tools' || first === 'circle' || first === 'tabs' || first === 'jamtracks' || first === 'recordings' || first === 'metrics' || first === 'knowledge' || first === 'gear' || first === 'progressions' || first === 'caged' || first === 'scales' || first === 'backing-tracks') {
     return first;
   }
   return 'home';
@@ -2122,6 +2123,8 @@ export default function Home() {
         <CAGEDSystem />
       ) : activeSection === 'scales' ? (
         <ScalePracticeGenerator />
+      ) : activeSection === 'backing-tracks' ? (
+        <BackingTracksView />
       ) : (
         <Fretboard />
       )}

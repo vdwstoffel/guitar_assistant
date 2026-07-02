@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { isValidYouTubeUrl } from "@/lib/youtube";
 import * as fs from "fs/promises";
 import * as path from "path";
 import * as mm from "music-metadata";
@@ -11,13 +12,6 @@ const DOWNLOAD_TIMEOUT_MS = 120_000;
 
 function sanitizeName(name: string): string {
   return name.replace(/[<>:"/\\|?*]/g, "_").trim();
-}
-
-const YOUTUBE_URL_REGEX =
-  /^https?:\/\/(www\.)?(youtube\.com\/(watch\?.*v=|shorts\/)|youtu\.be\/|music\.youtube\.com\/watch\?.*v=)/;
-
-function isValidYouTubeUrl(url: string): boolean {
-  return YOUTUBE_URL_REGEX.test(url);
 }
 
 function execFilePromise(

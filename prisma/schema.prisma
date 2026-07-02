@@ -223,3 +223,15 @@ model PracticeSession {
   @@index([videoId])
   @@index([startTime])
 }
+
+model BackingTrack {
+  id           String   @id @default(uuid())
+  youtubeUrl   String   @unique
+  videoId      String
+  title        String
+  thumbnailUrl String?
+  rootNote     String
+  scaleType    String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}

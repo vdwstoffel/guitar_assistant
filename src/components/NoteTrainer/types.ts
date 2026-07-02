@@ -14,13 +14,21 @@ export interface NoteTrainerConfig {
   volume: number;
   /** Speak the note name out loud when the cycle starts */
   voiceEnabled: boolean;
+  /** Listen via microphone and auto-advance when the correct pitch class is played */
+  listenEnabled: boolean;
+  /** Stop the exercise after this many consecutive correct hits (0 = endless) */
+  targetStreak: number;
 }
 
 export const DEFAULT_CONFIG: NoteTrainerConfig = {
-  bpm: 60,
+  bpm: 120,
   notePool: 'natural',
   enabledStrings: [true, true, true, true, true, true],
   revealBeats: 2,
   volume: 50,
   voiceEnabled: true,
+  listenEnabled: false,
+  targetStreak: 14,
 };
+
+export type MicStatus = 'off' | 'requesting' | 'listening' | 'denied' | 'error';

@@ -7,5 +7,8 @@ npx prisma generate
 # Push database schema (creates tables if they don't exist)
 npx prisma db push --skip-generate
 
-# Start the application
-exec npm run dev
+# Build the application (incremental — fast when nothing changed)
+npm run build
+
+# Start the application in production mode
+exec npm start

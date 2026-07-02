@@ -8,7 +8,7 @@ import Tuner from './Tuner';
 import { SearchResultTrack, SearchResultBook, SearchResultJamTrack } from '@/types';
 import { useAudioRecorder } from '@/hooks/useAudioRecorder';
 
-type Section = 'home' | 'lessons' | 'videos' | 'fretboard' | 'intervals' | 'chords' | 'tools' | 'circle' | 'tabs' | 'jamtracks' | 'recordings' | 'metrics' | 'knowledge' | 'gear' | 'progressions' | 'caged' | 'scales';
+type Section = 'home' | 'lessons' | 'videos' | 'fretboard' | 'intervals' | 'chords' | 'tools' | 'circle' | 'tabs' | 'jamtracks' | 'recordings' | 'metrics' | 'knowledge' | 'gear' | 'progressions' | 'caged' | 'scales' | 'backing-tracks';
 type TimeSignature = '4/4' | '3/4' | '2/4' | '6/8';
 
 interface TopNavProps {
@@ -315,6 +315,21 @@ const TopNav = memo(function TopNav({ activeSection, onSectionChange, onSearchTr
               </svg>
               <span className="hidden sm:inline">Jam Tracks</span>
               <span className="sm:hidden">Jam</span>
+            </Link>
+            <Link
+              href="/backing-tracks"
+              onClick={() => onSectionChange('backing-tracks')}
+              className={`px-2 sm:px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-1 ${
+                activeSection === 'backing-tracks'
+                  ? 'bg-gray-700 text-white'
+                  : 'text-gray-400 hover:text-white hover:bg-gray-700/50'
+              }`}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M9 10l3-3v10l-3-3H5a2 2 0 01-2-2v0a2 2 0 012-2h4z" />
+              </svg>
+              <span className="hidden sm:inline">Backing Tracks</span>
+              <span className="sm:hidden">Backing</span>
             </Link>
             <Link
               href="/videos"

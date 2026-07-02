@@ -1,0 +1,11 @@
+-- CreateTable
+CREATE TABLE "GuitarTab" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "title" TEXT NOT NULL,
+    "tempo" INTEGER NOT NULL DEFAULT 120,
+    "timeSignature" TEXT NOT NULL DEFAULT '4/4',
+    "tuning" TEXT NOT NULL DEFAULT 'E4 B3 G3 D3 A2 E2',
+    "alphaTex" TEXT NOT NULL DEFAULT '',
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" DATETIME NOT NULL
+);

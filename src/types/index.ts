@@ -213,6 +213,18 @@ export interface SearchResults {
   jamTracks: SearchResultJamTrack[];
 }
 
+export interface BackingTrack {
+  id: string;
+  youtubeUrl: string;
+  videoId: string;
+  title: string;
+  thumbnailUrl: string | null;
+  rootNote: string;
+  scaleType: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // Backwards compatibility aliases (for gradual migration)
 export type Song = Track;
 export type Album = Book;

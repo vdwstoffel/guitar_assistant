@@ -119,7 +119,7 @@ export default function RecordingsView() {
       const res = await fetch(`/api/recordings/${id}`, { method: "DELETE" });
       if (!res.ok) throw new Error("Delete failed");
       if (playingId === id) {
-        audioRef.current?.pause();
+        waveformRefs.current.get(id)?.pause();
         setPlayingId(null);
       }
       setRecordings((prev) => prev.filter((r) => r.id !== id));
