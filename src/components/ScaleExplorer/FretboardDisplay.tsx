@@ -114,9 +114,10 @@ interface NoteDotProps {
   info: NoteDisplayInfo;
   showDegreeColors: boolean;
   isComparing: boolean;
+  opacity?: number;
 }
 
-function NoteDot({ info, showDegreeColors, isComparing }: NoteDotProps) {
+function NoteDot({ info, showDegreeColors, isComparing, opacity }: NoteDotProps) {
   const style = getNoteStyle(info, showDegreeColors, isComparing);
   const textColorClass = isComparing ? getComparisonTextColor(info) : 'text-white';
 
@@ -126,6 +127,7 @@ function NoteDot({ info, showDegreeColors, isComparing }: NoteDotProps) {
       style={{
         width: '32px',
         height: '32px',
+        opacity: opacity ?? 1,
         ...style,
       }}
       onMouseEnter={(e) => {
@@ -162,6 +164,10 @@ export interface FretboardDisplayProps {
   /** Optional per-fret override (used by the note trainer to spotlight one note). Returns node or null. */
   renderOverride?: (stringIndex: number, fret: number) => React.ReactNode | null;
   numFrets?: number; // default 15
+  /** Optional fret window to outline across all 6 strings. */
+  boxOutline?: { lowFret: number; highFret: number } | null;
+  /** How to treat notes outside `boxOutline`. Defaults to 'hide' for backwards compat with ScaleExplorer. */
+  outsideBoxBehavior?: 'hide' | 'dim';
 }
 
 export default function FretboardDisplay({
@@ -171,6 +177,8 @@ export default function FretboardDisplay({
   showNoteNames,
   renderOverride,
   numFrets = DEFAULT_NUM_FRETS,
+  boxOutline = null,
+  outsideBoxBehavior = 'hide',
 }: FretboardDisplayProps) {
   return (
     <div
@@ -236,7 +244,22 @@ export default function FretboardDisplay({
                   {Array.from({ length: numFrets }, (_, fret) => fret + 1).map((fret) => {
                     const info = getNoteDisplayInfo(stringIndex, fret);
                     const override = renderOverride?.(stringIndex, fret) ?? null;
-                    const shouldShowNormal = showNoteNames && info.inScale && info.inSelectedBox;
+
+                    const isOutsideBox =
+                      !!boxOutline && (fret < boxOutline.lowFret || fret > boxOutline.highFret);
+
+                    // 'hide' mode: preserve legacy behavior — gate on info.inSelectedBox.
+                    // 'dim' mode: always render the dot when it's in-scale, but dim it if outside the outline.
+                    const shouldShowNormal =
+                      showNoteNames && info.inScale && (
+                        outsideBoxBehavior === 'dim'
+                          ? true
+                          : info.inSelectedBox
+                      );
+
+                    const noteOpacity =
+                      outsideBoxBehavior === 'dim' && isOutsideBox ? 0.3 : 1;
+
                     return (
                       <div
                         key={fret}
@@ -247,7 +270,12 @@ export default function FretboardDisplay({
                         }}
                       >
                         {override ?? (shouldShowNormal && (
-                          <NoteDot info={info} showDegreeColors={showDegreeColors} isComparing={isComparing} />
+                          <NoteDot
+                            info={info}
+                            showDegreeColors={showDegreeColors}
+                            isComparing={isComparing}
+                            opacity={noteOpacity}
+                          />
                         ))}
                       </div>
                     );
@@ -291,6 +319,24 @@ export default function FretboardDisplay({
               </div>
             ))}
           </div>
+
+          {/* Shape box outline overlay */}
+          {boxOutline && (
+            <div
+              className="absolute pointer-events-none rounded"
+              style={{
+                // The strings-container starts at left:48px (w-12 nut).
+                // Each fret column has flex-1 width; compute % of the full string row.
+                left: `calc(48px + ((${boxOutline.lowFret} - 1) / ${numFrets}) * (100% - 48px))`,
+                width: `calc(((${boxOutline.highFret} - ${boxOutline.lowFret} + 1) / ${numFrets}) * (100% - 48px))`,
+                top: '8px',    // matches py-4 padding on strings container (16px top - 8px inset)
+                bottom: '8px',
+                border: '2px solid rgba(251, 191, 36, 0.7)',
+                backgroundColor: 'rgba(251, 191, 36, 0.08)',
+                boxShadow: '0 0 12px rgba(251, 191, 36, 0.25)',
+              }}
+            />
+          )}
         </div>
       </div>
     </div>
