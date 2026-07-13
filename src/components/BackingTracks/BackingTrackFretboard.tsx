@@ -1,8 +1,22 @@
 'use client';
 
-import { NOTES, SCALE_FORMULAS, getScaleNotes } from '@/lib/musicTheory';
-import type { ScaleType } from '@/lib/musicTheory';
+import { useState } from 'react';
+import {
+  NOTES,
+  SCALE_FORMULAS,
+  getScaleNotes,
+  CAGED_POSITIONS,
+  MAJOR_PENTATONIC_POSITIONS,
+  MINOR_PENTATONIC_POSITIONS,
+  THREE_NPS_POSITIONS,
+  getShapeFretWindow,
+} from '@/lib/musicTheory';
+import type { ScaleType, FretboardShape } from '@/lib/musicTheory';
 import { FretboardDisplay, useFretboardEnhancements } from '@/components/ScaleExplorer';
+
+type ShapeSystem = 'None' | 'CAGED' | 'Pentatonic' | '3NPS';
+
+const SHAPE_SYSTEMS: ShapeSystem[] = ['None', 'CAGED', 'Pentatonic', '3NPS'];
 
 interface BackingTrackFretboardProps {
   rootNote: string;
@@ -17,6 +31,35 @@ export default function BackingTrackFretboard({
   onRootChange,
   onScaleChange,
 }: BackingTrackFretboardProps) {
+  const [shapeSystem, setShapeSystem] = useState<ShapeSystem>('None');
+  const [shapePosition, setShapePosition] = useState<number>(1);
+
+  // Resolve the current shape array based on system + scale.
+  const shapeArray: FretboardShape[] = (() => {
+    switch (shapeSystem) {
+      case 'CAGED':
+        return CAGED_POSITIONS;
+      case '3NPS':
+        return THREE_NPS_POSITIONS;
+      case 'Pentatonic':
+        return scaleType === 'Major Pentatonic'
+          ? (MAJOR_PENTATONIC_POSITIONS as FretboardShape[])
+          : (MINOR_PENTATONIC_POSITIONS as FretboardShape[]);
+      case 'None':
+      default:
+        return [];
+    }
+  })();
+
+  const activeShape = shapeArray.find((s) => s.position === shapePosition) ?? null;
+  const boxOutline = activeShape ? getShapeFretWindow(activeShape, rootNote) : null;
+
+  // Reset shape position to 1 when switching systems (so out-of-range positions vanish).
+  function handleShapeSystemChange(next: ShapeSystem) {
+    setShapeSystem(next);
+    setShapePosition(1);
+  }
+
   const enhancements = useFretboardEnhancements({
     selectedKey: rootNote,
     selectedScale: scaleType as ScaleType,
@@ -29,8 +72,8 @@ export default function BackingTrackFretboard({
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Root + scale selectors */}
-      <div className="flex gap-4 items-end justify-center">
+      {/* Root + scale + shape selectors */}
+      <div className="flex flex-wrap gap-4 items-end justify-center">
         <div className="flex flex-col gap-1">
           <label className="text-amber-200/70 text-xs font-medium">Root</label>
           <select
@@ -55,6 +98,34 @@ export default function BackingTrackFretboard({
             ))}
           </select>
         </div>
+        <div className="flex flex-col gap-1">
+          <label className="text-amber-200/70 text-xs font-medium">Shape system</label>
+          <select
+            value={shapeSystem}
+            onChange={(e) => handleShapeSystemChange(e.target.value as ShapeSystem)}
+            className="px-3 py-2 rounded bg-amber-900/50 text-amber-100 border border-amber-700/50 focus:outline-none focus:border-amber-500"
+          >
+            {SHAPE_SYSTEMS.map((sys) => (
+              <option key={sys} value={sys}>{sys}</option>
+            ))}
+          </select>
+        </div>
+        {shapeSystem !== 'None' && shapeArray.length > 0 && (
+          <div className="flex flex-col gap-1">
+            <label className="text-amber-200/70 text-xs font-medium">Shape</label>
+            <select
+              value={shapePosition}
+              onChange={(e) => setShapePosition(Number(e.target.value))}
+              className="px-3 py-2 rounded bg-amber-900/50 text-amber-100 border border-amber-700/50 focus:outline-none focus:border-amber-500"
+            >
+              {shapeArray.map((s) => (
+                <option key={s.position} value={s.position}>
+                  Shape {s.position} ({s.name})
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
         <p className="text-amber-300 text-sm ml-2 pb-2">{rootNote} {scaleType}</p>
       </div>
 
@@ -84,6 +155,8 @@ export default function BackingTrackFretboard({
         isComparing={enhancements.isComparing}
         showNoteNames={true}
         numFrets={24}
+        boxOutline={boxOutline}
+        outsideBoxBehavior="dim"
       />
     </div>
   );
