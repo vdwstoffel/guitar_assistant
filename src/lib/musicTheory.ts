@@ -595,3 +595,75 @@ export function isInPentatonicBox(
   }
   return false;
 }
+
+// ---------------------------------------------------------------------------
+// Generic fret-window shapes (CAGED, 3NPS)
+// ---------------------------------------------------------------------------
+
+/**
+ * A fret-window shape used for outlining a soloing box on the fretboard.
+ * `fretOffset` is measured from where the root sits on the 6th string,
+ * matching the anchoring convention used by `PentatonicBoxPosition`.
+ */
+export interface FretboardShape {
+  /** 1-indexed position number. */
+  position: number;
+  /** Display label, e.g. "E shape" or "Ionian". */
+  name: string;
+  /** [lowFret, highFret] offsets from the 6th-string root fret. */
+  fretOffset: [number, number];
+}
+
+/**
+ * 5 CAGED positions for the major scale, offsets from the 6th-string root.
+ * These describe rectangular fret windows; the notes inside are whatever
+ * the current scale + root happen to contain.
+ */
+export const CAGED_POSITIONS: FretboardShape[] = [
+  { position: 1, name: 'E shape',  fretOffset: [0, 3] },
+  { position: 2, name: 'D shape',  fretOffset: [2, 5] },
+  { position: 3, name: 'C shape',  fretOffset: [4, 7] },
+  { position: 4, name: 'A shape',  fretOffset: [7, 10] },
+  { position: 5, name: 'G shape',  fretOffset: [9, 12] },
+];
+
+/**
+ * 7 three-note-per-string positions (one per mode of the major scale),
+ * offsets from the 6th-string root.
+ */
+export const THREE_NPS_POSITIONS: FretboardShape[] = [
+  { position: 1, name: 'Ionian',     fretOffset: [0, 4] },
+  { position: 2, name: 'Dorian',     fretOffset: [2, 5] },
+  { position: 3, name: 'Phrygian',   fretOffset: [4, 7] },
+  { position: 4, name: 'Lydian',     fretOffset: [5, 9] },
+  { position: 5, name: 'Mixolydian', fretOffset: [7, 10] },
+  { position: 6, name: 'Aeolian',    fretOffset: [9, 12] },
+  { position: 7, name: 'Locrian',    fretOffset: [11, 14] },
+];
+
+/**
+ * Compute the absolute fret window for a shape given a root note.
+ * If the root lands on fret 0 (open E), the window shifts up an octave
+ * (+12) so it sits on the visible fretboard. `highFret` is clamped to 24.
+ * Returns null if the shape falls entirely off the visible fretboard.
+ */
+export function getShapeFretWindow(
+  shape: FretboardShape,
+  rootNote: string,
+): { lowFret: number; highFret: number } | null {
+  let rootFret = getRootFretOn6thString(rootNote);
+  let lowFret = rootFret + shape.fretOffset[0];
+  let highFret = rootFret + shape.fretOffset[1];
+
+  // Shift to an octave that fits on the fretboard.
+  if (lowFret < 1) {
+    lowFret += 12;
+    highFret += 12;
+  }
+
+  if (lowFret > 24) return null;
+  if (highFret > 24) highFret = 24;
+  if (highFret < lowFret) return null;
+
+  return { lowFret, highFret };
+}
