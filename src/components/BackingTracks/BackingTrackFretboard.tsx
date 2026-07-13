@@ -43,8 +43,8 @@ export default function BackingTrackFretboard({
         return THREE_NPS_POSITIONS;
       case 'Pentatonic':
         return scaleType === 'Major Pentatonic'
-          ? (MAJOR_PENTATONIC_POSITIONS as FretboardShape[])
-          : (MINOR_PENTATONIC_POSITIONS as FretboardShape[]);
+          ? MAJOR_PENTATONIC_POSITIONS
+          : MINOR_PENTATONIC_POSITIONS;
       case 'None':
       default:
         return [];
@@ -120,7 +120,7 @@ export default function BackingTrackFretboard({
             >
               {shapeArray.map((s) => (
                 <option key={s.position} value={s.position}>
-                  Shape {s.position} ({s.name})
+                  {shapeSystem === 'Pentatonic' ? s.name : `Shape ${s.position} (${s.name})`}
                 </option>
               ))}
             </select>
