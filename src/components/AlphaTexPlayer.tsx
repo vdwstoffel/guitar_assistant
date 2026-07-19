@@ -10,6 +10,11 @@ import {
   createDefaultTabData,
 } from "@/lib/tabData";
 import { usePracticeSessionTracker } from "@/hooks/usePracticeSessionTracker";
+import {
+  applyAlphaTabSink,
+  getAudioSinkPreference,
+  subscribeToAudioSinkChanges,
+} from "@/lib/audioSink";
 import VisualTabEditor from "./VisualTabEditor";
 
 interface AlphaTexPlayerProps {
@@ -106,6 +111,15 @@ export default function AlphaTexPlayer({ track, tab, onClose, onSave }: AlphaTex
         api.isLooping = isLooping;
         apiRef.current = api;
 
+        // Route AlphaTab's synth output to the user-selected audio device.
+        // Fires when the synth is ready; re-applies when the preference changes.
+        const applySink = () => {
+          void applyAlphaTabSink(api.player?.output, getAudioSinkPreference());
+        };
+        api.playerReady.on(applySink);
+        const unsubscribeSink = subscribeToAudioSinkChanges(applySink);
+        (api as any).__unsubscribeSink = unsubscribeSink;
+
         api.playerStateChanged.on((e: any) => {
           if (!destroyed) {
             const playing = e.state === 1;
@@ -158,6 +172,8 @@ export default function AlphaTexPlayer({ track, tab, onClose, onSave }: AlphaTex
       destroyed = true;
       if (apiRef.current) {
         try {
+          const unsub = (apiRef.current as any).__unsubscribeSink;
+          if (typeof unsub === "function") unsub();
           apiRef.current.stop();
           apiRef.current.destroy();
         } catch { /* ignore */ }

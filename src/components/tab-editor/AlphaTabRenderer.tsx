@@ -1,6 +1,11 @@
 'use client';
 
 import { useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
+import {
+  applyAlphaTabSink,
+  getAudioSinkPreference,
+  subscribeToAudioSinkChanges,
+} from '@/lib/audioSink';
 
 export interface Track {
   index: number;
@@ -79,6 +84,14 @@ const AlphaTabRenderer = forwardRef<AlphaTabRendererRef, AlphaTabRendererProps>(
 
           apiRef.current = new AlphaTabApi(containerRef.current!, settings);
 
+          // Route synth output to the user-selected audio device.
+          const applySink = () => {
+            void applyAlphaTabSink(apiRef.current?.player?.output, getAudioSinkPreference());
+          };
+          apiRef.current.playerReady.on(applySink);
+          const unsubscribeSink = subscribeToAudioSinkChanges(applySink);
+          apiRef.current.__unsubscribeSink = unsubscribeSink;
+
           // Set up event listeners
           apiRef.current.scoreLoaded.on(() => {
             if (!apiRef.current || !apiRef.current.score) return;
@@ -115,6 +128,8 @@ const AlphaTabRenderer = forwardRef<AlphaTabRendererRef, AlphaTabRendererProps>(
       return () => {
         if (apiRef.current) {
           try {
+            const unsub = apiRef.current.__unsubscribeSink;
+            if (typeof unsub === 'function') unsub();
             apiRef.current.destroy();
             apiRef.current = null;
           } catch (e) {

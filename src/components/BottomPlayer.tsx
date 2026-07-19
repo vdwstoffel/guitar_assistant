@@ -8,7 +8,14 @@ import { playCountIn } from "@/lib/clickGenerator";
 
 import KeyboardShortcutsHelp from "./KeyboardShortcutsHelp";
 import MarkerNameDialog from "./MarkerNameDialog";
+import AudioOutputPicker from "./AudioOutputPicker";
 import { usePracticeSessionTracker } from "@/hooks/usePracticeSessionTracker";
+import {
+  AUTO_SPARK_ID,
+  applyAudioContextSink,
+  getAudioSinkPreference,
+  setAudioSinkPreference,
+} from "@/lib/audioSink";
 
 export interface MarkerBarState {
   showMarkers: boolean;
@@ -126,6 +133,21 @@ function BottomPlayer({
     }
     return false;
   });
+
+  // Audio output device (persisted).
+  //   AUTO_SPARK_ID = use Spark 2 if detected, else system default
+  //   "default"     = follow system setting
+  //   "<deviceId>"  = specific device
+  const [audioOutputDeviceId, setAudioOutputDeviceIdState] = useState<string>(
+    () => (typeof window !== 'undefined' ? getAudioSinkPreference() : AUTO_SPARK_ID),
+  );
+  const audioOutputDeviceIdRef = useRef(audioOutputDeviceId);
+  audioOutputDeviceIdRef.current = audioOutputDeviceId;
+  // Broadcast preference changes so AlphaTab-based players can re-route too.
+  const setAudioOutputDeviceId = useCallback((next: string) => {
+    setAudioOutputDeviceIdState(next);
+    setAudioSinkPreference(next);
+  }, []);
 
   // Keep A/B loop refs in sync with state
   useEffect(() => { loopARef.current = loopA; }, [loopA]);
@@ -330,6 +352,11 @@ function BottomPlayer({
           volumeGainNodeRef.current.connect(ctx.destination);
         }
         applyNormGain();
+        void applyAudioContextSink(
+          audioContextRef.current,
+          volumeGainNodeRef.current,
+          audioOutputDeviceIdRef.current,
+        );
       } catch (e) {
         console.error("Failed to set up audio normalization:", e);
       }
@@ -365,12 +392,17 @@ function BottomPlayer({
     });
 
     ws.on("play", () => {
+      console.log("[BP] ws:play event  time=", ws.getCurrentTime(), " stopMarker=", stopMarker, " loopA/B=", loopARef.current, loopBRef.current, " lastSeekPos=", lastSeekPositionRef.current);
       if (isMountedRef.current) setIsPlaying(true);
       sessionTrackerRef.current.onPlay();
     });
     ws.on("pause", () => {
+      console.log("[BP] ws:pause event  time=", ws.getCurrentTime(), " stopMarker=", stopMarker, " loopA/B=", loopARef.current, loopBRef.current, " lastSeekPos=", lastSeekPositionRef.current);
       if (isMountedRef.current) setIsPlaying(false);
       sessionTrackerRef.current.onPause();
+    });
+    ws.on("seeking", (time) => {
+      console.log("[BP] ws:seeking event  time=", time);
     });
     ws.on("finish", () => {
       sessionTrackerRef.current.onFinish();
@@ -538,6 +570,22 @@ function BottomPlayer({
     }
   }, [volume, isLoading]);
 
+  // Route audio to the selected output device via AudioContext.setSinkId.
+  // Re-applies on devicechange so unplug/replug of the preferred device is honored.
+  useEffect(() => {
+    const reapply = () => {
+      void applyAudioContextSink(
+        audioContextRef.current,
+        volumeGainNodeRef.current,
+        audioOutputDeviceId,
+      );
+    };
+    reapply();
+    const md = navigator.mediaDevices;
+    md?.addEventListener?.("devicechange", reapply);
+    return () => md?.removeEventListener?.("devicechange", reapply);
+  }, [audioOutputDeviceId]);
+
   // Apply normalization gain when toggle or track changes
   useEffect(() => {
     applyNormGain();
@@ -638,6 +686,7 @@ function BottomPlayer({
 
     // Only stop if we're approaching the stop marker from before (not already past it)
     if (currentTime >= stopMarker - 0.05 && currentTime < stopMarker + 1) {
+      console.log("[BP] stopMarker effect TRIGGERED  currentTime=", currentTime, " stopMarker=", stopMarker, " repeat=", isRepeatEnabledRef.current);
       if (isRepeatEnabledRef.current) {
         restartPlaybackRef.current();
       } else {
@@ -749,7 +798,9 @@ function BottomPlayer({
     if (!wavesurferRef.current || !duration) return;
 
     // Check WaveSurfer's current playing state directly to avoid race conditions
-    if (wavesurferRef.current.isPlaying()) {
+    const wsPlaying = wavesurferRef.current.isPlaying();
+    console.log("[BP] togglePlay  wsPlaying=", wsPlaying, " time=", wavesurferRef.current.getCurrentTime(), " isCountingIn=", isCountingIn);
+    if (wsPlaying) {
       wavesurferRef.current.pause();
       return;
     }
@@ -844,6 +895,7 @@ function BottomPlayer({
 
   const jumpToMarker = useCallback(async (timestamp: number) => {
     if (!wavesurferRef.current || !duration) return;
+    console.log("[BP] jumpToMarker  timestamp=", timestamp, " duration=", duration, " tempo=", track?.tempo);
 
     // Clear stop marker if jumping to the marker that is currently the stop point
     setStopMarker((prev) => (prev === timestamp ? null : prev));
@@ -1169,7 +1221,7 @@ function BottomPlayer({
           <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-4 text-xs">
             {/* Speed */}
             <div className="flex items-center gap-1 sm:gap-2">
-              {[60, 80, 90, 100].map((preset) => (
+              {[60, 70, 80, 90, 100].map((preset) => (
                 <button
                   key={preset}
                   onClick={() => handlePlaybackSpeed(preset)}
@@ -1263,6 +1315,11 @@ function BottomPlayer({
 
             {/* Secondary toggles: normalize, markers, tabs — icon-only with badges */}
             <div className="flex items-center gap-1 pl-2 sm:pl-3 ml-1 sm:ml-2 border-l border-gray-700">
+                <AudioOutputPicker
+                  deviceId={audioOutputDeviceId}
+                  onChange={setAudioOutputDeviceId}
+                />
+
                 {track?.lufs != null && (
                   <button
                     onClick={() => {
