@@ -7,3 +7,4 @@ export { useFretboardEnhancements } from './hooks/useFretboardEnhancements';
 export type { LabelMode, NoteDisplayInfo, ComparisonClass, FretboardEnhancementsState } from './types';
 export { default as FretboardDisplay } from './FretboardDisplay';
 export type { FretboardDisplayProps } from './FretboardDisplay';
+export { default as ScaleChords } from './ScaleChords';
