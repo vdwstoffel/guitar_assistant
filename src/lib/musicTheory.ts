@@ -239,6 +239,108 @@ export function getChordNotes(root: string, chordType: string): string[] {
   return formula.map((semitones) => getNoteName(rootIndex + semitones));
 }
 
+// ---------------------------------------------------------------------------
+// Diatonic chords for a scale
+// ---------------------------------------------------------------------------
+
+/** A chord built on one degree of a scale. */
+export interface DiatonicChord {
+  /** Full chord symbol, e.g. "Am", "F", "A#dim". */
+  name: string;
+  /** Root note name of the chord, e.g. "A". */
+  root: string;
+  quality: 'Major' | 'Minor' | 'Diminished' | 'Augmented';
+  /** Roman-numeral function, e.g. "i", "VI", "vii°", "III+". */
+  roman: string;
+  /** 0-based position of the chord within the scale. */
+  degreeIndex: number;
+}
+
+/**
+ * Pentatonic/blues scales have 5-6 notes and no clean stack-of-thirds triads,
+ * so their diatonic chords are taken from a parent heptatonic scale of the
+ * same root.
+ */
+const PARENT_SCALE_FOR_CHORDS: Record<string, ScaleType> = {
+  'Minor Pentatonic': 'Minor',
+  'Major Pentatonic': 'Major',
+  'Blues': 'Minor',
+};
+
+const ROMAN_NUMERALS = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII'];
+
+const QUALITY_SUFFIX: Record<DiatonicChord['quality'], string> = {
+  Major: '',
+  Minor: 'm',
+  Diminished: 'dim',
+  Augmented: 'aug',
+};
+
+/** Classify a triad from the semitone sizes of its 3rd and 5th above the root. */
+function triadQuality(
+  thirdSemis: number,
+  fifthSemis: number,
+): DiatonicChord['quality'] {
+  if (thirdSemis === 4 && fifthSemis === 7) return 'Major';
+  if (thirdSemis === 3 && fifthSemis === 7) return 'Minor';
+  if (thirdSemis === 3 && fifthSemis === 6) return 'Diminished';
+  if (thirdSemis === 4 && fifthSemis === 8) return 'Augmented';
+  // Fallback for unusual stacks: classify by the third.
+  return thirdSemis <= 3 ? 'Minor' : 'Major';
+}
+
+/** Build the roman numeral for a degree given its chord quality. */
+function romanFor(degreeIndex: number, quality: DiatonicChord['quality']): string {
+  const base = ROMAN_NUMERALS[degreeIndex];
+  switch (quality) {
+    case 'Major':
+      return base;
+    case 'Augmented':
+      return base + '+';
+    case 'Minor':
+      return base.toLowerCase();
+    case 'Diminished':
+      return base.toLowerCase() + '°';
+  }
+}
+
+/**
+ * Return the diatonic chords for a scale, built by stacking thirds within the
+ * scale's own notes. For pentatonic/blues scales the chords come from a parent
+ * heptatonic scale (see PARENT_SCALE_FOR_CHORDS); `parentScale` names that
+ * scale, or is null when the requested scale is used directly.
+ *
+ * Returns empty chords for "None" or any scale that is not 7 notes after the
+ * parent mapping.
+ */
+export function getDiatonicChords(
+  root: string,
+  scaleType: string,
+): { chords: DiatonicChord[]; parentScale: ScaleType | null } {
+  const parentScale = PARENT_SCALE_FOR_CHORDS[scaleType] ?? null;
+  const effectiveScale = parentScale ?? scaleType;
+  const notes = getScaleNotes(root, effectiveScale);
+  if (notes.length !== 7) return { chords: [], parentScale };
+
+  const chords: DiatonicChord[] = notes.map((chordRoot, i) => {
+    const third = notes[(i + 2) % 7];
+    const fifth = notes[(i + 4) % 7];
+    const quality = triadQuality(
+      getInterval(chordRoot, third),
+      getInterval(chordRoot, fifth),
+    );
+    return {
+      root: chordRoot,
+      quality,
+      name: chordRoot + QUALITY_SUFFIX[quality],
+      roman: romanFor(i, quality),
+      degreeIndex: i,
+    };
+  });
+
+  return { chords, parentScale };
+}
+
 /**
  * Check whether a note belongs to a given scale.
  * When scaleType is "None" or unrecognized, returns true (all notes pass).
