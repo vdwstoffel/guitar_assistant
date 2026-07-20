@@ -1,3 +1,5 @@
+import { CHORD_FORMULAS, getNoteIndex, STANDARD_TUNING_INDICES } from '@/lib/musicTheory';
+
 /**
  * Guitar chord voicing definitions.
  *
@@ -444,4 +446,38 @@ export function getAvailableTypesForRoot(root: string): string[] {
     }
   }
   return Array.from(types);
+}
+
+/**
+ * Build a movable, barre-style voicing for any root + chord type, rooted on the
+ * 6th string. Used as a fallback when no hand-authored voicing exists in
+ * CHORD_VOICINGS. For each string it picks the lowest chord tone within a
+ * 4-fret window starting at the root fret; a string with no chord tone in that
+ * window is muted. Returns null only for an unknown chord type.
+ *
+ * The window approach reproduces the standard E-shape / Em-shape barres for
+ * Major / Minor and produces valid movable shapes for Diminished / Augmented.
+ */
+export function buildMovableVoicing(root: string, type: string): ChordVoicing | null {
+  const formula = CHORD_FORMULAS[type];
+  const rootIndex = getNoteIndex(root);
+  if (!formula || rootIndex === -1) return null;
+
+  const chordPitchClasses = new Set(formula.map((semitones) => (rootIndex + semitones) % 12));
+  // Fret of the root on the 6th string (open note index STANDARD_TUNING_INDICES[0]).
+  const baseFret = (((rootIndex - STANDARD_TUNING_INDICES[0]) % 12) + 12) % 12;
+
+  const frets: (number | null)[] = STANDARD_TUNING_INDICES.map((openIndex, stringIdx) => {
+    if (stringIdx === 0) return baseFret; // root on the 6th string
+    for (let f = baseFret; f <= baseFret + 3; f++) {
+      if (chordPitchClasses.has((openIndex + f) % 12)) return f;
+    }
+    return null; // no chord tone in the window -> muted
+  });
+
+  const fingers: (number | null)[] = frets.map((f) =>
+    f === null ? null : f === baseFret ? 1 : 2,
+  );
+
+  return { root, type, frets, fingers, position: baseFret };
 }

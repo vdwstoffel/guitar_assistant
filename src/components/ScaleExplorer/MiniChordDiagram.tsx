@@ -1,6 +1,6 @@
 import { getNoteName, getChordNotes } from '@/lib/musicTheory';
 import type { DiatonicChord } from '@/lib/musicTheory';
-import { getVoicingsForChord } from '@/lib/chordVoicings';
+import { getVoicingsForChord, buildMovableVoicing } from '@/lib/chordVoicings';
 import type { ChordVoicing } from '@/lib/chordVoicings';
 
 // ---------------------------------------------------------------------------
@@ -45,7 +45,7 @@ function typeForQuality(quality: DiatonicChord['quality']): string {
  */
 export default function MiniChordDiagram({ root, quality, chordName }: MiniChordDiagramProps) {
   const type = typeForQuality(quality);
-  const voicing: ChordVoicing | undefined = getVoicingsForChord(root, type)[0];
+  const voicing: ChordVoicing | null = getVoicingsForChord(root, type)[0] ?? buildMovableVoicing(root, type);
   const rootNote = getChordNotes(root, type)[0] ?? root;
 
   if (!voicing) {
