@@ -46,6 +46,7 @@ function typeForQuality(quality: DiatonicChord['quality']): string {
 export default function MiniChordDiagram({ root, quality, chordName }: MiniChordDiagramProps) {
   const type = typeForQuality(quality);
   const voicing: ChordVoicing | undefined = getVoicingsForChord(root, type)[0];
+  const rootNote = getChordNotes(root, type)[0] ?? root;
 
   if (!voicing) {
     const notes = getChordNotes(root, type);
@@ -111,7 +112,7 @@ export default function MiniChordDiagram({ root, quality, chordName }: MiniChord
         const x = MARGIN_LEFT + s * STRING_SPACING;
         const y = MARGIN_TOP + (displayFret - 0.5) * FRET_SPACING;
         const noteName = getNoteName(TUNING_INDICES[s] + fret);
-        const isRoot = noteName === root;
+        const isRoot = noteName === rootNote;
         return (
           <circle key={`d${s}`} cx={x} cy={y} r={DOT_RADIUS} fill={isRoot ? '#d97706' : '#0891b2'} stroke={isRoot ? '#b45309' : '#0e7490'} strokeWidth={1} />
         );
