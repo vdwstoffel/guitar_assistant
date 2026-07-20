@@ -585,6 +585,141 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 
 ---
 
+## Task 5: Movable-shape fallback for chords without a hand-authored voicing
+
+**Context:** The `chordVoicings` library only covers a limited root set (dim/aug are thin, sharp roots largely absent), so many diatonic chords currently render as a text list. This task adds a generic movable (barre-style) voicing generator so every diatonic chord gets a real diagram; the text fallback becomes a last resort only for an unknown chord type.
+
+**Files:**
+- Modify: `src/lib/chordVoicings.ts` (add `buildMovableVoicing`)
+- Modify: `src/components/ScaleExplorer/MiniChordDiagram.tsx` (use the fallback)
+
+**Interfaces:**
+- Consumes: `CHORD_FORMULAS`, `getNoteIndex`, `STANDARD_TUNING_INDICES` from `@/lib/musicTheory` (all exported); `ChordVoicing` from `@/lib/chordVoicings`.
+- Produces: `export function buildMovableVoicing(root: string, type: string): ChordVoicing | null`.
+
+- [ ] **Step 1: Add the generator to `src/lib/chordVoicings.ts`**
+
+Add this import at the top of `src/lib/chordVoicings.ts` (merge with any existing `@/lib/musicTheory` import if present; otherwise add a new line):
+
+```ts
+import { CHORD_FORMULAS, getNoteIndex, STANDARD_TUNING_INDICES } from '@/lib/musicTheory';
+```
+
+Append this function at the end of `src/lib/chordVoicings.ts` (after `getAvailableTypesForRoot`):
+
+```ts
+/**
+ * Build a movable, barre-style voicing for any root + chord type, rooted on the
+ * 6th string. Used as a fallback when no hand-authored voicing exists in
+ * CHORD_VOICINGS. For each string it picks the lowest chord tone within a
+ * 4-fret window starting at the root fret; a string with no chord tone in that
+ * window is muted. Returns null only for an unknown chord type.
+ *
+ * The window approach reproduces the standard E-shape / Em-shape barres for
+ * Major / Minor and produces valid movable shapes for Diminished / Augmented.
+ */
+export function buildMovableVoicing(root: string, type: string): ChordVoicing | null {
+  const formula = CHORD_FORMULAS[type];
+  const rootIndex = getNoteIndex(root);
+  if (!formula || rootIndex === -1) return null;
+
+  const chordPitchClasses = new Set(formula.map((semitones) => (rootIndex + semitones) % 12));
+  // Fret of the root on the 6th string (open note index STANDARD_TUNING_INDICES[0]).
+  const baseFret = (((rootIndex - STANDARD_TUNING_INDICES[0]) % 12) + 12) % 12;
+
+  const frets: (number | null)[] = STANDARD_TUNING_INDICES.map((openIndex, stringIdx) => {
+    if (stringIdx === 0) return baseFret; // root on the 6th string
+    for (let f = baseFret; f <= baseFret + 3; f++) {
+      if (chordPitchClasses.has((openIndex + f) % 12)) return f;
+    }
+    return null; // no chord tone in the window -> muted
+  });
+
+  const fingers: (number | null)[] = frets.map((f) =>
+    f === null ? null : f === baseFret ? 1 : 2,
+  );
+
+  return { root, type, frets, fingers, position: baseFret };
+}
+```
+
+- [ ] **Step 2: Use the fallback in `MiniChordDiagram.tsx`**
+
+In `src/components/ScaleExplorer/MiniChordDiagram.tsx`, add `buildMovableVoicing` to the existing import from `@/lib/chordVoicings`:
+
+```tsx
+import { getVoicingsForChord, buildMovableVoicing } from '@/lib/chordVoicings';
+```
+
+Then change the voicing lookup line from:
+
+```tsx
+  const voicing: ChordVoicing | undefined = getVoicingsForChord(root, type)[0];
+```
+
+to:
+
+```tsx
+  const voicing: ChordVoicing | null = getVoicingsForChord(root, type)[0] ?? buildMovableVoicing(root, type);
+```
+
+Leave the existing `if (!voicing)` text-fallback block as-is (it now only triggers for an unknown chord type).
+
+- [ ] **Step 3: Verify generator output with a throwaway script**
+
+Create `movable-check.ts` in the repo root:
+
+```ts
+import { buildMovableVoicing } from './src/lib/chordVoicings.ts';
+
+function assertEq(label: string, actual: unknown, expected: unknown) {
+  const a = JSON.stringify(actual);
+  const e = JSON.stringify(expected);
+  if (a !== e) {
+    console.error(`FAIL ${label}\n  expected ${e}\n  actual   ${a}`);
+    process.exitCode = 1;
+  } else {
+    console.log(`ok   ${label}`);
+  }
+}
+
+// C Major -> E-shape barre at fret 8: [8,10,10,9,8,8]
+assertEq('C Major frets', buildMovableVoicing('C', 'Major')?.frets, [8, 10, 10, 9, 8, 8]);
+// C Minor -> Em-shape barre at fret 8: [8,10,10,8,8,8]
+assertEq('C Minor frets', buildMovableVoicing('C', 'Minor')?.frets, [8, 10, 10, 8, 8, 8]);
+// F# Major -> baseFret 2: [2,4,4,3,2,2]
+assertEq('F# Major frets', buildMovableVoicing('F#', 'Major')?.frets, [2, 4, 4, 3, 2, 2]);
+// C Augmented -> [8,11,10,9,9,8]
+assertEq('C Augmented frets', buildMovableVoicing('C', 'Augmented')?.frets, [8, 11, 10, 9, 9, 8]);
+// C Diminished -> [8,9,10,8,null,8]
+assertEq('C Diminished frets', buildMovableVoicing('C', 'Diminished')?.frets, [8, 9, 10, 8, null, 8]);
+// position equals baseFret
+assertEq('C Major position', buildMovableVoicing('C', 'Major')?.position, 8);
+// Unknown type -> null
+assertEq('Unknown null', buildMovableVoicing('C', 'Nonsense'), null);
+```
+
+Run: `cd /home/stoffel/Documents/guitar_assistant && node movable-check.ts`
+Expected: all lines `ok`, exit code 0. Fix `buildMovableVoicing` if any `FAIL`.
+
+- [ ] **Step 4: Type-check**
+
+Run: `cd /home/stoffel/Documents/guitar_assistant && npx tsc --noEmit 2>&1 | grep -v "generated/prisma" | grep -iE "chordVoicings|MiniChordDiagram" || echo "no type errors"`
+Expected: `no type errors`
+
+- [ ] **Step 5: Delete the throwaway script and commit**
+
+```bash
+cd /home/stoffel/Documents/guitar_assistant
+rm movable-check.ts
+git add src/lib/chordVoicings.ts src/components/ScaleExplorer/MiniChordDiagram.tsx
+git commit -m "feat(fretboard): generate movable chord shapes for uncovered chords
+
+Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
+```
+
+---
+
 ## Self-Review Notes
 
 - **Spec coverage:** theory helper (Task 1), mini diagrams with notes fallback (Task 2), panel with chord cards + progressions (Task 3), wiring gated on `None`/trainer (Task 4). All spec sections covered.
