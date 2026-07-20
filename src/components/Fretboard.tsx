@@ -15,6 +15,7 @@ import {
   DegreeLegend,
   ScaleComparisonLegend,
   FretboardDisplay,
+  ScaleChords,
 } from '@/components/ScaleExplorer';
 import { useNoteTrainer, NoteTrainerControls } from '@/components/NoteTrainer';
 
@@ -219,6 +220,11 @@ export default function Fretboard() {
               <p className="text-red-400">Red notes indicate the root note of the scale</p>
             )}
           </div>
+        )}
+
+        {/* Chords that work well with the selected scale */}
+        {!trainer.isRunning && selectedScale !== 'None' && (
+          <ScaleChords root={selectedKey} scaleType={selectedScale} />
         )}
       </div>
     </div>
