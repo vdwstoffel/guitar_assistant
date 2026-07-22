@@ -5,9 +5,18 @@ import { useState, useEffect, useRef, useCallback, memo } from 'react';
 import GlobalSearch from './GlobalSearch';
 import PracticeNextDropdown from './PracticeNextDropdown';
 import Tuner from './Tuner';
+import AudioOutputPicker from './AudioOutputPicker';
 import { SearchResultTrack, SearchResultBook, SearchResultJamTrack } from '@/types';
 import { useAudioRecorder } from '@/hooks/useAudioRecorder';
-import { routeContextToSink, subscribeToAudioSinkChanges } from "@/lib/audioSink";
+import {
+  routeContextToSink,
+  getAudioSinkPreference,
+  setAudioSinkPreference,
+  subscribeToAudioSinkChanges,
+  getAudioInputPreference,
+  setAudioInputPreference,
+  subscribeToAudioInputChanges,
+} from "@/lib/audioSink";
 
 type Section = 'home' | 'lessons' | 'videos' | 'fretboard' | 'intervals' | 'chords' | 'tools' | 'circle' | 'tabs' | 'jamtracks' | 'recordings' | 'metrics' | 'knowledge' | 'gear' | 'progressions' | 'caged' | 'scales' | 'backing-tracks';
 type TimeSignature = '4/4' | '3/4' | '2/4' | '6/8';
@@ -25,6 +34,12 @@ const TopNav = memo(function TopNav({ activeSection, onSectionChange, onSearchTr
   const [showMetronome, setShowMetronome] = useState(false);
   const [showTuner, setShowTuner] = useState(false);
   const [showRecorder, setShowRecorder] = useState(false);
+  const [outputDeviceId, setOutputDeviceId] = useState<string>(() =>
+    typeof window !== "undefined" ? getAudioSinkPreference() : "auto-spark",
+  );
+  const [inputDeviceId, setInputDeviceId] = useState<string>(() =>
+    typeof window !== "undefined" ? getAudioInputPreference() : "auto-spark",
+  );
   const [recorderUploading, setRecorderUploading] = useState(false);
   const [showTheory, setShowTheory] = useState(false);
   const [showMobileSearch, setShowMobileSearch] = useState(false);
@@ -91,6 +106,12 @@ const TopNav = memo(function TopNav({ activeSection, onSectionChange, onSearchTr
     return subscribeToAudioSinkChanges(() => {
       void routeContextToSink(audioContextRef.current);
     });
+  }, []);
+
+  useEffect(() => {
+    const unsubOut = subscribeToAudioSinkChanges(setOutputDeviceId);
+    const unsubIn = subscribeToAudioInputChanges(setInputDeviceId);
+    return () => { unsubOut(); unsubIn(); };
   }, []);
 
   const playClick = useCallback((time: number, isAccent: boolean) => {
@@ -277,6 +298,14 @@ const TopNav = memo(function TopNav({ activeSection, onSectionChange, onSearchTr
               <span className="w-2 h-2 bg-red-300 rounded-full animate-pulse" />
             )}
           </button>
+
+          {/* Audio device picker */}
+          <AudioOutputPicker
+            outputDeviceId={outputDeviceId}
+            onOutputChange={(id) => { setOutputDeviceId(id); setAudioSinkPreference(id); }}
+            inputDeviceId={inputDeviceId}
+            onInputChange={(id) => { setInputDeviceId(id); setAudioInputPreference(id); }}
+          />
 
           {/* Centered nav items */}
           <div className="flex-1 flex gap-1 sm:gap-2 justify-center">
