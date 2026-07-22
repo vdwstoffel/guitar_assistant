@@ -7,6 +7,7 @@ import PracticeNextDropdown from './PracticeNextDropdown';
 import Tuner from './Tuner';
 import { SearchResultTrack, SearchResultBook, SearchResultJamTrack } from '@/types';
 import { useAudioRecorder } from '@/hooks/useAudioRecorder';
+import { routeContextToSink, subscribeToAudioSinkChanges } from "@/lib/audioSink";
 
 type Section = 'home' | 'lessons' | 'videos' | 'fretboard' | 'intervals' | 'chords' | 'tools' | 'circle' | 'tabs' | 'jamtracks' | 'recordings' | 'metrics' | 'knowledge' | 'gear' | 'progressions' | 'caged' | 'scales' | 'backing-tracks';
 type TimeSignature = '4/4' | '3/4' | '2/4' | '6/8';
@@ -86,6 +87,12 @@ const TopNav = memo(function TopNav({ activeSection, onSectionChange, onSearchTr
   useEffect(() => { bpmRef.current = bpm; }, [bpm]);
   useEffect(() => { timeSignatureRef.current = timeSignature; }, [timeSignature]);
 
+  useEffect(() => {
+    return subscribeToAudioSinkChanges(() => {
+      void routeContextToSink(audioContextRef.current);
+    });
+  }, []);
+
   const playClick = useCallback((time: number, isAccent: boolean) => {
     if (!audioContextRef.current) return;
     const osc = audioContextRef.current.createOscillator();
@@ -122,6 +129,7 @@ const TopNav = memo(function TopNav({ activeSection, onSectionChange, onSearchTr
     if (audioContextRef.current.state === 'suspended') {
       audioContextRef.current.resume();
     }
+    void routeContextToSink(audioContextRef.current);
     currentBeatRef.current = 0;
     setCurrentBeat(0);
     nextNoteTimeRef.current = audioContextRef.current.currentTime;
