@@ -184,14 +184,14 @@ export default function AudioOutputPicker({
               kind="audiooutput"
               devices={devices}
               selectedId={outputDeviceId}
-              onSelect={(id) => { onOutputChange(id); }}
+              onSelect={(id) => { onOutputChange(id); setOpen(false); }}
             />
             <DeviceSection
               title="Audio input"
               kind="audioinput"
               devices={devices}
               selectedId={inputDeviceId}
-              onSelect={(id) => { onInputChange(id); }}
+              onSelect={(id) => { onInputChange(id); setOpen(false); }}
             />
 
             <div className="border-t border-gray-700 mt-1 pt-1 px-3 pb-2">
