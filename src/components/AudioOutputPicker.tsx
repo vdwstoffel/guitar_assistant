@@ -173,7 +173,7 @@ export default function AudioOutputPicker({
             role="listbox"
             style={{
               position: "fixed",
-              bottom: window.innerHeight - buttonRect.top + 8,
+              top: buttonRect.bottom + 8,
               right: Math.max(8, window.innerWidth - buttonRect.right),
               zIndex: 100,
             }}
