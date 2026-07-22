@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { routeContextToSink, subscribeToAudioSinkChanges } from "@/lib/audioSink";
 
 type TimeSignature = '4/4' | '3/4' | '2/4' | '6/8';
 
@@ -49,6 +50,12 @@ export default function Metronome() {
     timeSignatureRef.current = timeSignature;
   }, [timeSignature]);
 
+  useEffect(() => {
+    return subscribeToAudioSinkChanges(() => {
+      void routeContextToSink(audioContextRef.current);
+    });
+  }, []);
+
   const playClick = useCallback((time: number, isAccent: boolean) => {
     if (!audioContextRef.current) return;
 
@@ -94,6 +101,8 @@ export default function Metronome() {
     if (audioContextRef.current.state === 'suspended') {
       audioContextRef.current.resume();
     }
+
+    void routeContextToSink(audioContextRef.current);
 
     currentBeatRef.current = 0;
     setCurrentBeat(0);

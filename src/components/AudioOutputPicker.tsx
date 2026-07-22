@@ -4,8 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 interface AudioOutputPickerProps {
-  deviceId: string;
-  onChange: (deviceId: string) => void;
+  outputDeviceId: string;
+  onOutputChange: (deviceId: string) => void;
+  inputDeviceId: string;
+  onInputChange: (deviceId: string) => void;
 }
 
 const DEFAULT_DEVICE_ID = "default";
@@ -20,7 +22,82 @@ function detectSupport(): boolean {
   return typeof probe.setSinkId === "function";
 }
 
-export default function AudioOutputPicker({ deviceId, onChange }: AudioOutputPickerProps) {
+function DeviceSection({
+  title,
+  kind,
+  devices,
+  selectedId,
+  onSelect,
+}: {
+  title: string;
+  kind: "audiooutput" | "audioinput";
+  devices: MediaDeviceInfo[];
+  selectedId: string;
+  onSelect: (id: string) => void;
+}) {
+  const sparkDevice = devices.find(
+    (d) => d.kind === kind && SPARK_LABEL_RE.test(d.label) && d.deviceId !== COMMUNICATIONS_DEVICE_ID,
+  );
+  const visible = devices.filter(
+    (d) =>
+      d.kind === kind &&
+      d.deviceId &&
+      d.deviceId !== DEFAULT_DEVICE_ID &&
+      d.deviceId !== COMMUNICATIONS_DEVICE_ID,
+  );
+  return (
+    <>
+      <div className="px-3 py-1.5 text-[10px] uppercase tracking-wide text-gray-500 border-b border-gray-700">
+        {title}
+      </div>
+      <button
+        role="option"
+        aria-selected={selectedId === AUTO_SPARK_ID}
+        onClick={() => onSelect(AUTO_SPARK_ID)}
+        className={`w-full text-left px-3 py-1.5 flex items-center gap-2 hover:bg-gray-700 ${
+          selectedId === AUTO_SPARK_ID ? "text-green-400" : "text-gray-200"
+        }`}
+      >
+        <span className="w-3 inline-block">{selectedId === AUTO_SPARK_ID ? "✓" : ""}</span>
+        <span className="flex-1 truncate">
+          Auto{sparkDevice ? " → Spark 2" : " (Spark 2 not detected)"}
+        </span>
+      </button>
+      <button
+        role="option"
+        aria-selected={selectedId === DEFAULT_DEVICE_ID}
+        onClick={() => onSelect(DEFAULT_DEVICE_ID)}
+        className={`w-full text-left px-3 py-1.5 flex items-center gap-2 hover:bg-gray-700 ${
+          selectedId === DEFAULT_DEVICE_ID ? "text-green-400" : "text-gray-200"
+        }`}
+      >
+        <span className="w-3 inline-block">{selectedId === DEFAULT_DEVICE_ID ? "✓" : ""}</span>
+        System default
+      </button>
+      {visible.map((d) => (
+        <button
+          key={d.deviceId}
+          role="option"
+          aria-selected={d.deviceId === selectedId}
+          onClick={() => onSelect(d.deviceId)}
+          className={`w-full text-left px-3 py-1.5 flex items-center gap-2 hover:bg-gray-700 ${
+            d.deviceId === selectedId ? "text-green-400" : "text-gray-200"
+          }`}
+        >
+          <span className="w-3 inline-block">{d.deviceId === selectedId ? "✓" : ""}</span>
+          <span className="truncate">{d.label || "Unnamed device"}</span>
+        </button>
+      ))}
+    </>
+  );
+}
+
+export default function AudioOutputPicker({
+  outputDeviceId,
+  onOutputChange,
+  inputDeviceId,
+  onInputChange,
+}: AudioOutputPickerProps) {
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [open, setOpen] = useState(false);
   const [labelsHidden, setLabelsHidden] = useState(false);
@@ -37,8 +114,8 @@ export default function AudioOutputPicker({ deviceId, onChange }: AudioOutputPic
       .enumerateDevices()
       .then((all) => {
         if (cancelled) return;
+        setDevices(all);
         const outputs = all.filter((d) => d.kind === "audiooutput");
-        setDevices(outputs);
         setLabelsHidden(outputs.some((d) => !d.label) || outputs.length < 2);
       })
       .catch((err) => console.warn("enumerateDevices failed", err));
@@ -88,28 +165,6 @@ export default function AudioOutputPicker({ deviceId, onChange }: AudioOutputPic
 
   if (!supported) return null;
 
-  const sparkDevice = devices.find(
-    (d) => SPARK_LABEL_RE.test(d.label) && d.deviceId !== COMMUNICATIONS_DEVICE_ID,
-  );
-
-  let selectedLabel: string;
-  if (deviceId === AUTO_SPARK_ID) {
-    selectedLabel = sparkDevice
-      ? `Auto → ${sparkDevice.label}`
-      : "Auto (Spark 2 not detected — using system default)";
-  } else if (deviceId === DEFAULT_DEVICE_ID) {
-    selectedLabel = "System default";
-  } else {
-    selectedLabel = devices.find((d) => d.deviceId === deviceId)?.label || "Default";
-  }
-
-  const visibleDevices = devices.filter(
-    (d) =>
-      d.deviceId &&
-      d.deviceId !== DEFAULT_DEVICE_ID &&
-      d.deviceId !== COMMUNICATIONS_DEVICE_ID,
-  );
-
   const dropdown =
     open && buttonRect && typeof document !== "undefined"
       ? createPortal(
@@ -118,70 +173,26 @@ export default function AudioOutputPicker({ deviceId, onChange }: AudioOutputPic
             role="listbox"
             style={{
               position: "fixed",
-              bottom: window.innerHeight - buttonRect.top + 8,
+              top: buttonRect.bottom + 8,
               right: Math.max(8, window.innerWidth - buttonRect.right),
               zIndex: 100,
             }}
             className="min-w-55 max-w-80 bg-gray-800 border border-gray-700 rounded-md shadow-lg py-1 text-sm max-h-[70vh] overflow-y-auto"
           >
-            <div className="px-3 py-1.5 text-[10px] uppercase tracking-wide text-gray-500 border-b border-gray-700">
-              Audio output
-            </div>
-
-            <button
-              role="option"
-              aria-selected={deviceId === AUTO_SPARK_ID}
-              onClick={() => {
-                onChange(AUTO_SPARK_ID);
-                setOpen(false);
-              }}
-              className={`w-full text-left px-3 py-1.5 flex items-center gap-2 hover:bg-gray-700 ${
-                deviceId === AUTO_SPARK_ID ? "text-green-400" : "text-gray-200"
-              }`}
-              title={
-                sparkDevice
-                  ? `Currently routing to: ${sparkDevice.label}`
-                  : "Spark 2 not detected — falls back to system default"
-              }
-            >
-              <span className="w-3 inline-block">{deviceId === AUTO_SPARK_ID ? "✓" : ""}</span>
-              <span className="flex-1 truncate">
-                Auto{sparkDevice ? " → Spark 2" : " (Spark 2 not detected)"}
-              </span>
-            </button>
-
-            <button
-              role="option"
-              aria-selected={deviceId === DEFAULT_DEVICE_ID}
-              onClick={() => {
-                onChange(DEFAULT_DEVICE_ID);
-                setOpen(false);
-              }}
-              className={`w-full text-left px-3 py-1.5 flex items-center gap-2 hover:bg-gray-700 ${
-                deviceId === DEFAULT_DEVICE_ID ? "text-green-400" : "text-gray-200"
-              }`}
-            >
-              <span className="w-3 inline-block">{deviceId === DEFAULT_DEVICE_ID ? "✓" : ""}</span>
-              System default
-            </button>
-
-            {visibleDevices.map((d) => (
-              <button
-                key={d.deviceId}
-                role="option"
-                aria-selected={d.deviceId === deviceId}
-                onClick={() => {
-                  onChange(d.deviceId);
-                  setOpen(false);
-                }}
-                className={`w-full text-left px-3 py-1.5 flex items-center gap-2 hover:bg-gray-700 ${
-                  d.deviceId === deviceId ? "text-green-400" : "text-gray-200"
-                }`}
-              >
-                <span className="w-3 inline-block">{d.deviceId === deviceId ? "✓" : ""}</span>
-                <span className="truncate">{d.label || "Unnamed device"}</span>
-              </button>
-            ))}
+            <DeviceSection
+              title="Audio output"
+              kind="audiooutput"
+              devices={devices}
+              selectedId={outputDeviceId}
+              onSelect={(id) => { onOutputChange(id); setOpen(false); }}
+            />
+            <DeviceSection
+              title="Audio input"
+              kind="audioinput"
+              devices={devices}
+              selectedId={inputDeviceId}
+              onSelect={(id) => { onInputChange(id); setOpen(false); }}
+            />
 
             <div className="border-t border-gray-700 mt-1 pt-1 px-3 pb-2">
               <p className="text-[11px] text-gray-400 mb-1.5">
@@ -210,8 +221,8 @@ export default function AudioOutputPicker({ deviceId, onChange }: AudioOutputPic
           setRefreshTick((n) => n + 1);
         }}
         className="w-7 h-7 flex items-center justify-center rounded text-gray-400 hover:text-white hover:bg-gray-700 transition-colors"
-        title={`Audio output: ${selectedLabel}`}
-        aria-label="Choose audio output device"
+        title="Audio input / output devices"
+        aria-label="Choose audio input and output devices"
         aria-haspopup="listbox"
         aria-expanded={open}
       >

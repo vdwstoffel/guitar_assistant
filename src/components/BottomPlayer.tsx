@@ -8,13 +8,12 @@ import { playCountIn } from "@/lib/clickGenerator";
 
 import KeyboardShortcutsHelp from "./KeyboardShortcutsHelp";
 import MarkerNameDialog from "./MarkerNameDialog";
-import AudioOutputPicker from "./AudioOutputPicker";
 import { usePracticeSessionTracker } from "@/hooks/usePracticeSessionTracker";
 import {
   AUTO_SPARK_ID,
   applyAudioContextSink,
   getAudioSinkPreference,
-  setAudioSinkPreference,
+  subscribeToAudioSinkChanges,
 } from "@/lib/audioSink";
 
 export interface MarkerBarState {
@@ -143,10 +142,9 @@ function BottomPlayer({
   );
   const audioOutputDeviceIdRef = useRef(audioOutputDeviceId);
   audioOutputDeviceIdRef.current = audioOutputDeviceId;
-  // Broadcast preference changes so AlphaTab-based players can re-route too.
-  const setAudioOutputDeviceId = useCallback((next: string) => {
-    setAudioOutputDeviceIdState(next);
-    setAudioSinkPreference(next);
+  // Reflect global output-device changes (picker now lives in the top nav).
+  useEffect(() => {
+    return subscribeToAudioSinkChanges((next) => setAudioOutputDeviceIdState(next));
   }, []);
 
   // Keep A/B loop refs in sync with state
@@ -1315,10 +1313,6 @@ function BottomPlayer({
 
             {/* Secondary toggles: normalize, markers, tabs — icon-only with badges */}
             <div className="flex items-center gap-1 pl-2 sm:pl-3 ml-1 sm:ml-2 border-l border-gray-700">
-                <AudioOutputPicker
-                  deviceId={audioOutputDeviceId}
-                  onChange={setAudioOutputDeviceId}
-                />
 
                 {track?.lufs != null && (
                   <button

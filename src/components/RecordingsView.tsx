@@ -138,51 +138,23 @@ export default function RecordingsView() {
         <h1 className="text-2xl font-bold mb-4">Recordings</h1>
 
         <div className="bg-gray-800 border border-gray-700 rounded-lg p-4 mb-6 space-y-4">
-          <div>
-            <label className="block text-xs uppercase tracking-wide text-gray-400 mb-1.5">
-              Input device
-            </label>
-            <div className="flex gap-2">
-              <select
-                className="flex-1 min-w-0 bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm focus:outline-none focus:border-blue-500 disabled:opacity-50"
-                value={recorder.selectedDeviceId ?? ""}
-                onChange={(e) => recorder.setSelectedDeviceId(e.target.value)}
-                disabled={isRecording}
-              >
-                {recorder.devices.length === 0 && (
-                  <option value="">No input devices found</option>
-                )}
-                {recorder.devices.map((d) => (
-                  <option key={d.deviceId} value={d.deviceId}>
-                    {d.label}
-                  </option>
-                ))}
-              </select>
+          {!recorder.permissionGranted && (
+            <div>
               <button
-                onClick={() => recorder.refreshDevices()}
-                className="px-3 py-2 text-sm bg-gray-700 hover:bg-gray-600 border border-gray-600 rounded text-gray-300 shrink-0"
+                onClick={() => recorder.requestPermission()}
+                className="px-3 py-2 text-sm bg-blue-600 hover:bg-blue-700 rounded text-white"
                 disabled={isRecording}
-                title="Refresh device list"
+                title="Grant microphone access"
               >
-                ↻
+                Grant access
               </button>
-              {!recorder.permissionGranted && (
-                <button
-                  onClick={() => recorder.requestPermission()}
-                  className="px-3 py-2 text-sm bg-blue-600 hover:bg-blue-700 rounded text-white shrink-0"
-                  disabled={isRecording}
-                  title="Reveals all input devices (e.g. your audio interface)"
-                >
-                  Grant access
-                </button>
-              )}
             </div>
-          </div>
+          )}
 
           <div className="flex items-center gap-4">
             <button
               onClick={handleStartStop}
-              disabled={isBusy || recorder.devices.length === 0}
+              disabled={isBusy}
               className={`shrink-0 px-5 py-3 rounded-md font-medium text-white flex items-center gap-2 transition-colors ${
                 isRecording
                   ? "bg-red-600 hover:bg-red-700"
