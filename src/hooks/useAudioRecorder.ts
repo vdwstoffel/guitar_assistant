@@ -1,21 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { withInputDevice } from "@/lib/audioSink";
 
 export type RecorderStatus = "idle" | "requesting" | "recording" | "stopping" | "error";
-
-export interface AudioInputDevice {
-  deviceId: string;
-  label: string;
-}
 
 interface UseAudioRecorderResult {
   status: RecorderStatus;
   error: string | null;
-  devices: AudioInputDevice[];
-  selectedDeviceId: string | null;
-  setSelectedDeviceId: (id: string) => void;
-  refreshDevices: () => Promise<void>;
   requestPermission: () => Promise<void>;
   permissionGranted: boolean;
   durationMs: number;
@@ -43,8 +35,6 @@ function pickSupportedMimeType(): string {
 export function useAudioRecorder(): UseAudioRecorderResult {
   const [status, setStatus] = useState<RecorderStatus>("idle");
   const [error, setError] = useState<string | null>(null);
-  const [devices, setDevices] = useState<AudioInputDevice[]>([]);
-  const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null);
   const [permissionGranted, setPermissionGranted] = useState(false);
   const [durationMs, setDurationMs] = useState(0);
   const [level, setLevel] = useState(0);
@@ -60,32 +50,6 @@ export function useAudioRecorder(): UseAudioRecorderResult {
   const animRef = useRef<number | null>(null);
   const resolveStopRef = useRef<((value: { blob: Blob; mimeType: string; duration: number } | null) => void) | null>(null);
 
-  const refreshDevices = useCallback(async () => {
-    if (typeof navigator === "undefined" || !navigator.mediaDevices?.enumerateDevices) {
-      setError("This browser does not support media devices. A secure (HTTPS) origin is required.");
-      return;
-    }
-    try {
-      const all = await navigator.mediaDevices.enumerateDevices();
-      const inputs = all
-        .filter((d) => d.kind === "audioinput")
-        .map((d, i) => ({
-          deviceId: d.deviceId,
-          label: d.label || `Microphone ${i + 1}`,
-        }));
-      setDevices(inputs);
-      const hasRealLabels = inputs.some((d) => d.label && !d.label.startsWith("Microphone "));
-      if (hasRealLabels) setPermissionGranted(true);
-      setSelectedDeviceId((current) => {
-        if (current && inputs.some((d) => d.deviceId === current)) return current;
-        return inputs[0]?.deviceId ?? null;
-      });
-    } catch (err) {
-      console.error("enumerateDevices failed:", err);
-      setError(err instanceof Error ? err.message : "Could not list audio devices");
-    }
-  }, []);
-
   const requestPermission = useCallback(async () => {
     setError(null);
     if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
@@ -96,23 +60,11 @@ export function useAudioRecorder(): UseAudioRecorderResult {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       stream.getTracks().forEach((t) => t.stop());
       setPermissionGranted(true);
-      await refreshDevices();
     } catch (err) {
       console.error("Microphone permission denied:", err);
       setError(err instanceof Error ? err.message : "Microphone permission denied");
     }
-  }, [refreshDevices]);
-
-  useEffect(() => {
-    refreshDevices();
-    const handler = () => {
-      refreshDevices();
-    };
-    navigator.mediaDevices?.addEventListener?.("devicechange", handler);
-    return () => {
-      navigator.mediaDevices?.removeEventListener?.("devicechange", handler);
-    };
-  }, [refreshDevices]);
+  }, []);
 
   const cleanupStream = useCallback(() => {
     if (tickRef.current !== null) {
@@ -161,20 +113,16 @@ export function useAudioRecorder(): UseAudioRecorderResult {
     }
     setStatus("requesting");
     try {
-      const audioConstraints: MediaTrackConstraints = {
+      const audioConstraints = await withInputDevice({
         echoCancellation: false,
         noiseSuppression: false,
         autoGainControl: false,
         channelCount: 2,
         sampleRate: 48000,
         sampleSize: 16,
-      };
-      if (selectedDeviceId) audioConstraints.deviceId = { exact: selectedDeviceId };
+      });
       const stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
       streamRef.current = stream;
-
-      // After first permission grant, labels become available; refresh list.
-      refreshDevices();
 
       const mimeType = pickSupportedMimeType();
       const recorderOptions: MediaRecorderOptions = { audioBitsPerSecond: 256000 };
@@ -243,7 +191,7 @@ export function useAudioRecorder(): UseAudioRecorderResult {
       setStatus("error");
       cleanupStream();
     }
-  }, [selectedDeviceId, refreshDevices, cleanupStream]);
+  }, [cleanupStream]);
 
   const stop = useCallback(() => {
     return new Promise<{ blob: Blob; mimeType: string; duration: number } | null>((resolve) => {
@@ -261,10 +209,6 @@ export function useAudioRecorder(): UseAudioRecorderResult {
   return {
     status,
     error,
-    devices,
-    selectedDeviceId,
-    setSelectedDeviceId,
-    refreshDevices,
     requestPermission,
     permissionGranted,
     durationMs,

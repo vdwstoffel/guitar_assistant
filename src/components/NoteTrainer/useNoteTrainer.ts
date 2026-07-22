@@ -4,6 +4,7 @@ import { NOTES, getNoteIndex } from '@/lib/musicTheory';
 import { playCountIn } from '@/lib/clickGenerator';
 import { playNoteByName } from '@/lib/audioGenerator';
 import { freqToNote } from '@/lib/tuner/presets';
+import { withInputDevice } from '@/lib/audioSink';
 
 // MIDI of each open string in standard tuning (low E → high E)
 const OPEN_STRING_MIDI = [40, 45, 50, 55, 59, 64] as const;
@@ -177,11 +178,11 @@ export function useNoteTrainer() {
     setMicError(null);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
+        audio: await withInputDevice({
           echoCancellation: false,
           noiseSuppression: false,
           autoGainControl: false,
-        },
+        }),
       });
       streamRef.current = stream;
 

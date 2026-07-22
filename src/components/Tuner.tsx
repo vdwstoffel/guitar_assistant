@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { PitchDetector } from 'pitchy';
 import { TUNING_PRESETS, freqToNote, nearestString, type TuningString } from '@/lib/tuner/presets';
+import { withInputDevice } from '@/lib/audioSink';
 
 type Mode = 'chromatic' | 'preset';
 type Status = 'idle' | 'requesting' | 'listening' | 'denied' | 'error';
@@ -85,11 +86,11 @@ export default function Tuner({ show }: TunerProps) {
     setErrorMessage(null);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
+        audio: await withInputDevice({
           echoCancellation: false,
           noiseSuppression: false,
           autoGainControl: false,
-        },
+        }),
       });
       streamRef.current = stream;
 

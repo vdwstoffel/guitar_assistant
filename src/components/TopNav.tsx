@@ -616,38 +616,17 @@ const TopNav = memo(function TopNav({ activeSection, onSectionChange, onSearchTr
       {showRecorder && (
         <div className="bg-gray-800 border-b border-gray-700 px-3 sm:px-4 py-3">
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4">
-            {/* Device picker */}
-            <div className="flex-1 min-w-0 flex items-center gap-2">
-              <svg className="w-4 h-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 10v2a7 7 0 01-14 0v-2" />
-              </svg>
-              <select
-                className="flex-1 min-w-0 bg-gray-700 border border-gray-600 rounded px-2 py-1.5 text-sm text-white focus:outline-none focus:border-blue-500 disabled:opacity-50"
-                value={recorder.selectedDeviceId ?? ''}
-                onChange={(e) => recorder.setSelectedDeviceId(e.target.value)}
+            {/* Mic permission (device is chosen via the global Audio Settings picker) */}
+            {!recorder.permissionGranted && (
+              <button
+                onClick={() => recorder.requestPermission()}
                 disabled={recorder.status === 'recording'}
+                className="px-2 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 rounded text-white shrink-0"
+                title="Grant microphone access"
               >
-                {recorder.devices.length === 0 && (
-                  <option value="">No input devices</option>
-                )}
-                {recorder.devices.map((d) => (
-                  <option key={d.deviceId} value={d.deviceId}>
-                    {d.label}
-                  </option>
-                ))}
-              </select>
-              {!recorder.permissionGranted && (
-                <button
-                  onClick={() => recorder.requestPermission()}
-                  disabled={recorder.status === 'recording'}
-                  className="px-2 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 rounded text-white shrink-0"
-                  title="Grant microphone access to reveal all input devices"
-                >
-                  Grant access
-                </button>
-              )}
-            </div>
+                Grant access
+              </button>
+            )}
 
             {/* Timer */}
             <div className="text-lg font-mono tabular-nums min-w-[4ch] text-center text-white">
@@ -667,7 +646,7 @@ const TopNav = memo(function TopNav({ activeSection, onSectionChange, onSearchTr
             {/* Record / Stop button */}
             <button
               onClick={handleRecorderToggle}
-              disabled={recorderUploading || recorder.status === 'requesting' || recorder.status === 'stopping' || recorder.devices.length === 0}
+              disabled={recorderUploading || recorder.status === 'requesting' || recorder.status === 'stopping'}
               className={`px-4 py-2 rounded-md font-medium text-white text-sm flex items-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
                 recorder.status === 'recording'
                   ? 'bg-red-600 hover:bg-red-700'
