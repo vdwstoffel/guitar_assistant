@@ -18,6 +18,10 @@ import {
   subscribeToAudioInputChanges,
 } from "@/lib/audioSink";
 
+// Tooltip shown on hover for icon-only nav buttons (absolute, so no layout shift).
+const NAV_TOOLTIP =
+  "pointer-events-none absolute left-1/2 top-full z-50 mt-1 -translate-x-1/2 whitespace-nowrap rounded bg-gray-900 px-2 py-1 text-xs text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100";
+
 type Section = 'home' | 'lessons' | 'videos' | 'fretboard' | 'intervals' | 'chords' | 'tools' | 'circle' | 'tabs' | 'jamtracks' | 'recordings' | 'metrics' | 'knowledge' | 'gear' | 'progressions' | 'caged' | 'scales' | 'backing-tracks';
 type TimeSignature = '4/4' | '3/4' | '2/4' | '6/8';
 
@@ -250,53 +254,60 @@ const TopNav = memo(function TopNav({ activeSection, onSectionChange, onSearchTr
           {/* Metronome button */}
           <button
             onClick={() => setShowMetronome(!showMetronome)}
-            className={`flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+            aria-label="Metronome"
+            className={`group relative flex items-center gap-1 p-2 rounded-md transition-colors ${
               showMetronome || isPlaying
                 ? 'bg-blue-600 text-white'
                 : 'text-gray-400 hover:text-white hover:bg-gray-700/50'
             }`}
           >
+            {/* Metronome: pyramid body with pendulum */}
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3h6l4 18H5L9 3z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6.5 15h11" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 20l4-11" />
             </svg>
-            <span className="hidden sm:inline">Metronome</span>
             {isPlaying && (
               <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
             )}
+            <span className={NAV_TOOLTIP}>Metronome</span>
           </button>
 
           {/* Tuner button */}
           <button
             onClick={() => setShowTuner(!showTuner)}
-            className={`flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+            aria-label="Tuner"
+            className={`group relative flex items-center gap-1 p-2 rounded-md transition-colors ${
               showTuner
                 ? 'bg-blue-600 text-white'
                 : 'text-gray-400 hover:text-white hover:bg-gray-700/50'
             }`}
           >
+            {/* Tuning fork */}
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19a3 3 0 11-6 0 3 3 0 016 0zm12-3a3 3 0 11-6 0 3 3 0 016 0z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3v9M15 3v9M9 12h6M12 12v9" />
             </svg>
-            <span className="hidden sm:inline">Tuner</span>
+            <span className={NAV_TOOLTIP}>Tuner</span>
           </button>
 
           {/* Recordings button */}
           <button
             onClick={() => setShowRecorder(!showRecorder)}
-            className={`flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+            aria-label="Recordings"
+            className={`group relative flex items-center gap-1 p-2 rounded-md transition-colors ${
               showRecorder || recorder.status === 'recording'
                 ? 'bg-red-600 text-white'
                 : 'text-gray-400 hover:text-white hover:bg-gray-700/50'
             }`}
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 10v2a7 7 0 01-14 0v-2M12 19v4m-4 0h8" />
+            {/* Record circle */}
+            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="6" />
             </svg>
-            <span className="hidden sm:inline">Recordings</span>
             {recorder.status === 'recording' && (
               <span className="w-2 h-2 bg-red-300 rounded-full animate-pulse" />
             )}
+            <span className={NAV_TOOLTIP}>Recordings</span>
           </button>
 
           {/* Audio device picker */}
