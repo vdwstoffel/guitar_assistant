@@ -2,6 +2,7 @@
 
 import { useEffect, useImperativeHandle, useRef, useState, forwardRef } from "react";
 import WaveSurfer from "wavesurfer.js";
+import { routeMediaElementToSink, subscribeToAudioSinkChanges } from "@/lib/audioSink";
 
 export interface RecordingWaveformHandle {
   play: () => void;
@@ -22,6 +23,14 @@ const RecordingWaveform = forwardRef<RecordingWaveformHandle, Props>(
     const containerRef = useRef<HTMLDivElement>(null);
     const wsRef = useRef<WaveSurfer | null>(null);
     const [shouldLoad, setShouldLoad] = useState(false);
+
+    // Callbacks change identity on every parent render. Keep the latest in a
+    // ref so the WaveSurfer effect doesn't tear down/recreate on each render —
+    // which would destroy the instance mid-playback.
+    const callbacksRef = useRef({ onPlay, onPause, onFinish, onReady });
+    useEffect(() => {
+      callbacksRef.current = { onPlay, onPause, onFinish, onReady };
+    });
 
     useEffect(() => {
       const node = containerRef.current;
@@ -56,17 +65,20 @@ const RecordingWaveform = forwardRef<RecordingWaveformHandle, Props>(
       });
       wsRef.current = ws;
 
-      const handleReady = () => onReady?.(ws.getDuration());
-      const handlePlay = () => onPlay?.();
-      const handlePause = () => onPause?.();
-      const handleFinish = () => onFinish?.();
+      ws.on("ready", () => {
+        void routeMediaElementToSink(ws.getMediaElement());
+        callbacksRef.current.onReady?.(ws.getDuration());
+      });
+      ws.on("play", () => callbacksRef.current.onPlay?.());
+      ws.on("pause", () => callbacksRef.current.onPause?.());
+      ws.on("finish", () => callbacksRef.current.onFinish?.());
 
-      ws.on("ready", handleReady);
-      ws.on("play", handlePlay);
-      ws.on("pause", handlePause);
-      ws.on("finish", handleFinish);
+      const unsubscribeSink = subscribeToAudioSinkChanges(() => {
+        void routeMediaElementToSink(ws.getMediaElement());
+      });
 
       return () => {
+        unsubscribeSink();
         try {
           ws.destroy();
         } catch {
@@ -74,7 +86,7 @@ const RecordingWaveform = forwardRef<RecordingWaveformHandle, Props>(
         }
         wsRef.current = null;
       };
-    }, [shouldLoad, audioUrl, onReady, onPlay, onPause, onFinish]);
+    }, [shouldLoad, audioUrl]);
 
     useImperativeHandle(ref, () => ({
       play: () => {

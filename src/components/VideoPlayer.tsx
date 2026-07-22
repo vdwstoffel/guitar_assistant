@@ -4,6 +4,7 @@ import { BookVideo } from "@/types";
 import { useEffect, useRef, useState } from "react";
 import { formatDurationLong } from "@/lib/formatting";
 import { usePracticeSessionTracker } from "@/hooks/usePracticeSessionTracker";
+import { routeMediaElementToSink, subscribeToAudioSinkChanges } from "@/lib/audioSink";
 
 interface VideoPlayerProps {
   video: BookVideo | null;
@@ -27,6 +28,13 @@ export default function VideoPlayer({ video }: VideoPlayerProps) {
       videoRef.current.load();
     }
   }, [video]);
+
+  useEffect(() => {
+    void routeMediaElementToSink(videoRef.current);
+    return subscribeToAudioSinkChanges(() => {
+      void routeMediaElementToSink(videoRef.current);
+    });
+  }, []);
 
   // Restore volume after video loads
   const handleLoadedMetadata = () => {

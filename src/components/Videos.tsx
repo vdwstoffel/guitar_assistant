@@ -7,6 +7,7 @@ import { usePracticeSessionTracker } from "@/hooks/usePracticeSessionTracker";
 import NotesModal from "./modals/NotesModal";
 import MarkerNameDialog from "./MarkerNameDialog";
 import { formatDurationLong } from "@/lib/formatting";
+import { routeMediaElementToSink, subscribeToAudioSinkChanges } from "@/lib/audioSink";
 
 interface VideoMarker {
   id: string;
@@ -405,6 +406,13 @@ export default function Videos({ initialVideoId }: VideosProps) {
   useEffect(() => {
     localStorage.setItem("videoMarkerLeadIn", String(leadIn));
   }, [leadIn]);
+
+  useEffect(() => {
+    return subscribeToAudioSinkChanges(() => {
+      void routeMediaElementToSink(htmlVideoRef.current);
+    });
+  }, []);
+
   const [markers, setMarkers] = useState<VideoMarker[]>([]);
   const [editingMarkerId, setEditingMarkerId] = useState<string | null>(null);
   const [editMarkerName, setEditMarkerName] = useState("");
@@ -1293,6 +1301,7 @@ export default function Videos({ initialVideoId }: VideosProps) {
                   onLoadedMetadata={(e) => {
                     const saved = localStorage.getItem("youtubeLocalVolume");
                     if (saved !== null) e.currentTarget.volume = parseFloat(saved);
+                    void routeMediaElementToSink(e.currentTarget);
                   }}
                   onVolumeChange={(e) => {
                     localStorage.setItem("youtubeLocalVolume", String(e.currentTarget.volume));
