@@ -9,12 +9,14 @@
  */
 
 import { NOTES, getNoteIndex } from './musicTheory';
+import { routeContextToSink, subscribeToAudioSinkChanges } from './audioSink';
 
 // ---------------------------------------------------------------------------
 // AudioContext singleton
 // ---------------------------------------------------------------------------
 
 let audioContext: AudioContext | null = null;
+let sinkRoutingSetup = false;
 
 /**
  * Get or create a shared AudioContext.
@@ -23,6 +25,12 @@ let audioContext: AudioContext | null = null;
 export function getAudioContext(): AudioContext {
   if (!audioContext) {
     audioContext = new AudioContext();
+  }
+  if (!sinkRoutingSetup) {
+    sinkRoutingSetup = true;
+    const ctx = audioContext;
+    void routeContextToSink(ctx);
+    subscribeToAudioSinkChanges(() => void routeContextToSink(ctx));
   }
   if (audioContext.state === 'suspended') {
     audioContext.resume();

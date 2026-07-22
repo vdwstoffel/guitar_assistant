@@ -2,6 +2,8 @@
  * Web Audio API click sound generation for count-in
  */
 
+import { routeContextToSink, subscribeToAudioSinkChanges } from "./audioSink";
+
 export interface CountInOptions {
   bpm: number;
   timeSignature: string;
@@ -10,10 +12,17 @@ export interface CountInOptions {
 }
 
 let audioContext: AudioContext | null = null;
+let sinkRoutingSetup = false;
 
 function getAudioContext(): AudioContext {
   if (!audioContext) {
     audioContext = new AudioContext();
+  }
+  if (!sinkRoutingSetup) {
+    sinkRoutingSetup = true;
+    const ctx = audioContext;
+    void routeContextToSink(ctx);
+    subscribeToAudioSinkChanges(() => void routeContextToSink(ctx));
   }
   if (audioContext.state === "suspended") {
     audioContext.resume();
