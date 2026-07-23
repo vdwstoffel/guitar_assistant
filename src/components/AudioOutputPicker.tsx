@@ -165,6 +165,18 @@ export default function AudioOutputPicker({
 
   if (!supported) return null;
 
+  // Width is capped to the viewport; left is right-aligned to the button but
+  // clamped to [8, viewport - width - 8] so the dropdown never leaves the screen.
+  const dropdownWidth = buttonRect
+    ? Math.min(288, window.innerWidth - 16)
+    : 0;
+  const dropdownLeft = buttonRect
+    ? Math.min(
+        Math.max(8, buttonRect.right - dropdownWidth),
+        window.innerWidth - dropdownWidth - 8,
+      )
+    : 0;
+
   const dropdown =
     open && buttonRect && typeof document !== "undefined"
       ? createPortal(
@@ -174,10 +186,11 @@ export default function AudioOutputPicker({
             style={{
               position: "fixed",
               top: buttonRect.bottom + 8,
-              right: Math.max(8, window.innerWidth - buttonRect.right),
+              left: dropdownLeft,
+              width: dropdownWidth,
               zIndex: 100,
             }}
-            className="min-w-55 max-w-80 bg-gray-800 border border-gray-700 rounded-md shadow-lg py-1 text-sm max-h-[70vh] overflow-y-auto"
+            className="bg-gray-800 border border-gray-700 rounded-md shadow-lg py-1 text-sm max-h-[70vh] overflow-y-auto"
           >
             <DeviceSection
               title="Audio output"
