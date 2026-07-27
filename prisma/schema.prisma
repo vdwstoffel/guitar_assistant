@@ -116,6 +116,7 @@ model BookVideo {
   chapter          Chapter?          @relation(fields: [chapterId], references: [id], onDelete: SetNull)
   extractedTrack   Track?            @relation("ExtractedAudio")
   practiceSessions PracticeSession[]
+  markers          BookVideoMarker[]
   createdAt   DateTime @default(now())
 
   @@index([bookId])
@@ -145,6 +146,16 @@ model VideoMarker {
   video     Video  @relation(fields: [videoId], references: [id], onDelete: Cascade)
 
   @@index([videoId])
+}
+
+model BookVideoMarker {
+  id          String    @id @default(uuid())
+  name        String
+  timestamp   Float
+  bookVideoId String
+  bookVideo   BookVideo @relation(fields: [bookVideoId], references: [id], onDelete: Cascade)
+
+  @@index([bookVideoId])
 }
 
 model JamTrack {

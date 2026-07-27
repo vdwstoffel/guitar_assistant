@@ -40,14 +40,20 @@ export async function GET(
               },
               videos: {
                 orderBy: { sortOrder: "asc" },
-                include: { extractedTrack: { select: { id: true } } },
+                include: {
+                  extractedTrack: { select: { id: true } },
+                  markers: { orderBy: { timestamp: "asc" } },
+                },
               },
             },
           },
           videos: {
             where: { chapterId: null },
             orderBy: { sortOrder: "asc" },
-            include: { extractedTrack: { select: { id: true } } },
+            include: {
+              extractedTrack: { select: { id: true } },
+              markers: { orderBy: { timestamp: "asc" } },
+            },
           },
         },
       }),
