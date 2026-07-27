@@ -30,7 +30,7 @@ import HomeView from "@/components/HomeView";
 import GuitarProViewer from "@/components/GuitarProViewer";
 import UploadModal from "@/components/UploadModal";
 import VideoPlayer from "@/components/VideoPlayer";
-import { AuthorSummary, BookSummary, Book, Track, TrackTab, Marker, JamTrack, JamTrackMarker, BookVideo, SearchResultTrack, SearchResultBook, SearchResultJamTrack } from "@/types";
+import { AuthorSummary, BookSummary, Book, Track, TrackTab, Marker, JamTrack, JamTrackMarker, BookVideo, BookVideoMarker, SearchResultTrack, SearchResultBook, SearchResultJamTrack } from "@/types";
 import TrackTabsModal from "@/components/TrackTabsModal";
 
 type Section = 'home' | 'lessons' | 'videos' | 'fretboard' | 'intervals' | 'chords' | 'tools' | 'circle' | 'tabs' | 'jamtracks' | 'recordings' | 'metrics' | 'knowledge' | 'gear' | 'progressions' | 'caged' | 'scales' | 'backing-tracks';
@@ -786,6 +786,115 @@ export default function Home() {
       }
     } catch (error) {
       console.error("Error clearing markers:", error);
+    }
+  };
+
+  const updateVideoInBookDetail = useCallback(
+    (videoId: string, updater: (video: BookVideo) => BookVideo) => {
+      setSelectedBookDetail(prev => {
+        if (!prev) return prev;
+        const newVideos = prev.videos?.map(v => (v.id === videoId ? updater(v) : v));
+        let chaptersChanged = false;
+        const newChapters = prev.chapters?.map(ch => {
+          if (!ch.videos?.some(v => v.id === videoId)) return ch;
+          chaptersChanged = true;
+          return { ...ch, videos: ch.videos.map(v => (v.id === videoId ? updater(v) : v)) };
+        });
+        return {
+          ...prev,
+          videos: newVideos,
+          ...(chaptersChanged ? { chapters: newChapters } : {}),
+        };
+      });
+    },
+    []
+  );
+
+  const applyVideoMarkers = (
+    videoId: string,
+    updater: (markers: BookVideoMarker[]) => BookVideoMarker[]
+  ) => {
+    setSelectedVideo(prev =>
+      prev?.id === videoId ? { ...prev, markers: updater(prev.markers ?? []) } : prev
+    );
+    updateVideoInBookDetail(videoId, v => ({ ...v, markers: updater(v.markers ?? []) }));
+  };
+
+  const handleVideoMarkerAdd = async (
+    bookId: string,
+    videoId: string,
+    name: string,
+    timestamp: number
+  ) => {
+    try {
+      const response = await fetch(`/api/books/${bookId}/videos/${videoId}/markers`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, timestamp }),
+      });
+      if (response.ok) {
+        const newMarker: BookVideoMarker = await response.json();
+        applyVideoMarkers(videoId, markers => [...markers, newMarker]);
+      }
+    } catch (error) {
+      console.error("Error adding video marker:", error);
+    }
+  };
+
+  const handleVideoMarkerRename = async (
+    bookId: string,
+    videoId: string,
+    markerId: string,
+    name: string
+  ) => {
+    try {
+      const response = await fetch(
+        `/api/books/${bookId}/videos/${videoId}/markers/${markerId}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name }),
+        }
+      );
+      if (response.ok) {
+        applyVideoMarkers(videoId, markers =>
+          markers.map(m => (m.id === markerId ? { ...m, name } : m))
+        );
+      }
+    } catch (error) {
+      console.error("Error renaming video marker:", error);
+    }
+  };
+
+  const handleVideoMarkerDelete = async (
+    bookId: string,
+    videoId: string,
+    markerId: string
+  ) => {
+    try {
+      const response = await fetch(
+        `/api/books/${bookId}/videos/${videoId}/markers/${markerId}`,
+        { method: "DELETE" }
+      );
+      if (response.ok) {
+        applyVideoMarkers(videoId, markers => markers.filter(m => m.id !== markerId));
+      }
+    } catch (error) {
+      console.error("Error deleting video marker:", error);
+    }
+  };
+
+  const handleVideoMarkersClear = async (bookId: string, videoId: string) => {
+    try {
+      const response = await fetch(
+        `/api/books/${bookId}/videos/${videoId}/markers/clear`,
+        { method: "DELETE" }
+      );
+      if (response.ok) {
+        applyVideoMarkers(videoId, () => []);
+      }
+    } catch (error) {
+      console.error("Error clearing video markers:", error);
     }
   };
 
@@ -1729,7 +1838,22 @@ export default function Home() {
               {selectedVideo && showVideo ? (
                 /* Video Player - Full Height */
                 <div className="flex-1 overflow-hidden">
-                  <VideoPlayer video={selectedVideo} />
+                  <VideoPlayer
+                    video={selectedVideo}
+                    markers={selectedVideo.markers ?? []}
+                    onAddMarker={(name, timestamp) =>
+                      handleVideoMarkerAdd(selectedVideo.bookId, selectedVideo.id, name, timestamp)
+                    }
+                    onRenameMarker={(markerId, name) =>
+                      handleVideoMarkerRename(selectedVideo.bookId, selectedVideo.id, markerId, name)
+                    }
+                    onDeleteMarker={(markerId) =>
+                      handleVideoMarkerDelete(selectedVideo.bookId, selectedVideo.id, markerId)
+                    }
+                    onClearMarkers={() =>
+                      handleVideoMarkersClear(selectedVideo.bookId, selectedVideo.id)
+                    }
+                  />
                 </div>
               ) : pdfPath ? (
                 <div className="flex flex-1 min-h-0">
