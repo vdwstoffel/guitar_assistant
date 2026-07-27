@@ -143,6 +143,8 @@ export default function VideoMarkersBar({
                     onDeleteMarker(marker.id);
                   }}
                   className="opacity-0 group-hover:opacity-100 text-white hover:text-red-300"
+                  title="Delete marker"
+                  aria-label="Delete marker"
                 >
                   ×
                 </button>
