@@ -76,23 +76,26 @@ consistency; the marker operations key off `bookVideoId`.
   `chapters[].videos` consumed by the lessons view), include `markers` (ordered by `timestamp asc`)
   on each book video, matching how tracks include their markers.
 
-### 4. UI — VideoPlayer owns the markers bar
+### 4. UI — VideoPlayer owns a dedicated VideoMarkersBar
 
 [VideoPlayer.tsx](../../../src/components/VideoPlayer.tsx) becomes the "video + markers" unit, the way
 `BottomPlayer` owns audio markers:
 
 - It keeps its local `<video>` ref, and tracks `currentTime` from the element's `timeupdate` event.
-- It renders the existing shared [MarkersBar.tsx](../../../src/components/MarkersBar.tsx), passing
-  `markers`, `currentTime`, and the CRUD callbacks. Jump-to sets `videoRef.current.currentTime`
-  (seek only; it does not force play/pause — the video keeps its current play state); add captures
-  the current `currentTime`.
+- It renders a **new dedicated `VideoMarkersBar`** component (not the audio `MarkersBar`). The shared
+  audio `MarkersBar` carries lead-in/count-in and tap-tempo controls and several required-but-unused
+  edit props that don't apply to video, so a small purpose-built bar is cleaner and leaves the shared
+  audio component untouched.
+- `VideoMarkersBar` responsibilities (full parity, name-only): an "Add Marker" button (opens the
+  dialog at the current playhead), a marker list sorted by timestamp with jump-on-click, rename and
+  delete per marker, clear-all, and number-key shortcuts (1-9 → first nine markers, 0 → tenth). It
+  **reuses the existing [MarkerNameDialog.tsx](../../../src/components/MarkerNameDialog.tsx)** with
+  `hasPdf={false}`, which hides all PDF-page UI — matching "timestamp + name only." `MarkerNameDialog`
+  and `MarkersBar` are otherwise unchanged.
+- Jump-to sets `videoRef.current.currentTime` (seek only; it does not force play/pause — the video
+  keeps its current play state); add captures the current `currentTime`.
 - New props on `VideoPlayer`: `markers`, `onAddMarker`, `onRenameMarker`, `onDeleteMarker`,
   `onClearMarkers`.
-
-`MarkersBar` gets one new optional prop `showPdfPage` (default `true`, preserving all current
-callers' behavior). Book videos pass `showPdfPage={false}` so the PDF-page input in the marker dialog
-and the per-marker PDF-page column are hidden — matching "timestamp + name only." Existing callers
-(audio tracks) are unchanged.
 
 ### 5. Page wiring
 
@@ -127,6 +130,6 @@ No unit-test framework. Verification:
 - `src/app/api/books/[id]/videos/[videoId]/markers/clear/route.ts` — POST (clear all).
 - `src/app/api/books/[id]/.../` book-detail GET — include `markers` on book videos.
 - `src/types/index.ts` — `BookVideoMarker` interface + `BookVideo.markers`.
-- `src/components/MarkersBar.tsx` — add optional `showPdfPage` prop (default true).
+- `src/components/VideoMarkersBar.tsx` — **new** dedicated markers bar (reuses `MarkerNameDialog`).
 - `src/components/VideoPlayer.tsx` — own the markers bar + currentTime + jump/add wiring.
 - `src/app/[[...section]]/page.tsx` — video marker CRUD handlers + pass to VideoPlayer.
