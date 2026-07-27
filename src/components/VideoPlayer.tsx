@@ -1,18 +1,32 @@
 "use client";
 
-import { BookVideo } from "@/types";
+import { BookVideo, BookVideoMarker } from "@/types";
 import { useEffect, useRef, useState } from "react";
 import { formatDurationLong } from "@/lib/formatting";
 import { usePracticeSessionTracker } from "@/hooks/usePracticeSessionTracker";
 import { routeMediaElementToSink, subscribeToAudioSinkChanges } from "@/lib/audioSink";
+import VideoMarkersBar from "./VideoMarkersBar";
 
 interface VideoPlayerProps {
   video: BookVideo | null;
+  markers?: BookVideoMarker[];
+  onAddMarker?: (name: string, timestamp: number) => void;
+  onRenameMarker?: (markerId: string, name: string) => void;
+  onDeleteMarker?: (markerId: string) => void;
+  onClearMarkers?: () => void;
 }
 
-export default function VideoPlayer({ video }: VideoPlayerProps) {
+export default function VideoPlayer({
+  video,
+  markers = [],
+  onAddMarker,
+  onRenameMarker,
+  onDeleteMarker,
+  onClearMarkers,
+}: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const { onPlay, onPause, onFinish } = usePracticeSessionTracker(video, 100);
+  const [currentTime, setCurrentTime] = useState(0);
   const [volume, setVolume] = useState(() => {
     // Initialize from sessionStorage, default to 1.0
     if (typeof window !== 'undefined') {
@@ -36,10 +50,35 @@ export default function VideoPlayer({ video }: VideoPlayerProps) {
     });
   }, []);
 
+  // Keyboard shortcut: + / = raise and - lower the video volume by 0.05.
+  // Setting .volume fires onVolumeChange, which persists it to state/localStorage.
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (!videoRef.current) return;
+      if (e.key === "+" || e.key === "=") {
+        e.preventDefault();
+        videoRef.current.volume = Math.min(1, videoRef.current.volume + 0.05);
+      } else if (e.key === "-") {
+        e.preventDefault();
+        videoRef.current.volume = Math.max(0, videoRef.current.volume - 0.05);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
   // Restore volume after video loads
   const handleLoadedMetadata = () => {
     if (videoRef.current) {
       videoRef.current.volume = volume;
+    }
+  };
+
+  const handleJumpToMarker = (timestamp: number) => {
+    if (videoRef.current) {
+      videoRef.current.currentTime = timestamp;
+      void videoRef.current.play().catch(() => {});
     }
   };
 
@@ -90,6 +129,7 @@ export default function VideoPlayer({ video }: VideoPlayerProps) {
           onEnded={onFinish}
           onVolumeChange={handleVolumeChange}
           onLoadedMetadata={handleLoadedMetadata}
+          onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
         >
           <source src={videoUrl} />
           Your browser does not support the video tag.
@@ -103,6 +143,17 @@ export default function VideoPlayer({ video }: VideoPlayerProps) {
           </p>
         )}
       </div>
+      {onAddMarker && onRenameMarker && onDeleteMarker && onClearMarkers && (
+        <VideoMarkersBar
+          markers={markers}
+          currentTime={currentTime}
+          onAddMarker={onAddMarker}
+          onRenameMarker={onRenameMarker}
+          onDeleteMarker={onDeleteMarker}
+          onClearAll={onClearMarkers}
+          onJumpToMarker={handleJumpToMarker}
+        />
+      )}
     </div>
   );
 }

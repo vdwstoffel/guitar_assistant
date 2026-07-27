@@ -108,6 +108,14 @@ export interface BookVideo {
   chapterId: string | null;
   createdAt: string;
   extractedTrackId: string | null;
+  markers?: BookVideoMarker[];
+}
+
+export interface BookVideoMarker {
+  id: string;
+  name: string;
+  timestamp: number;
+  bookVideoId: string;
 }
 
 export interface JamTrackMarker {
