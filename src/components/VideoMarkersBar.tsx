@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BookVideoMarker } from "@/types";
 import MarkerNameDialog from "./MarkerNameDialog";
 
@@ -39,11 +39,16 @@ export default function VideoMarkersBar({
     [markers]
   );
 
+  // Keep the latest playhead in a ref so the keyboard shortcut can read it
+  // without re-subscribing the listener on every timeupdate.
+  const currentTimeRef = useRef(currentTime);
+  currentTimeRef.current = currentTime;
+
   const handleOpenAdd = useCallback(() => {
     setEditingMarker(null);
-    setPendingTimestamp(currentTime);
+    setPendingTimestamp(currentTimeRef.current);
     setShowDialog(true);
-  }, [currentTime]);
+  }, []);
 
   const handleOpenEdit = useCallback((marker: BookVideoMarker) => {
     setEditingMarker(marker);
@@ -69,11 +74,17 @@ export default function VideoMarkersBar({
     setEditingMarker(null);
   }, []);
 
-  // Number-key shortcuts: 1-9 jump to markers 1-9, 0 jumps to marker 10.
+  // Keyboard shortcuts: 'm' adds a marker at the playhead; number keys 1-9 jump
+  // to markers 1-9, 0 jumps to marker 10.
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
       const key = e.key;
+      if (key === "m" || key === "M") {
+        e.preventDefault();
+        handleOpenAdd();
+        return;
+      }
       if (key >= "0" && key <= "9") {
         const index = key === "0" ? 9 : parseInt(key) - 1;
         if (index < sortedMarkers.length) onJumpToMarker(sortedMarkers[index].timestamp);
@@ -81,7 +92,7 @@ export default function VideoMarkersBar({
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [sortedMarkers, onJumpToMarker]);
+  }, [sortedMarkers, onJumpToMarker, handleOpenAdd]);
 
   return (
     <div className="w-full border-t border-gray-700 bg-gray-800 text-white pt-2 pb-2 px-2 sm:px-4">

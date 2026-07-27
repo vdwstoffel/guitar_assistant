@@ -50,6 +50,24 @@ export default function VideoPlayer({
     });
   }, []);
 
+  // Keyboard shortcut: + / = raise and - lower the video volume by 0.05.
+  // Setting .volume fires onVolumeChange, which persists it to state/localStorage.
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (!videoRef.current) return;
+      if (e.key === "+" || e.key === "=") {
+        e.preventDefault();
+        videoRef.current.volume = Math.min(1, videoRef.current.volume + 0.05);
+      } else if (e.key === "-") {
+        e.preventDefault();
+        videoRef.current.volume = Math.max(0, videoRef.current.volume - 0.05);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
   // Restore volume after video loads
   const handleLoadedMetadata = () => {
     if (videoRef.current) {
@@ -58,7 +76,10 @@ export default function VideoPlayer({
   };
 
   const handleJumpToMarker = (timestamp: number) => {
-    if (videoRef.current) videoRef.current.currentTime = timestamp;
+    if (videoRef.current) {
+      videoRef.current.currentTime = timestamp;
+      void videoRef.current.play().catch(() => {});
+    }
   };
 
   // Save volume when user changes it
