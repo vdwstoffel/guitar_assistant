@@ -37,11 +37,14 @@ export default function VideoPlayer({
   });
 
   useEffect(() => {
-    // Reset video when changing videos
-    if (videoRef.current && video) {
+    // Reload only when switching to a different video — NOT when the video
+    // object's identity changes for other reasons (e.g. a marker was added,
+    // which produces a new BookVideo object). Keying on the whole object would
+    // reload the element and reset playback to the start on every marker edit.
+    if (videoRef.current) {
       videoRef.current.load();
     }
-  }, [video]);
+  }, [video?.id]);
 
   useEffect(() => {
     void routeMediaElementToSink(videoRef.current);
