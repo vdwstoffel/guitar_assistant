@@ -59,6 +59,12 @@ export default function VideoPlayer({
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
       if (!videoRef.current) return;
+      if (e.code === "Space") {
+        e.preventDefault();
+        if (videoRef.current.paused) void videoRef.current.play().catch(() => {});
+        else videoRef.current.pause();
+        return;
+      }
       if (e.key === "+" || e.key === "=") {
         e.preventDefault();
         videoRef.current.volume = Math.min(1, videoRef.current.volume + 0.05);
