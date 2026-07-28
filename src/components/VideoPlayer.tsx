@@ -65,6 +65,11 @@ export default function VideoPlayer({
         else videoRef.current.pause();
         return;
       }
+      if (e.code === "ArrowLeft") {
+        e.preventDefault();
+        videoRef.current.currentTime = Math.max(0, videoRef.current.currentTime - 5);
+        return;
+      }
       if (e.key === "+" || e.key === "=") {
         e.preventDefault();
         videoRef.current.volume = Math.min(1, videoRef.current.volume + 0.05);
