@@ -962,6 +962,9 @@ function BottomPlayer({
     if (!track || !name.trim()) return;
     onMarkerAdd(track.id, name.trim(), timestamp, pdfPage);
     setShowMarkerDialog(false);
+    // Reveal the markers bar when a marker is created (e.g. the first one on a
+    // track that had none and so had the bar hidden).
+    setShowMarkers(true);
     resumeAfterMarkerDialog();
   }, [track, onMarkerAdd, resumeAfterMarkerDialog]);
 
