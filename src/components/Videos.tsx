@@ -857,6 +857,20 @@ export default function Videos({ initialVideoId }: VideosProps) {
     }
   };
 
+  // Seek by a relative offset (seconds) without changing play state.
+  const seekPlayerBy = (deltaSeconds: number) => {
+    const current = getPlayerCurrentTime();
+    if (current === null) return;
+    const target = Math.max(0, current + deltaSeconds);
+    if (htmlVideoRef.current) {
+      htmlVideoRef.current.currentTime = target;
+      return;
+    }
+    if (playerRef.current) {
+      try { playerRef.current.seekTo(target, true); } catch { /* player may not be ready */ }
+    }
+  };
+
   const isPlayerPlaying = (): boolean => {
     if (htmlVideoRef.current) return !htmlVideoRef.current.paused;
     if (playerRef.current) {
@@ -931,6 +945,12 @@ export default function Videos({ initialVideoId }: VideosProps) {
       if (e.code === "KeyM") {
         e.preventDefault();
         addMarkerRef.current();
+        return;
+      }
+
+      if (e.code === "ArrowLeft") {
+        e.preventDefault();
+        seekPlayerBy(-5);
         return;
       }
 
