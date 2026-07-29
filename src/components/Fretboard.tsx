@@ -15,7 +15,7 @@ import {
   DegreeLegend,
   ScaleComparisonLegend,
   FretboardDisplay,
-  ScaleChords,
+  ScaleReferenceTabs,
 } from '@/components/ScaleExplorer';
 import { useNoteTrainer, NoteTrainerControls } from '@/components/NoteTrainer';
 
@@ -43,11 +43,11 @@ export default function Fretboard() {
         background: 'linear-gradient(to bottom, hsl(23, 64%, 5%), hsl(23, 64%, 18%))',
       }}
     >
-      <div className="w-full max-w-7xl">
+      <div className="w-full max-w-450">
         {/* Header */}
-        <div className="mb-8 text-center">
-          <h1 className="text-3xl font-bold text-amber-100 mb-4">Guitar Fretboard</h1>
-          <p className="text-amber-200/70 mb-6">Standard Tuning (E A D G B E)</p>
+        <div className="mb-4 text-center">
+          <h1 className="text-2xl font-bold text-amber-100 mb-1">Guitar Fretboard</h1>
+          <p className="text-amber-200/70 text-sm mb-3">Standard Tuning (E A D G B E)</p>
 
           {trainerMode ? (
             /* Note Trainer controls */
@@ -80,7 +80,7 @@ export default function Fretboard() {
             </div>
           ) : (
             /* Normal scale controls */
-            <div className="flex flex-col items-center gap-4">
+            <div className="flex flex-col items-center gap-2">
               <div className="flex gap-3">
                 <button
                   onClick={() => setShowNoteNames(!showNoteNames)}
@@ -136,11 +136,11 @@ export default function Fretboard() {
 
               {/* Scale info, formula, and enhancement controls */}
               {selectedScale !== 'None' && (
-                <div className="max-w-lg text-center space-y-2">
+                <div className="max-w-2xl text-center space-y-1.5">
                   <p className="text-amber-300 text-sm font-medium">
                     {selectedKey} {selectedScale}
                   </p>
-                  <p className="text-amber-200/60 text-sm leading-relaxed">
+                  <p className="text-amber-200/60 text-xs leading-snug">
                     {SCALE_FORMULAS[selectedScale].description}
                   </p>
 
@@ -185,6 +185,7 @@ export default function Fretboard() {
 
         {/* Fretboard */}
         <FretboardDisplay
+          numFrets={24}
           getNoteDisplayInfo={enhancements.getNoteDisplayInfo}
           showDegreeColors={enhancements.showDegreeColors}
           isComparing={enhancements.isComparing}
@@ -222,9 +223,9 @@ export default function Fretboard() {
           </div>
         )}
 
-        {/* Chords that work well with the selected scale */}
-        {!trainer.isRunning && selectedScale !== 'None' && (
-          <ScaleChords root={selectedKey} scaleType={selectedScale} />
+        {/* Reference tabs: scale chords/progressions + interval meanings */}
+        {!trainer.isRunning && (
+          <ScaleReferenceTabs root={selectedKey} scaleType={selectedScale} />
         )}
       </div>
     </div>

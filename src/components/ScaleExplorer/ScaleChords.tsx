@@ -34,7 +34,7 @@ export default function ScaleChords({ root, scaleType }: ScaleChordsProps) {
   if (chords.length === 0) return null;
 
   return (
-    <div className="mt-10 w-full max-w-4xl mx-auto text-left">
+    <div className="w-full text-left">
       <h2 className="text-xl font-bold text-amber-100 mb-1">
         Chords in {root} {scaleType}
       </h2>

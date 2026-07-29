@@ -8,3 +8,5 @@ export type { LabelMode, NoteDisplayInfo, ComparisonClass, FretboardEnhancements
 export { default as FretboardDisplay } from './FretboardDisplay';
 export type { FretboardDisplayProps } from './FretboardDisplay';
 export { default as ScaleChords } from './ScaleChords';
+export { default as IntervalMeanings } from './IntervalMeanings';
+export { default as ScaleReferenceTabs } from './ScaleReferenceTabs';

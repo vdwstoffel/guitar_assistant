@@ -115,9 +115,10 @@ interface NoteDotProps {
   showDegreeColors: boolean;
   isComparing: boolean;
   opacity?: number;
+  size?: number;
 }
 
-function NoteDot({ info, showDegreeColors, isComparing, opacity }: NoteDotProps) {
+function NoteDot({ info, showDegreeColors, isComparing, opacity, size = 32 }: NoteDotProps) {
   const style = getNoteStyle(info, showDegreeColors, isComparing);
   const textColorClass = isComparing ? getComparisonTextColor(info) : 'text-white';
 
@@ -125,8 +126,8 @@ function NoteDot({ info, showDegreeColors, isComparing, opacity }: NoteDotProps)
     <div
       className="absolute z-10 rounded-full flex items-center justify-center transition-all cursor-default hover:scale-110"
       style={{
-        width: '32px',
-        height: '32px',
+        width: `${size}px`,
+        height: `${size}px`,
         opacity: opacity ?? 1,
         ...style,
       }}
@@ -144,7 +145,10 @@ function NoteDot({ info, showDegreeColors, isComparing, opacity }: NoteDotProps)
         }
       }}
     >
-      <span className={`${textColorClass} text-xs font-mono font-bold`}>
+      <span
+        className={`${textColorClass} font-mono font-bold leading-none`}
+        style={{ fontSize: `${Math.max(8, Math.round(size * 0.34))}px` }}
+      >
         {info.label}
       </span>
     </div>
@@ -180,9 +184,16 @@ export default function FretboardDisplay({
   boxOutline = null,
   outsideBoxBehavior = 'hide',
 }: FretboardDisplayProps) {
+  // Scale the note dots down as more frets are shown so they don't overlap,
+  // but keep them large enough to read clearly. 15 frets → 36px, 24 frets → ~28px.
+  const dotSize = Math.max(28, Math.round(36 * (15 / numFrets)));
+  // String-row height tracks the dot size (plus a little breathing room) so the
+  // neck stays compact vertically — shorter at 24 frets where dots are smaller.
+  const rowHeight = dotSize + 4;
+
   return (
     <div
-      className="rounded-lg p-8"
+      className="rounded-lg p-4"
       style={{
         background: 'linear-gradient(135deg, hsl(30, 40%, 25%) 0%, hsl(30, 35%, 30%) 50%, hsl(30, 40%, 25%) 100%)',
         boxShadow: '0 10px 40px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.1)',
@@ -190,7 +201,7 @@ export default function FretboardDisplay({
     >
       <div className="w-full">
         {/* Fret Numbers */}
-        <div className="flex mb-4">
+        <div className="flex mb-2">
           <div className="w-12 flex-shrink-0"></div>
           {Array.from({ length: numFrets }, (_, i) => i + 1).map((fret) => (
             <div
@@ -223,7 +234,7 @@ export default function FretboardDisplay({
                   <div
                     className="w-12 flex-shrink-0 flex items-center justify-center"
                     style={{
-                      height: '40px',
+                      height: `${rowHeight}px`,
                       background: 'linear-gradient(to right, hsl(30, 20%, 12%), hsl(30, 20%, 18%))',
                       borderRight: '3px solid hsl(30, 15%, 8%)',
                       boxShadow: 'inset -2px 0 4px rgba(0, 0, 0, 0.5)',
@@ -265,7 +276,7 @@ export default function FretboardDisplay({
                         key={fret}
                         className="relative flex-1 flex items-center justify-center"
                         style={{
-                          height: '40px',
+                          height: `${rowHeight}px`,
                           borderRight: fret === numFrets ? 'none' : '2px solid hsl(30, 30%, 35%)',
                         }}
                       >
@@ -275,6 +286,7 @@ export default function FretboardDisplay({
                             showDegreeColors={showDegreeColors}
                             isComparing={isComparing}
                             opacity={noteOpacity}
+                            size={dotSize}
                           />
                         ))}
                       </div>
@@ -290,7 +302,7 @@ export default function FretboardDisplay({
             {Array.from({ length: numFrets }, (_, i) => i + 1).map((fret) => (
               <div
                 key={fret}
-                className="flex-1 h-8 flex items-center justify-center gap-2"
+                className="flex-1 h-5 flex items-center justify-center gap-2"
               >
                 {isInlayPosition(fret) && (
                   <>
