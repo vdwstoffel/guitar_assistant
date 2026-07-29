@@ -172,7 +172,7 @@ export default function AddBackingTrackModal({
               disabled={submitting}
               className="px-4 py-2 rounded bg-amber-600 hover:bg-amber-700 text-white text-sm disabled:opacity-50"
             >
-              {submitting ? 'Adding…' : 'Add'}
+              {submitting ? 'Downloading audio…' : 'Add'}
             </button>
           </div>
         </form>
