@@ -4,7 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma/client";
 import { isValidYouTubeUrl, extractVideoId, thumbnailUrl } from "@/lib/youtube";
 import { NOTES, SCALE_FORMULAS } from "@/lib/musicTheory";
-import { downloadBackingTrackAudio } from "@/lib/backingTrackAudio";
+import * as fs from "fs/promises";
+import { downloadBackingTrackAudio, backingTrackAudioDir } from "@/lib/backingTrackAudio";
 
 const TITLE_FETCH_TIMEOUT_MS = 30_000;
 
@@ -129,6 +130,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(created, { status: 201 });
   } catch (err: unknown) {
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+      // Race condition: another concurrent POST won the unique-constraint race.
+      // Clean up the audio folder this request just downloaded to avoid orphans.
+      try {
+        await fs.rm(backingTrackAudioDir(audioPath), { recursive: true, force: true });
+      } catch {
+        // best-effort; ignore fs errors
+      }
       const dup = await prisma.backingTrack.findUnique({ where: { youtubeUrl: url } });
       return NextResponse.json(
         { error: "A backing track with this URL already exists.", existingId: dup?.id },
