@@ -227,6 +227,8 @@ export interface BackingTrack {
   videoId: string;
   title: string;
   thumbnailUrl: string | null;
+  audioPath: string | null;
+  duration: number | null;
   rootNote: string;
   scaleType: string;
   createdAt: string;
