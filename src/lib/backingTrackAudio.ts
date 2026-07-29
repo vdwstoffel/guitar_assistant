@@ -2,13 +2,15 @@ import * as fs from "fs/promises";
 import * as path from "path";
 import * as mm from "music-metadata";
 import { execFile } from "child_process";
+import { extractVideoId } from "@/lib/youtube";
 
-const MUSIC_DIR = process.env.MUSIC_DIR || "./music";
+export const MUSIC_DIR = process.env.MUSIC_DIR || "./music";
 export const BACKING_TRACKS_FOLDER = "BackingTracks";
 const DOWNLOAD_TIMEOUT_MS = 120_000;
 
 export function sanitizeName(name: string): string {
-  return name.replace(/[<>:"/\\|?*]/g, "_").trim();
+  const cleaned = name.replace(/[<>:"/\\|?*]/g, "_").trim().replace(/^\.+$/, "_");
+  return cleaned || "_";
 }
 
 export interface DownloadedAudio {
@@ -56,11 +58,12 @@ export async function downloadBackingTrackAudio(
   title: string,
 ): Promise<DownloadedAudio> {
   const musicPath = path.resolve(MUSIC_DIR);
-  const folderName = sanitizeName(title);
+  const videoId = extractVideoId(youtubeUrl);
+  const folderName = `${sanitizeName(title)}-${videoId ?? "track"}`;
   const trackFolder = path.join(musicPath, BACKING_TRACKS_FOLDER, folderName);
   await fs.mkdir(trackFolder, { recursive: true });
 
-  const fileName = `${sanitizeName(title)}.mp3`;
+  const fileName = `${folderName}.mp3`;
   const outputPath = path.join(trackFolder, fileName);
   const audioPath = path.join(BACKING_TRACKS_FOLDER, folderName, fileName);
 
@@ -104,5 +107,15 @@ export async function downloadBackingTrackAudio(
 
 /** Absolute directory containing a stored audioPath (for deletion). */
 export function backingTrackAudioDir(audioPath: string): string {
-  return path.dirname(path.resolve(MUSIC_DIR, audioPath));
+  const resolvedDir = path.dirname(path.resolve(MUSIC_DIR, audioPath));
+  const backingTracksRoot = path.resolve(MUSIC_DIR, BACKING_TRACKS_FOLDER);
+  const musicRoot = path.resolve(MUSIC_DIR);
+  // Containment check: dir must be inside the BackingTracks subtree, not the music root itself
+  if (resolvedDir !== backingTracksRoot && !resolvedDir.startsWith(backingTracksRoot + path.sep)) {
+    throw new Error(`Refusing to delete outside music tree: ${resolvedDir}`);
+  }
+  if (!resolvedDir.startsWith(musicRoot + path.sep) && resolvedDir !== musicRoot) {
+    throw new Error(`Refusing to delete outside music dir: ${resolvedDir}`);
+  }
+  return resolvedDir;
 }

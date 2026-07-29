@@ -2,9 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import * as fs from "fs/promises";
 import * as path from "path";
 import { prisma } from "@/lib/prisma";
-import { downloadBackingTrackAudio } from "@/lib/backingTrackAudio";
-
-const MUSIC_DIR = process.env.MUSIC_DIR || "./music";
+import { downloadBackingTrackAudio, MUSIC_DIR } from "@/lib/backingTrackAudio";
 
 export async function POST(
   _request: NextRequest,

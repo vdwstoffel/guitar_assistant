@@ -31,7 +31,7 @@ export default function BackingTrackDetail({ track, onBack, onUpdate, onDelete }
   }, [track.id, track.rootNote, track.scaleType, track.title, track.audioPath]);
 
   useEffect(() => {
-    if (audioPath || downloading) return;
+    if (audioPath || downloading || downloadError) return;
     let cancelled = false;
     setDownloading(true);
     setDownloadError(null);
@@ -44,7 +44,7 @@ export default function BackingTrackDetail({ track, onBack, onUpdate, onDelete }
       .catch((err) => { if (!cancelled) setDownloadError(err instanceof Error ? err.message : 'Download failed'); })
       .finally(() => { if (!cancelled) setDownloading(false); });
     return () => { cancelled = true; };
-  }, [audioPath, downloading, track.id]);
+  }, [audioPath, downloading, downloadError, track.id]);
 
   // Debounced PATCH for scale changes
   const patchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -109,7 +109,7 @@ export default function BackingTrackDetail({ track, onBack, onUpdate, onDelete }
           </h1>
         )}
 
-        {/* Fretboard on top (full-width, large), YouTube player below */}
+        {/* Fretboard on top (full-width, large), audio player below */}
         <div className="flex flex-col gap-8">
           <BackingTrackFretboard
             rootNote={rootNote}
