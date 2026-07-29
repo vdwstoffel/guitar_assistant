@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import * as fs from "fs/promises";
 import { prisma } from "@/lib/prisma";
 import { NOTES, SCALE_FORMULAS } from "@/lib/musicTheory";
+import { backingTrackAudioDir } from "@/lib/backingTrackAudio";
 
 function isValidRootNote(note: unknown): note is string {
   return typeof note === "string" && (NOTES as readonly string[]).includes(note);
@@ -67,6 +69,15 @@ export async function DELETE(_request: NextRequest, { params }: { params: Promis
   const { id } = await params;
   const existing = await prisma.backingTrack.findUnique({ where: { id } });
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  if (existing.audioPath) {
+    try {
+      await fs.rm(backingTrackAudioDir(existing.audioPath), { recursive: true, force: true });
+    } catch {
+      // best-effort; ignore fs errors
+    }
+  }
+
   await prisma.backingTrack.delete({ where: { id } });
   return NextResponse.json({ success: true });
 }

@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma/client";
 import { isValidYouTubeUrl, extractVideoId, thumbnailUrl } from "@/lib/youtube";
 import { NOTES, SCALE_FORMULAS } from "@/lib/musicTheory";
+import { downloadBackingTrackAudio } from "@/lib/backingTrackAudio";
 
 const TITLE_FETCH_TIMEOUT_MS = 30_000;
 
@@ -103,6 +104,15 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  let audioPath: string;
+  let duration: number;
+  try {
+    ({ audioPath, duration } = await downloadBackingTrackAudio(url, title));
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : "Download failed";
+    return NextResponse.json({ error: detail }, { status: 422 });
+  }
+
   try {
     const created = await prisma.backingTrack.create({
       data: {
@@ -112,6 +122,8 @@ export async function POST(request: NextRequest) {
         thumbnailUrl: thumbnailUrl(videoId),
         rootNote,
         scaleType,
+        audioPath,
+        duration,
       },
     });
     return NextResponse.json(created, { status: 201 });
