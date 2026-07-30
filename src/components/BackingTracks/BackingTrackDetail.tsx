@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from 'react';
 import type { BackingTrack } from '@/types';
 import BackingTrackAudioPlayer from './BackingTrackAudioPlayer';
 import BackingTrackFretboard from './BackingTrackFretboard';
+import DownloadProgress from './DownloadProgress';
+import { consumeDownloadStream, type DownloadProgressEvent } from '@/lib/downloadStream';
 
 interface BackingTrackDetailProps {
   track: BackingTrack;
@@ -20,6 +22,7 @@ export default function BackingTrackDetail({ track, onBack, onUpdate, onDelete }
   const [audioPath, setAudioPath] = useState<string | null>(track.audioPath);
   const [downloading, setDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [downloadProgress, setDownloadProgress] = useState<DownloadProgressEvent | null>(null);
 
   // Sync local state if a different track becomes selected
   useEffect(() => {
@@ -28,6 +31,7 @@ export default function BackingTrackDetail({ track, onBack, onUpdate, onDelete }
     setTitleDraft(track.title);
     setAudioPath(track.audioPath);
     setDownloadError(null);
+    setDownloadProgress(null);
   }, [track.id, track.rootNote, track.scaleType, track.title, track.audioPath]);
 
   useEffect(() => {
@@ -35,11 +39,15 @@ export default function BackingTrackDetail({ track, onBack, onUpdate, onDelete }
     let cancelled = false;
     setDownloading(true);
     setDownloadError(null);
+    setDownloadProgress({ percent: 0, phase: 'downloading' });
     fetch(`/api/backing-tracks/${track.id}/download`, { method: 'POST' })
       .then(async (res) => {
-        const body = await res.json();
-        if (!res.ok) throw new Error(body.error || `Download failed (${res.status})`);
-        if (!cancelled) setAudioPath(body.audioPath as string);
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(body.error || `Download failed (${res.status})`);
+        }
+        const updated = await consumeDownloadStream(res, (p) => { if (!cancelled) setDownloadProgress(p); });
+        if (!cancelled) setAudioPath(updated.audioPath);
       })
       .catch((err) => { if (!cancelled) setDownloadError(err instanceof Error ? err.message : 'Download failed'); })
       .finally(() => { if (!cancelled) setDownloading(false); });
@@ -131,7 +139,7 @@ export default function BackingTrackDetail({ track, onBack, onUpdate, onDelete }
                 </button>
               </div>
             ) : (
-              <div className="text-center text-sm text-amber-200/70 py-6">Downloading audio…</div>
+              <DownloadProgress progress={downloadProgress} />
             )}
           </div>
         </div>
