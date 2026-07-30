@@ -2,8 +2,10 @@
 
 import { useEffect, useRef, useState } from 'react';
 import type { BackingTrack } from '@/types';
-import YouTubeEmbed from './YouTubeEmbed';
+import BackingTrackAudioPlayer from './BackingTrackAudioPlayer';
 import BackingTrackFretboard from './BackingTrackFretboard';
+import DownloadProgress from './DownloadProgress';
+import { consumeDownloadStream, type DownloadProgressEvent } from '@/lib/downloadStream';
 
 interface BackingTrackDetailProps {
   track: BackingTrack;
@@ -17,13 +19,40 @@ export default function BackingTrackDetail({ track, onBack, onUpdate, onDelete }
   const [scaleType, setScaleType] = useState(track.scaleType);
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState(track.title);
+  const [audioPath, setAudioPath] = useState<string | null>(track.audioPath);
+  const [downloading, setDownloading] = useState(false);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [downloadProgress, setDownloadProgress] = useState<DownloadProgressEvent | null>(null);
 
   // Sync local state if a different track becomes selected
   useEffect(() => {
     setRootNote(track.rootNote);
     setScaleType(track.scaleType);
     setTitleDraft(track.title);
-  }, [track.id, track.rootNote, track.scaleType, track.title]);
+    setAudioPath(track.audioPath);
+    setDownloadError(null);
+    setDownloadProgress(null);
+  }, [track.id, track.rootNote, track.scaleType, track.title, track.audioPath]);
+
+  useEffect(() => {
+    if (audioPath || downloading || downloadError) return;
+    let cancelled = false;
+    setDownloading(true);
+    setDownloadError(null);
+    setDownloadProgress({ percent: 0, phase: 'downloading' });
+    fetch(`/api/backing-tracks/${track.id}/download`, { method: 'POST' })
+      .then(async (res) => {
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(body.error || `Download failed (${res.status})`);
+        }
+        const updated = await consumeDownloadStream(res, (p) => { if (!cancelled) setDownloadProgress(p); });
+        if (!cancelled) setAudioPath(updated.audioPath);
+      })
+      .catch((err) => { if (!cancelled) setDownloadError(err instanceof Error ? err.message : 'Download failed'); })
+      .finally(() => { if (!cancelled) setDownloading(false); });
+    return () => { cancelled = true; };
+  }, [audioPath, downloading, downloadError, track.id]);
 
   // Debounced PATCH for scale changes
   const patchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -88,7 +117,7 @@ export default function BackingTrackDetail({ track, onBack, onUpdate, onDelete }
           </h1>
         )}
 
-        {/* Fretboard on top (full-width, large), YouTube player below */}
+        {/* Fretboard on top (full-width, large), audio player below */}
         <div className="flex flex-col gap-8">
           <BackingTrackFretboard
             rootNote={rootNote}
@@ -97,7 +126,21 @@ export default function BackingTrackDetail({ track, onBack, onUpdate, onDelete }
             onScaleChange={handleScaleChange}
           />
           <div className="w-full max-w-3xl mx-auto">
-            <YouTubeEmbed videoId={track.videoId} title={track.title} />
+            {audioPath ? (
+              <BackingTrackAudioPlayer audioPath={audioPath} title={track.title} />
+            ) : downloadError ? (
+              <div className="text-center text-sm text-rose-400 py-6">
+                {downloadError}
+                <button
+                  className="ml-2 underline hover:text-rose-300"
+                  onClick={() => { setDownloadError(null); }}
+                >
+                  Retry
+                </button>
+              </div>
+            ) : (
+              <DownloadProgress progress={downloadProgress} />
+            )}
           </div>
         </div>
       </div>

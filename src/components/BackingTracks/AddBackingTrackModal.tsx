@@ -4,6 +4,8 @@ import { useState } from 'react';
 import { isValidYouTubeUrl } from '@/lib/youtube';
 import { NOTES, SCALE_FORMULAS } from '@/lib/musicTheory';
 import type { BackingTrack } from '@/types';
+import { consumeDownloadStream, type DownloadProgressEvent } from '@/lib/downloadStream';
+import DownloadProgress from './DownloadProgress';
 
 interface AddBackingTrackModalProps {
   isOpen: boolean;
@@ -23,6 +25,7 @@ export default function AddBackingTrackModal({
   const [error, setError] = useState<string | null>(null);
   const [existingId, setExistingId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [progress, setProgress] = useState<DownloadProgressEvent | null>(null);
 
   if (!isOpen) return null;
 
@@ -31,6 +34,7 @@ export default function AddBackingTrackModal({
   const reset = () => {
     setUrl(''); setTitle(''); setRootNote('A'); setScaleType('Minor Pentatonic');
     setNeedsTitle(false); setError(null); setExistingId(null); setSubmitting(false);
+    setProgress(null);
   };
   const handleClose = () => { reset(); onClose(); };
 
@@ -44,6 +48,7 @@ export default function AddBackingTrackModal({
     }
 
     setSubmitting(true);
+    setProgress({ percent: 0, phase: 'downloading' });
     try {
       const res = await fetch('/api/backing-tracks', {
         method: 'POST',
@@ -55,14 +60,17 @@ export default function AddBackingTrackModal({
           scaleType,
         }),
       });
-      const body = await res.json();
 
-      if (res.status === 201) {
-        onCreated(body as BackingTrack);
+      // Success streams NDJSON progress + the final track; failures return JSON errors.
+      if (res.ok) {
+        const track = await consumeDownloadStream(res, setProgress);
+        onCreated(track);
         reset();
         onClose();
         return;
       }
+
+      const body = await res.json().catch(() => ({}));
 
       if (res.status === 409 && body.existingId) {
         setExistingId(body.existingId);
@@ -81,6 +89,7 @@ export default function AddBackingTrackModal({
       setError(err instanceof Error ? err.message : 'Network error');
     } finally {
       setSubmitting(false);
+      setProgress(null);
     }
   };
 
@@ -159,11 +168,14 @@ export default function AddBackingTrackModal({
             </div>
           )}
 
+          {submitting && <DownloadProgress progress={progress} />}
+
           <div className="flex justify-end gap-2 pt-2">
             <button
               type="button"
               onClick={handleClose}
-              className="px-4 py-2 rounded bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-sm"
+              disabled={submitting}
+              className="px-4 py-2 rounded bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-sm disabled:opacity-50"
             >
               Cancel
             </button>
@@ -172,7 +184,7 @@ export default function AddBackingTrackModal({
               disabled={submitting}
               className="px-4 py-2 rounded bg-amber-600 hover:bg-amber-700 text-white text-sm disabled:opacity-50"
             >
-              {submitting ? 'Adding…' : 'Add'}
+              {submitting ? 'Downloading…' : 'Add'}
             </button>
           </div>
         </form>

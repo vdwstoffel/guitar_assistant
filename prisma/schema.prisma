@@ -241,6 +241,8 @@ model BackingTrack {
   videoId      String
   title        String
   thumbnailUrl String?
+  audioPath    String?
+  duration     Float?
   rootNote     String
   scaleType    String
   createdAt    DateTime @default(now())
