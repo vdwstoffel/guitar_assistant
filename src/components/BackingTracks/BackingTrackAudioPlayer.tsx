@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { routeMediaElementToSink, subscribeToAudioSinkChanges } from '@/lib/audioSink';
 
 interface BackingTrackAudioPlayerProps {
@@ -55,11 +55,27 @@ export default function BackingTrackAudioPlayer({ audioPath, title }: BackingTra
     setCurrent(t);
   };
 
+  const applyVolume = useCallback((v: number) => {
+    const clamped = Math.min(1, Math.max(0, v));
+    setVolume(clamped);
+    if (audioRef.current) audioRef.current.volume = clamped;
+  }, []);
+
   const handleVolume = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const v = Number(e.target.value);
-    setVolume(v);
-    if (audioRef.current) audioRef.current.volume = v;
+    applyVolume(Number(e.target.value));
   };
+
+  // +/- keys nudge the volume (ignored while typing in a field).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t && (t.isContentEditable || /^(INPUT|SELECT|TEXTAREA)$/.test(t.tagName))) return;
+      if (e.key === '+' || e.key === '=') { applyVolume((audioRef.current?.volume ?? volume) + 0.05); e.preventDefault(); }
+      else if (e.key === '-' || e.key === '_') { applyVolume((audioRef.current?.volume ?? volume) - 0.05); e.preventDefault(); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [applyVolume, volume]);
 
   return (
     <div className="w-full rounded-lg bg-neutral-900/70 border border-neutral-700 p-4 flex flex-col gap-3">
@@ -111,7 +127,7 @@ export default function BackingTrackAudioPlayer({ audioPath, title }: BackingTra
           🔁 Loop
         </button>
 
-        <div className="flex items-center gap-2 flex-1 max-w-[160px]">
+        <div className="flex items-center gap-2 flex-1 max-w-[160px]" title="Use + / − keys to adjust volume">
           <span className="text-xs text-neutral-400">🔊</span>
           <input
             type="range"
@@ -121,7 +137,7 @@ export default function BackingTrackAudioPlayer({ audioPath, title }: BackingTra
             value={volume}
             onChange={handleVolume}
             className="flex-1 accent-amber-500"
-            aria-label="Volume"
+            aria-label="Volume (use + and - keys)"
           />
         </div>
 
