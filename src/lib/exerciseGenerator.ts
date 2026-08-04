@@ -51,7 +51,8 @@ export interface ExerciseConfig {
   exerciseType: ExerciseType;
   /** 1-based position index, or null for full neck. */
   position: number | null;
-  tempo: number;
+  /** Cosmetic only (no playback); defaults to 120 and the marker is hidden. */
+  tempo?: number;
   duration: AlphaTexDuration;
   bars: number;
 }
@@ -298,11 +299,12 @@ export function generateExercise(config: ExerciseConfig): GeneratedExercise {
 
   const positionLabel = config.position === null ? 'Full Neck' : `Position ${config.position}`;
   const exerciseLabel = EXERCISE_TYPES.find((t) => t.value === effectiveType)?.label ?? effectiveType;
-  const description = `${config.root} ${config.scaleType} — ${exerciseLabel} (${positionLabel}, ${config.tempo} BPM)`;
+  const description = `${config.root} ${config.scaleType} — ${exerciseLabel} (${positionLabel})`;
 
   const alphatex = fretNotesToAlphaTex(notes, {
     title: description,
-    tempo: config.tempo,
+    // No playback, so tempo is cosmetic only; the marker is hidden at render time.
+    tempo: config.tempo ?? 120,
     duration: config.duration,
   });
 

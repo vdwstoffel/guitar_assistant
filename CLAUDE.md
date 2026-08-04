@@ -18,6 +18,11 @@ Guitar/Music Assistant - a Next.js 16 web application for managing and practicin
 
 Use `docker-compose up` to start the application. The Docker configuration handles all dependencies and environment setup.
 
+**This is a production build with no hot reload.** Whenever a change requires the running app to pick it up, restart the container yourself — no need to ask:
+```bash
+docker-compose restart nextjs-app
+```
+
 ## Common Commands
 
 ```bash

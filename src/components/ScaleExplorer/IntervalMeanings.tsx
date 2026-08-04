@@ -1,5 +1,5 @@
-import { INTERVAL_REFERENCE } from '@/components/IntervalExplorer/types';
-import type { IntervalInfo } from '@/components/IntervalExplorer/types';
+import { INTERVAL_REFERENCE } from '@/lib/intervalReference';
+import type { IntervalInfo } from '@/lib/intervalReference';
 
 // ---------------------------------------------------------------------------
 // Quality badge styling
@@ -24,8 +24,8 @@ function qualityBadgeClass(quality: IntervalInfo['quality']): string {
 
 /**
  * Static reference of all 13 intervals (unison → octave) with their quality,
- * character, and a well-known song example. Read-only reference used on the
- * fretboard page — see IntervalExplorer for the interactive version.
+ * character, and a well-known song example. Read-only reference shown in the
+ * Scale Practice "Interval Meanings" tab.
  */
 export default function IntervalMeanings() {
   return (

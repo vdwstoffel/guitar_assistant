@@ -16,6 +16,7 @@ import {
   ScaleComparisonLegend,
   FretboardDisplay,
   ScaleReferenceTabs,
+  ScaleSongsPanel,
 } from '@/components/ScaleExplorer';
 import { useNoteTrainer, NoteTrainerControls } from '@/components/NoteTrainer';
 
@@ -38,7 +39,7 @@ export default function Fretboard() {
 
   return (
     <div
-      className="flex-1 flex flex-col items-center justify-center p-6 overflow-auto"
+      className="flex-1 flex flex-col items-center justify-start p-6 overflow-auto"
       style={{
         background: 'linear-gradient(to bottom, hsl(23, 64%, 5%), hsl(23, 64%, 18%))',
       }}
@@ -46,8 +47,6 @@ export default function Fretboard() {
       <div className="w-full max-w-450">
         {/* Header */}
         <div className="mb-4 text-center">
-          <h1 className="text-2xl font-bold text-amber-100 mb-1">Guitar Fretboard</h1>
-          <p className="text-amber-200/70 text-sm mb-3">Standard Tuning (E A D G B E)</p>
 
           {trainerMode ? (
             /* Note Trainer controls */
@@ -81,7 +80,39 @@ export default function Fretboard() {
           ) : (
             /* Normal scale controls */
             <div className="flex flex-col items-center gap-2">
-              <div className="flex gap-3">
+              {/* Scale/Key selectors and mode buttons on one row */}
+              <div className="flex flex-wrap gap-3 items-end justify-center">
+                <div className="flex flex-col gap-1">
+                  <label className="text-amber-200/70 text-sm font-medium">Scale</label>
+                  <select
+                    value={selectedScale}
+                    onChange={(e) => setSelectedScale(e.target.value as ScaleType)}
+                    className="px-3 py-2 rounded bg-amber-900/50 text-amber-100 border border-amber-700/50 focus:outline-none focus:border-amber-500"
+                  >
+                    {Object.keys(SCALE_FORMULAS).map((scale) => (
+                      <option key={scale} value={scale}>
+                        {scale}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-amber-200/70 text-sm font-medium">Key</label>
+                  <select
+                    value={selectedKey}
+                    onChange={(e) => setSelectedKey(e.target.value)}
+                    disabled={selectedScale === 'None'}
+                    className="px-3 py-2 rounded bg-amber-900/50 text-amber-100 border border-amber-700/50 focus:outline-none focus:border-amber-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {NOTES.map((note) => (
+                      <option key={note} value={note}>
+                        {note}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
                 <button
                   onClick={() => setShowNoteNames(!showNoteNames)}
                   className={`px-4 py-2 rounded transition-colors ${
@@ -100,54 +131,19 @@ export default function Fretboard() {
                 </button>
               </div>
 
-              {/* Scale Selection */}
-              <div className="flex gap-4 items-center">
-                <div className="flex flex-col gap-2">
-                  <label className="text-amber-200/70 text-sm font-medium">Scale</label>
-                  <select
-                    value={selectedScale}
-                    onChange={(e) => setSelectedScale(e.target.value as ScaleType)}
-                    className="px-3 py-2 rounded bg-amber-900/50 text-amber-100 border border-amber-700/50 focus:outline-none focus:border-amber-500"
-                  >
-                    {Object.keys(SCALE_FORMULAS).map((scale) => (
-                      <option key={scale} value={scale}>
-                        {scale}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="flex flex-col gap-2">
-                  <label className="text-amber-200/70 text-sm font-medium">Key</label>
-                  <select
-                    value={selectedKey}
-                    onChange={(e) => setSelectedKey(e.target.value)}
-                    disabled={selectedScale === 'None'}
-                    className="px-3 py-2 rounded bg-amber-900/50 text-amber-100 border border-amber-700/50 focus:outline-none focus:border-amber-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {NOTES.map((note) => (
-                      <option key={note} value={note}>
-                        {note}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              {/* Scale info, formula, and enhancement controls */}
+              {/* Scale description, degrees, and genres — one line under the controls */}
               {selectedScale !== 'None' && (
-                <div className="max-w-2xl text-center space-y-1.5">
-                  <p className="text-amber-300 text-sm font-medium">
-                    {selectedKey} {selectedScale}
-                  </p>
-                  <p className="text-amber-200/60 text-xs leading-snug">
+                <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5">
+                  <span className="text-amber-200/70 text-xs leading-snug">
+                    <span className="text-amber-300 font-semibold">{selectedKey} {selectedScale}</span>
+                    {' — '}
                     {SCALE_FORMULAS[selectedScale].description}
-                  </p>
+                  </span>
 
                   {/* Scale Formula Display */}
                   <ScaleFormulaDisplay formula={enhancements.scaleFormula} />
 
-                  <div className="flex flex-wrap justify-center gap-2">
+                  <div className="flex flex-wrap gap-1.5">
                     {SCALE_FORMULAS[selectedScale].genres.map((genre) => (
                       <span
                         key={genre}
@@ -204,8 +200,6 @@ export default function Fretboard() {
         {/* Legends (hidden during trainer mode) */}
         {!trainer.isRunning && (
           <div className="mt-6 text-center text-sm text-amber-200/70 space-y-2">
-            <p>Hover over notes to highlight them</p>
-
             {/* Degree color legend */}
             <DegreeLegend visible={enhancements.showDegreeColors && selectedScale !== 'None'} />
 
@@ -215,17 +209,17 @@ export default function Fretboard() {
               compareScale={enhancements.compareScale}
               selectedKey={selectedKey}
             />
-
-            {/* Default root note hint (only when no special modes are active) */}
-            {selectedScale !== 'None' && !enhancements.showDegreeColors && !enhancements.isComparing && (
-              <p className="text-red-400">Red notes indicate the root note of the scale</p>
-            )}
           </div>
         )}
 
-        {/* Reference tabs: scale chords/progressions + interval meanings */}
+        {/* Reference tabs (left) + songs panel (right) */}
         {!trainer.isRunning && (
-          <ScaleReferenceTabs root={selectedKey} scaleType={selectedScale} />
+          <div className="mt-6 w-full flex flex-col lg:flex-row gap-4 items-start">
+            <div className="flex-1 min-w-0">
+              <ScaleReferenceTabs root={selectedKey} scaleType={selectedScale} />
+            </div>
+            <ScaleSongsPanel root={selectedKey} scaleType={selectedScale} />
+          </div>
         )}
       </div>
     </div>

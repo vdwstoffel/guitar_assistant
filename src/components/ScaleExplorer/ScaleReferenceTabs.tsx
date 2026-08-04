@@ -4,6 +4,7 @@ import { useState } from 'react';
 import type { ScaleType } from '@/lib/musicTheory';
 import ScaleChords from './ScaleChords';
 import IntervalMeanings from './IntervalMeanings';
+import PracticeExerciseTab from './PracticeExerciseTab';
 
 // ---------------------------------------------------------------------------
 // Props
@@ -14,11 +15,12 @@ interface ScaleReferenceTabsProps {
   scaleType: ScaleType;
 }
 
-type ReferenceTab = 'chords' | 'intervals';
+type ReferenceTab = 'chords' | 'intervals' | 'practice';
 
 const TABS: { id: ReferenceTab; label: string }[] = [
   { id: 'chords', label: 'Chords & Progressions' },
   { id: 'intervals', label: 'Interval Meanings' },
+  { id: 'practice', label: 'Practice Exercise' },
 ];
 
 // ---------------------------------------------------------------------------
@@ -33,7 +35,7 @@ export default function ScaleReferenceTabs({ root, scaleType }: ScaleReferenceTa
   const [activeTab, setActiveTab] = useState<ReferenceTab>('chords');
 
   return (
-    <div className="mt-6 w-full max-w-5xl mx-auto text-left">
+    <div className="w-full text-left">
       {/* Tab bar */}
       <div className="flex gap-1 border-b border-amber-800/30 mb-6">
         {TABS.map((tab) => (
@@ -51,17 +53,23 @@ export default function ScaleReferenceTabs({ root, scaleType }: ScaleReferenceTa
         ))}
       </div>
 
-      {/* Tab content */}
+      {/* Tab content — Chords/Intervals stay readable width; Practice goes full width */}
       {activeTab === 'chords' ? (
-        scaleType === 'None' ? (
-          <p className="text-amber-200/60 text-sm py-6 text-center">
-            Select a scale above to see its chords and common progressions.
-          </p>
-        ) : (
-          <ScaleChords root={root} scaleType={scaleType} />
-        )
+        <div className="max-w-5xl">
+          {scaleType === 'None' ? (
+            <p className="text-amber-200/60 text-sm py-6 text-center">
+              Select a scale above to see its chords and common progressions.
+            </p>
+          ) : (
+            <ScaleChords root={root} scaleType={scaleType} />
+          )}
+        </div>
+      ) : activeTab === 'intervals' ? (
+        <div className="max-w-5xl">
+          <IntervalMeanings />
+        </div>
       ) : (
-        <IntervalMeanings />
+        <PracticeExerciseTab root={root} scaleType={scaleType} />
       )}
     </div>
   );

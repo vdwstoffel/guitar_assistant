@@ -125,8 +125,11 @@ const BookGrid = memo(function BookGrid({
     !!book.totalCount && book.totalCount > 0 && (book.completedCount || 0) >= book.totalCount;
 
   const { inProgressBooks, otherBooks, completedBooks } = useMemo(() => {
+    // Completion takes precedence: a 100%-complete book belongs in "Completed"
+    // even if its inProgress flag was never cleared, otherwise it would match
+    // none of the three categories and disappear from the library entirely.
+    const done = books.filter(({ book }) => isCompleted(book));
     const ip = books.filter(({ book }) => book.inProgress && !isCompleted(book));
-    const done = books.filter(({ book }) => isCompleted(book) && !book.inProgress);
     const other = books.filter(({ book }) => !book.inProgress && !isCompleted(book));
     return {
       inProgressBooks: sortBooks(ip),

@@ -1,16 +1,4 @@
-/** Types and constants for the IntervalExplorer feature. */
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-/** A position on the fretboard identified by string and fret number. */
-export interface FretPosition {
-  /** 0 = 6th (low E) string, 5 = 1st (high E) string */
-  string: number;
-  /** 0 = open string, 1-15 = fretted positions */
-  fret: number;
-}
+/** Shared interval reference data (used by the ScaleExplorer's Interval Meanings tab). */
 
 /** Data for a single interval in the reference panel. */
 export interface IntervalInfo {
@@ -27,10 +15,6 @@ export interface IntervalInfo {
   /** Famous song example (first two notes) */
   songExample: string;
 }
-
-// ---------------------------------------------------------------------------
-// Reference data
-// ---------------------------------------------------------------------------
 
 /**
  * Complete reference data for all 13 intervals (unison through octave).

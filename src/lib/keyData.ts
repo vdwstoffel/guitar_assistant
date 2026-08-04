@@ -1,5 +1,5 @@
 /**
- * Shared key/scale data used by CircleOfFifths, ProgressionExplorer, etc.
+ * Shared key/scale data used by CircleOfFifths, etc.
  *
  * Contains diatonic chord data for all 24 major and minor keys,
  * circle-of-fifths ordering, and common chord progressions.

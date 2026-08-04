@@ -4,9 +4,11 @@ import { useEffect, useRef, useState } from "react";
 
 interface AlphaTexStaticProps {
   alphatex: string;
+  /** Hide the tempo (metronome) marker — useful when there's no playback. */
+  hideTempo?: boolean;
 }
 
-export default function AlphaTexStatic({ alphatex }: AlphaTexStaticProps) {
+export default function AlphaTexStatic({ alphatex, hideTempo = false }: AlphaTexStaticProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const apiRef = useRef<any>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -36,6 +38,9 @@ export default function AlphaTexStatic({ alphatex }: AlphaTexStaticProps) {
         settings.display.scale = 0.9;
         settings.player.playerMode = alphaTab.PlayerMode.Disabled;
         settings.player.enableCursor = false;
+        if (hideTempo) {
+          settings.notation.elements.set(alphaTab.NotationElement.EffectTempo, false);
+        }
 
         const api = new AlphaTabApi(containerRef.current!, settings);
         apiRef.current = api;
@@ -72,7 +77,7 @@ export default function AlphaTexStatic({ alphatex }: AlphaTexStaticProps) {
         apiRef.current = null;
       }
     };
-  }, [alphatex]);
+  }, [alphatex, hideTempo]);
 
   return (
     <div className="relative my-4">

@@ -22,7 +22,7 @@ import {
 const NAV_TOOLTIP =
   "pointer-events-none absolute left-1/2 top-full z-50 mt-1 -translate-x-1/2 whitespace-nowrap rounded bg-gray-900 px-2 py-1 text-xs text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100";
 
-type Section = 'home' | 'lessons' | 'videos' | 'fretboard' | 'intervals' | 'chords' | 'tools' | 'circle' | 'tabs' | 'jamtracks' | 'recordings' | 'metrics' | 'knowledge' | 'gear' | 'progressions' | 'caged' | 'scales' | 'backing-tracks';
+type Section = 'home' | 'lessons' | 'videos' | 'fretboard' | 'chords' | 'tools' | 'circle' | 'jamtracks' | 'recordings' | 'metrics' | 'caged';
 type TimeSignature = '4/4' | '3/4' | '2/4' | '6/8';
 
 interface TopNavProps {
@@ -65,18 +65,12 @@ const TopNav = memo(function TopNav({ activeSection, onSectionChange, onSearchTr
   const tapTimesRef = useRef<number[]>([]);
 
   const theoryItems: { id: Section; label: string; href: string }[] = [
-    { id: 'fretboard', label: 'Fretboard', href: '/fretboard' },
-    { id: 'scales', label: 'Scale Practice', href: '/scales' },
-    { id: 'intervals', label: 'Intervals', href: '/intervals' },
     { id: 'chords', label: 'Chords', href: '/chords' },
     { id: 'circle', label: 'Circle of 5ths', href: '/circle' },
-    { id: 'progressions', label: 'Progressions', href: '/progressions' },
     { id: 'caged', label: 'CAGED System', href: '/caged' },
-    { id: 'knowledge', label: 'Theory Notes', href: '/knowledge' },
-    { id: 'gear', label: 'Gear', href: '/gear' },
   ];
 
-  const isTheoryActive = activeSection === 'fretboard' || activeSection === 'scales' || activeSection === 'intervals' || activeSection === 'chords' || activeSection === 'circle' || activeSection === 'progressions' || activeSection === 'caged' || activeSection === 'knowledge' || activeSection === 'gear';
+  const isTheoryActive = activeSection === 'chords' || activeSection === 'circle' || activeSection === 'caged';
 
   // Close theory dropdown on click outside
   useEffect(() => {
@@ -365,21 +359,6 @@ const TopNav = memo(function TopNav({ activeSection, onSectionChange, onSearchTr
               <span className="sm:hidden">Jam</span>
             </Link>
             <Link
-              href="/backing-tracks"
-              onClick={() => onSectionChange('backing-tracks')}
-              className={`px-2 sm:px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-1 ${
-                activeSection === 'backing-tracks'
-                  ? 'bg-gray-700 text-white'
-                  : 'text-gray-400 hover:text-white hover:bg-gray-700/50'
-              }`}
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M9 10l3-3v10l-3-3H5a2 2 0 01-2-2v0a2 2 0 012-2h4z" />
-              </svg>
-              <span className="hidden sm:inline">Backing Tracks</span>
-              <span className="sm:hidden">Backing</span>
-            </Link>
-            <Link
               href="/videos"
               onClick={() => onSectionChange('videos')}
               className={`px-2 sm:px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-1 ${
@@ -393,6 +372,21 @@ const TopNav = memo(function TopNav({ activeSection, onSectionChange, onSearchTr
               </svg>
               <span className="hidden sm:inline">Videos</span>
               <span className="sm:hidden">Vid</span>
+            </Link>
+            <Link
+              href="/fretboard"
+              onClick={() => onSectionChange('fretboard')}
+              className={`px-2 sm:px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-1 ${
+                activeSection === 'fretboard'
+                  ? 'bg-gray-700 text-white'
+                  : 'text-gray-400 hover:text-white hover:bg-gray-700/50'
+              }`}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 5h16M4 9h16M4 13h16M4 17h16M8 5v12M16 5v12" />
+              </svg>
+              <span className="hidden sm:inline">Fretboard</span>
+              <span className="sm:hidden">Fret</span>
             </Link>
             {/* Theory dropdown */}
             <div className="relative" ref={theoryDropdownRef}>
@@ -436,21 +430,6 @@ const TopNav = memo(function TopNav({ activeSection, onSectionChange, onSearchTr
               )}
             </div>
 
-            <Link
-              href="/tabs"
-              onClick={() => onSectionChange('tabs')}
-              className={`px-2 sm:px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-1 ${
-                activeSection === 'tabs'
-                  ? 'bg-gray-700 text-white'
-                  : 'text-gray-400 hover:text-white hover:bg-gray-700/50'
-              }`}
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-              <span className="hidden sm:inline">Tabs</span>
-              <span className="sm:hidden">Tab</span>
-            </Link>
             <Link
               href="/metrics"
               onClick={() => onSectionChange('metrics')}

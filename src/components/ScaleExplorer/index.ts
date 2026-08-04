@@ -10,3 +10,4 @@ export type { FretboardDisplayProps } from './FretboardDisplay';
 export { default as ScaleChords } from './ScaleChords';
 export { default as IntervalMeanings } from './IntervalMeanings';
 export { default as ScaleReferenceTabs } from './ScaleReferenceTabs';
+export { default as ScaleSongsPanel } from './ScaleSongsPanel';

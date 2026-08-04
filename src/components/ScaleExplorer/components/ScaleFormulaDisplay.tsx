@@ -8,7 +8,7 @@ export default function ScaleFormulaDisplay({ formula }: ScaleFormulaDisplayProp
   if (formula.length === 0) return null;
 
   return (
-    <div className="flex flex-wrap items-center justify-center gap-1.5 mt-2">
+    <div className="flex flex-wrap items-center gap-1.5">
       {formula.map((interval, idx) => (
         <span key={idx} className="flex items-center gap-1.5">
           <span className="px-2 py-0.5 rounded text-xs font-mono font-bold bg-amber-700/30 text-amber-200 border border-amber-600/30">

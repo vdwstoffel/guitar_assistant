@@ -6,23 +6,16 @@ interface DownloadProgressProps {
   progress: DownloadProgressEvent | null;
 }
 
-/**
- * Progress indicator for a backing-track audio download.
- * - `downloading`: a real percentage bar.
- * - `converting` (or unknown percent): an indeterminate animated bar, since the
- *   ffmpeg extraction step reports no download percentage.
- */
+/** Progress bar for a song audio download (percentage while downloading, pulse while converting). */
 export default function DownloadProgress({ progress }: DownloadProgressProps) {
   const phase = progress?.phase ?? 'downloading';
   const percent = progress?.percent ?? null;
   const converting = phase === 'converting' || percent === null;
 
-  const label = converting
-    ? 'Converting audio…'
-    : `Downloading audio… ${Math.round(percent!)}%`;
+  const label = converting ? 'Converting audio…' : `Downloading audio… ${Math.round(percent!)}%`;
 
   return (
-    <div className="w-full max-w-sm mx-auto py-4">
+    <div className="w-full py-2">
       <div className="flex items-center justify-between mb-2 text-sm text-amber-200/80">
         <span>{label}</span>
         {!converting && <span className="font-mono text-amber-300">{Math.round(percent!)}%</span>}

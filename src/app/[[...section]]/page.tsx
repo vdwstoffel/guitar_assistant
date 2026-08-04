@@ -11,21 +11,14 @@ import MarkersBar from "@/components/MarkersBar";
 import TopNav from "@/components/TopNav";
 import Fretboard from "@/components/Fretboard";
 import CircleOfFifths from "@/components/CircleOfFifths";
-import IntervalExplorer from "@/components/IntervalExplorer";
 import ChordBuilder from "@/components/ChordBuilder";
 
 import PdfViewer from "@/components/PdfViewer";
 import Videos from "@/components/Videos";
 import RecordingsView from "@/components/RecordingsView";
 import Tools from "@/components/Tools";
-import TabEditor from "@/components/TabEditor";
 import MetricsView from "@/components/MetricsView";
-import KnowledgeView from "@/components/KnowledgeView";
-import GearView from "@/components/GearView";
-import ProgressionExplorer from "@/components/ProgressionExplorer";
 import CAGEDSystem from "@/components/CAGEDSystem";
-import ScalePracticeGenerator from "@/components/ScalePractice";
-import { BackingTracksView } from "@/components/BackingTracks";
 import HomeView from "@/components/HomeView";
 import GuitarProViewer from "@/components/GuitarProViewer";
 import UploadModal from "@/components/UploadModal";
@@ -33,12 +26,12 @@ import VideoPlayer from "@/components/VideoPlayer";
 import { AuthorSummary, BookSummary, Book, Track, TrackTab, Marker, JamTrack, JamTrackMarker, BookVideo, BookVideoMarker, SearchResultTrack, SearchResultBook, SearchResultJamTrack } from "@/types";
 import TrackTabsModal from "@/components/TrackTabsModal";
 
-type Section = 'home' | 'lessons' | 'videos' | 'fretboard' | 'intervals' | 'chords' | 'tools' | 'circle' | 'tabs' | 'jamtracks' | 'recordings' | 'metrics' | 'knowledge' | 'gear' | 'progressions' | 'caged' | 'scales' | 'backing-tracks';
+type Section = 'home' | 'lessons' | 'videos' | 'fretboard' | 'chords' | 'tools' | 'circle' | 'jamtracks' | 'recordings' | 'metrics' | 'caged';
 
 const getSectionFromPath = (section: string[] | undefined): Section => {
   if (!section || section.length === 0) return 'home';
   const first = section[0];
-  if (first === 'home' || first === 'lessons' || first === 'videos' || first === 'fretboard' || first === 'intervals' || first === 'chords' || first === 'tools' || first === 'circle' || first === 'tabs' || first === 'jamtracks' || first === 'recordings' || first === 'metrics' || first === 'knowledge' || first === 'gear' || first === 'progressions' || first === 'caged' || first === 'scales' || first === 'backing-tracks') {
+  if (first === 'home' || first === 'lessons' || first === 'videos' || first === 'fretboard' || first === 'chords' || first === 'tools' || first === 'circle' || first === 'jamtracks' || first === 'recordings' || first === 'metrics' || first === 'caged') {
     return first;
   }
   return 'home';
@@ -2229,26 +2222,12 @@ export default function Home() {
         <Tools />
       ) : activeSection === 'circle' ? (
         <CircleOfFifths />
-      ) : activeSection === 'intervals' ? (
-        <IntervalExplorer />
       ) : activeSection === 'chords' ? (
         <ChordBuilder />
-      ) : activeSection === 'tabs' ? (
-        <TabEditor />
       ) : activeSection === 'metrics' ? (
         <MetricsView onGoToTrack={handleGoToTrackFromMetrics} />
-      ) : activeSection === 'knowledge' ? (
-        <KnowledgeView />
-      ) : activeSection === 'gear' ? (
-        <GearView />
-      ) : activeSection === 'progressions' ? (
-        <ProgressionExplorer />
       ) : activeSection === 'caged' ? (
         <CAGEDSystem />
-      ) : activeSection === 'scales' ? (
-        <ScalePracticeGenerator />
-      ) : activeSection === 'backing-tracks' ? (
-        <BackingTracksView />
       ) : (
         <Fretboard />
       )}

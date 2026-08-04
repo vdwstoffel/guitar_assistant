@@ -30,7 +30,7 @@ Standalone play-along tracks (backing tracks, songs) that live outside the book 
 
 ### Practice Tools
 - **Metronome** - Adjustable BPM (20-300), time signature support (4/4, 3/4, 2/4, 6/8), visual beat indicator, volume control
-- **Fretboard Visualizer** - Interactive guitar fretboard reference
+- **Fretboard Visualizer** - Interactive guitar fretboard with scale/key overlays, note trainer, a Practice Exercise generator (auto-generated tabs), and a per-scale/key **Songs** panel (add a YouTube URL → downloaded audio you can play along to)
 - **Circle of Fifths** - Major/minor keys, key signatures, diatonic chords, scale notes
 - **PDF Concatenation** - Append pages to existing book PDFs incrementally
 
