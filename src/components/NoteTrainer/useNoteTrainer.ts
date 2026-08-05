@@ -2,7 +2,13 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { PitchDetector } from 'pitchy';
 import { NOTES, getNoteIndex } from '@/lib/musicTheory';
 import { playCountIn } from '@/lib/clickGenerator';
-import { playNoteByName } from '@/lib/audioGenerator';
+import {
+  playNoteByName,
+  speakNoteName,
+  stopSpokenNote,
+  playCorrectCue,
+  playIncorrectCue,
+} from '@/lib/audioGenerator';
 import { freqToNote } from '@/lib/tuner/presets';
 import { withInputDevice } from '@/lib/audioSink';
 
@@ -70,20 +76,14 @@ function drawNext(pool: readonly string[], deck: string[], lastNote: string | nu
   return deck.shift()!;
 }
 
+// Announce the note through the app-routed AudioContext (so it plays on the
+// selected output device — the browser's speechSynthesis can't be routed).
 function speakNote(note: string, volume: number): void {
-  if (typeof window === 'undefined' || !window.speechSynthesis) return;
-  window.speechSynthesis.cancel();
-  const spoken = note.replace('#', ' sharp');
-  const utterance = new SpeechSynthesisUtterance(spoken);
-  utterance.volume = Math.max(0, Math.min(1, volume / 100));
-  utterance.rate = 1.05;
-  window.speechSynthesis.speak(utterance);
+  void speakNoteName(note, volume);
 }
 
 function cancelSpeech(): void {
-  if (typeof window !== 'undefined' && window.speechSynthesis) {
-    window.speechSynthesis.cancel();
-  }
+  stopSpokenNote();
 }
 
 export function useNoteTrainer() {
@@ -253,11 +253,13 @@ export function useNoteTrainer() {
 
           if (name === target) {
             setMatchHit(true);
+            playCorrectCue(configRef.current.volume); // audio cue so no need to watch the screen
             // Brief celebratory hold so the ✓ is visible.
             setTimeout(() => finish(true), 250);
           } else {
             // Wrong pitch — freeze the display so the user sees what they played.
             setMissedNote(name);
+            playIncorrectCue(configRef.current.volume);
             setTimeout(() => finish(false), 700);
           }
         };

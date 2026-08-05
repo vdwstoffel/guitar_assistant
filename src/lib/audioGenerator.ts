@@ -39,6 +39,83 @@ export function getAudioContext(): AudioContext {
 }
 
 // ---------------------------------------------------------------------------
+// Spoken note-name clips (routed to the selected output device)
+// ---------------------------------------------------------------------------
+//
+// The browser's speechSynthesis cannot target a chosen output device, so the
+// Note Trainer announces notes with pre-generated clips played through the
+// routed shared AudioContext instead. Clips live in /public/note-audio.
+
+const clipCache = new Map<string, AudioBuffer>();
+const clipPending = new Map<string, Promise<AudioBuffer>>();
+let currentClipSource: AudioBufferSourceNode | null = null;
+
+/** URL of the spoken clip for a note (e.g. "A#" -> /note-audio/A-sharp.mp3). */
+function noteClipUrl(note: string): string {
+  return `/note-audio/${note.replace('#', '-sharp')}.mp3`;
+}
+
+/** Fetch + decode a note clip once, caching the decoded buffer. */
+async function loadNoteClip(note: string, ctx: AudioContext): Promise<AudioBuffer> {
+  const cached = clipCache.get(note);
+  if (cached) return cached;
+  let pending = clipPending.get(note);
+  if (!pending) {
+    pending = (async () => {
+      const res = await fetch(noteClipUrl(note));
+      if (!res.ok) throw new Error(`Missing note clip for "${note}" (${res.status})`);
+      const decoded = await ctx.decodeAudioData(await res.arrayBuffer());
+      clipCache.set(note, decoded);
+      return decoded;
+    })();
+    clipPending.set(note, pending);
+  }
+  return pending;
+}
+
+/**
+ * Announce a note name through the app-routed AudioContext, so it plays on the
+ * user-selected output device (unlike speechSynthesis, which is locked to the
+ * system default). No-op if the clip is missing.
+ *
+ * @param note   - note name (e.g. "C", "F#")
+ * @param volume - 0–100
+ */
+export async function speakNoteName(note: string, volume: number = 100): Promise<void> {
+  const ctx = getAudioContext();
+  let buffer: AudioBuffer;
+  try {
+    buffer = await loadNoteClip(note, ctx);
+  } catch {
+    return;
+  }
+  stopSpokenNote(); // avoid overlap with a still-playing announcement
+  const src = ctx.createBufferSource();
+  src.buffer = buffer;
+  const gain = ctx.createGain();
+  gain.gain.value = Math.max(0, Math.min(1, volume / 100));
+  src.connect(gain);
+  gain.connect(ctx.destination);
+  src.onended = () => {
+    if (currentClipSource === src) currentClipSource = null;
+  };
+  currentClipSource = src;
+  src.start();
+}
+
+/** Stop any in-progress spoken note-name clip. */
+export function stopSpokenNote(): void {
+  if (currentClipSource) {
+    try {
+      currentClipSource.stop();
+    } catch {
+      /* already stopped */
+    }
+    currentClipSource = null;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Frequency conversion
 // ---------------------------------------------------------------------------
 
@@ -126,6 +203,53 @@ export function playNoteByName(
 ): void {
   const freq = noteToFrequency(note, octave);
   playNote(freq, duration, DEFAULT_WAVEFORM, volume);
+}
+
+/** Peak gain for the feedback cues (kept quiet — this is a practice tool). */
+const CUE_PEAK = 0.045;
+
+interface ToneOpts {
+  type?: OscillatorType;
+  attack?: number;
+  sustain?: number;
+  decay: number;
+}
+
+/** Schedule one enveloped tone on the routed context, optionally delayed. */
+function playTone(freq: number, gainPeak: number, opts: ToneOpts, startOffset = 0): void {
+  const ctx = getAudioContext();
+  const t0 = ctx.currentTime + startOffset;
+  const attack = opts.attack ?? 0.005;
+  const sustain = opts.sustain ?? 0;
+  const end = t0 + attack + sustain + opts.decay;
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = opts.type ?? 'sine';
+  osc.frequency.setValueAtTime(freq, t0);
+  gain.gain.setValueAtTime(0, t0);
+  gain.gain.linearRampToValueAtTime(gainPeak, t0 + attack);
+  if (sustain > 0) gain.gain.setValueAtTime(gainPeak, t0 + attack + sustain);
+  gain.gain.exponentialRampToValueAtTime(0.0001, end);
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+  osc.start(t0);
+  osc.stop(end + 0.02);
+}
+
+/** CORRECT: the classic cheerful two-note "ding-ding" bell (ascending). */
+export function playCorrectCue(volume: number = 100): void {
+  const v = Math.max(0, Math.min(1, volume / 100));
+  const bell: ToneOpts = { type: 'sine', attack: 0.004, decay: 0.45 };
+  playTone(1318.5, CUE_PEAK * v, bell, 0);      // E6
+  playTone(1760.0, CUE_PEAK * v, bell, 0.11);   // A6 (higher second ding)
+}
+
+/** WRONG: a soft, gentle "nope" — two quiet descending sine blips (no punishment). */
+export function playIncorrectCue(volume: number = 100): void {
+  const v = Math.max(0, Math.min(1, volume / 100));
+  const blip: ToneOpts = { type: 'sine', attack: 0.006, decay: 0.14 };
+  playTone(311.13, CUE_PEAK * v, blip, 0);      // D#4
+  playTone(246.94, CUE_PEAK * v, blip, 0.12);   // B3  (gentle downward step)
 }
 
 /**
