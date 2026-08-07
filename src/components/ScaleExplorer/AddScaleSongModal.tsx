@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { isValidYouTubeUrl } from '@/lib/youtube';
 import { NOTES, SCALE_FORMULAS } from '@/lib/musicTheory';
 import type { BackingTrack } from '@/types';
@@ -27,6 +27,14 @@ export default function AddScaleSongModal({
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [progress, setProgress] = useState<DownloadProgressEvent | null>(null);
+
+  // Sync the Key/Scale selects to the fretboard's current selection whenever the
+  // modal opens. The component stays mounted while closed, so useState's initial
+  // value would otherwise stay stuck on whatever root/scale was active at first
+  // mount (e.g. the default C Major) instead of the user's current choice.
+  useEffect(() => {
+    if (isOpen) { setRootNote(initialRoot); setScaleType(initialScale); }
+  }, [isOpen, initialRoot, initialScale]);
 
   if (!isOpen) return null;
 
