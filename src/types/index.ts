@@ -70,6 +70,8 @@ export interface Author {
   books: Book[];
 }
 
+export type VideoStatus = "pending" | "downloading" | "ready" | "failed";
+
 export interface Video {
   id: string;
   title: string;
@@ -80,6 +82,9 @@ export interface Video {
   inProgress: boolean;
   notes: string | null;
   localPath: string | null;
+  duration: number | null;
+  status: VideoStatus;
+  errorMessage: string | null;
   createdAt: string;
 }
 

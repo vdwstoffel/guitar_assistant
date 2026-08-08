@@ -2215,7 +2215,9 @@ export default function Home() {
           </div>
         </>
       ) : activeSection === 'videos' ? (
-        <Videos initialVideoId={searchParams.get('video')} />
+        <div className="flex-1 min-h-0">
+          <Videos initialVideoId={searchParams.get('video')} />
+        </div>
       ) : activeSection === 'recordings' ? (
         <RecordingsView />
       ) : activeSection === 'tools' ? (

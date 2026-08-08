@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import * as fs from "fs/promises";
+import * as path from "path";
 import { prisma } from "@/lib/prisma";
 
 export async function PUT(
@@ -49,9 +51,38 @@ export async function DELETE(
   try {
     const { id } = await params;
 
-    await prisma.video.delete({
-      where: { id },
-    });
+    // Look up the video first so we can clean up local files.
+    const video = await prisma.video.findUnique({ where: { id } });
+    if (!video) {
+      return NextResponse.json({ error: "Video not found" }, { status: 404 });
+    }
+
+    const MUSIC_DIR = process.env.MUSIC_DIR || "./music";
+    const musicRoot = path.resolve(MUSIC_DIR);
+
+    // Delete the local MP4 file if it exists and is safely inside MUSIC_DIR.
+    if (video.localPath) {
+      const mp4Path = path.resolve(MUSIC_DIR, video.localPath);
+      if (mp4Path === musicRoot || mp4Path.startsWith(musicRoot + path.sep)) {
+        try {
+          await fs.unlink(mp4Path);
+        } catch (err) {
+          console.error(`Failed to delete video file ${mp4Path}:`, err);
+        }
+      }
+    }
+
+    // Delete the thumbnail (<id>.jpg) from music/Videos/.
+    const thumbPath = path.resolve(MUSIC_DIR, "Videos", `${id}.jpg`);
+    if (thumbPath === musicRoot || thumbPath.startsWith(musicRoot + path.sep)) {
+      try {
+        await fs.unlink(thumbPath);
+      } catch (err) {
+        console.error(`Failed to delete thumbnail ${thumbPath}:`, err);
+      }
+    }
+
+    await prisma.video.delete({ where: { id } });
 
     return NextResponse.json({ success: true });
   } catch (error) {

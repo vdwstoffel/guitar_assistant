@@ -133,6 +133,9 @@ model Video {
   inProgress       Boolean           @default(false)
   notes            String?
   localPath        String?
+  duration         Float?
+  status           String            @default("pending")
+  errorMessage     String?
   createdAt        DateTime          @default(now())
   practiceSessions PracticeSession[]
   markers          VideoMarker[]

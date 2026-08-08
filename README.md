@@ -34,11 +34,14 @@ Standalone play-along tracks (backing tracks, songs) that live outside the book 
 - **Circle of Fifths** - Major/minor keys, key signatures, diatonic chords, scale notes
 - **PDF Concatenation** - Append pages to existing book PDFs incrementally
 
-### Video Playlists
-- Manage YouTube video playlists for lessons and tutorials
+### Videos Tab
+- **Local download & offline playback** - Paste a YouTube URL; yt-dlp downloads the video to the server so it plays back fully offline with no streaming dependency
+- **Markers** - Add timestamp annotations to any video for quick jump-to-section navigation; each marker supports a lead-in buffer so playback starts a few seconds before the mark
+- **A/B loop** - Set loop start/end between any two markers to repeat a section continuously for focused practice
+- **Playback speed control** - Slow down or speed up playback independently per video
+- **Audio output routing** - Route video audio to any connected output device
 - **Custom categories** - Organize videos into collapsible category sections (Warmup, Tutorial, etc.)
 - **Drag-and-drop reordering** - Reorganize both categories and videos within categories
-- Upload book-specific videos, optionally linked to chapters or PDF pages
 
 ### Recordings
 - Capture yourself playing guitar straight from the browser to review later

@@ -12,9 +12,9 @@ export async function GET(
   const filePath = path.join(MUSIC_DIR, ...pathSegments);
   const absolutePath = path.resolve(filePath);
 
-  // Security: ensure the path is within the music directory
+  // Security: ensure the path is within the music directory (boundary-safe check).
   const musicDirAbsolute = path.resolve(MUSIC_DIR);
-  if (!absolutePath.startsWith(musicDirAbsolute)) {
+  if (absolutePath !== musicDirAbsolute && !absolutePath.startsWith(musicDirAbsolute + path.sep)) {
     return NextResponse.json({ error: "Invalid path" }, { status: 403 });
   }
 
