@@ -67,6 +67,7 @@ model Track {
   notes         String?
   sourceVideoId     String?  @unique
   markers           Marker[]
+  loops             Loop[]
   tabs              TrackTab[]
   book              Book     @relation(fields: [bookId], references: [id], onDelete: Cascade)
   chapter           Chapter? @relation(fields: [chapterId], references: [id], onDelete: SetNull)
@@ -181,6 +182,7 @@ model JamTrack {
   lufs          Float?
   gpFilePath    String?
   markers           JamTrackMarker[]
+  loops             JamTrackLoop[]
   createdAt         DateTime         @default(now())
 }
 
@@ -188,6 +190,28 @@ model JamTrackMarker {
   id         String   @id @default(uuid())
   name       String
   timestamp  Float
+  jamTrackId String
+  jamTrack   JamTrack @relation(fields: [jamTrackId], references: [id], onDelete: Cascade)
+
+  @@index([jamTrackId])
+}
+
+model Loop {
+  id        String @id @default(uuid())
+  name      String
+  startTime Float
+  endTime   Float
+  trackId   String
+  track     Track  @relation(fields: [trackId], references: [id], onDelete: Cascade)
+
+  @@index([trackId])
+}
+
+model JamTrackLoop {
+  id         String   @id @default(uuid())
+  name       String
+  startTime  Float
+  endTime    Float
   jamTrackId String
   jamTrack   JamTrack @relation(fields: [jamTrackId], references: [id], onDelete: Cascade)
 

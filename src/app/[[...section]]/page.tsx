@@ -22,7 +22,7 @@ import HomeView from "@/components/HomeView";
 import GuitarProViewer from "@/components/GuitarProViewer";
 import UploadModal from "@/components/UploadModal";
 import VideoPlayer from "@/components/VideoPlayer";
-import { AuthorSummary, BookSummary, Book, Track, TrackTab, Marker, JamTrack, JamTrackMarker, BookVideo, BookVideoMarker, SearchResultTrack, SearchResultBook, SearchResultJamTrack } from "@/types";
+import { AuthorSummary, BookSummary, Book, Track, TrackTab, Marker, JamTrack, JamTrackMarker, BookVideo, BookVideoMarker, SearchResultTrack, SearchResultBook, SearchResultJamTrack, SavedLoop, JamTrackLoop } from "@/types";
 import TrackTabsModal from "@/components/TrackTabsModal";
 
 type Section = 'home' | 'lessons' | 'videos' | 'fretboard' | 'chords' | 'tools' | 'circle' | 'jamtracks' | 'recordings' | 'caged';
@@ -778,6 +778,77 @@ export default function Home() {
       }
     } catch (error) {
       console.error("Error clearing markers:", error);
+    }
+  };
+
+  const handleLoopSave = async (
+    trackId: string,
+    name: string,
+    startTime: number,
+    endTime: number
+  ) => {
+    const isJamTrack = jamTracks.some(jt => jt.id === trackId);
+    try {
+      if (isJamTrack) {
+        const response = await fetch(`/api/jamtracks/${trackId}/loops`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name, startTime, endTime }),
+        });
+        if (response.ok) {
+          const newLoop: JamTrackLoop = await response.json();
+          setJamTracks(prev =>
+            prev.map(jt => jt.id === trackId ? { ...jt, loops: [...jt.loops, newLoop] } : jt)
+          );
+        }
+        return;
+      }
+      const response = await fetch("/api/loops", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ trackId, name, startTime, endTime }),
+      });
+      if (response.ok) {
+        const newLoop: SavedLoop = await response.json();
+        setCurrentTrack(prev =>
+          prev?.id === trackId ? { ...prev, loops: [...prev.loops, newLoop] } : prev
+        );
+        updateTrackInBookDetail(trackId, t => ({ ...t, loops: [...t.loops, newLoop] }));
+      }
+    } catch (error) {
+      console.error("Error saving loop:", error);
+    }
+  };
+
+  const findJamTrackForLoop = (loopId: string): JamTrack | undefined =>
+    jamTracks.find(jt => jt.loops.some(l => l.id === loopId));
+
+  const handleLoopDelete = async (loopId: string) => {
+    const owningJamTrack = findJamTrackForLoop(loopId);
+    try {
+      if (owningJamTrack) {
+        const response = await fetch(`/api/jamtracks/${owningJamTrack.id}/loops/${loopId}`, {
+          method: "DELETE",
+        });
+        if (response.ok) {
+          setJamTracks(prev => prev.map(jt =>
+            jt.id === owningJamTrack.id
+              ? { ...jt, loops: jt.loops.filter(l => l.id !== loopId) }
+              : jt
+          ));
+        }
+        return;
+      }
+      const response = await fetch(`/api/loops/${loopId}`, { method: "DELETE" });
+      if (response.ok) {
+        const removeLoop = (loops: SavedLoop[]) => loops.filter(l => l.id !== loopId);
+        setCurrentTrack(prev =>
+          prev ? { ...prev, loops: removeLoop(prev.loops) } : prev
+        );
+        updateTrackInBookDetail(currentTrack?.id || '', t => ({ ...t, loops: removeLoop(t.loops) }));
+      }
+    } catch (error) {
+      console.error("Error deleting loop:", error);
     }
   };
 
@@ -1648,6 +1719,22 @@ export default function Home() {
     handleMarkersClearRef.current(trackId);
   }, []);
 
+  const handleLoopSaveRef = useRef(handleLoopSave);
+  handleLoopSaveRef.current = handleLoopSave;
+  const handleLoopDeleteRef = useRef(handleLoopDelete);
+  handleLoopDeleteRef.current = handleLoopDelete;
+
+  const stableOnLoopSave = useCallback(
+    (trackId: string, name: string, startTime: number, endTime: number) => {
+      handleLoopSaveRef.current(trackId, name, startTime, endTime);
+    },
+    []
+  );
+
+  const stableOnLoopDelete = useCallback((loopId: string) => {
+    handleLoopDeleteRef.current(loopId);
+  }, []);
+
   const stableOnTimeUpdate = useCallback((time: number, playing: boolean) => {
     setCurrentAudioTime(time);
     setAudioIsPlaying(playing);
@@ -1815,6 +1902,8 @@ export default function Home() {
                   onMarkerRename={stableOnMarkerRename}
                   onMarkerDelete={stableOnMarkerDelete}
                   onMarkersClear={stableOnMarkersClear}
+                  onLoopSave={stableOnLoopSave}
+                  onLoopDelete={stableOnLoopDelete}
                   externalMarkersBar={true}
                   onMarkerBarStateChange={setMarkerBarState}
                   onTimeUpdate={stableOnTimeUpdate}
@@ -2133,6 +2222,8 @@ export default function Home() {
                   onMarkerRename={stableOnMarkerRename}
                   onMarkerDelete={stableOnMarkerDelete}
                   onMarkersClear={stableOnMarkersClear}
+                  onLoopSave={stableOnLoopSave}
+                  onLoopDelete={stableOnLoopDelete}
                   externalMarkersBar={true}
                   onMarkerBarStateChange={setMarkerBarState}
                   onTimeUpdate={stableOnTimeUpdate}

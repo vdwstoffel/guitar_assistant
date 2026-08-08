@@ -34,7 +34,10 @@ export async function GET() {
       }),
       prisma.jamTrack.findMany({
         orderBy: { title: "asc" },
-        include: { markers: { orderBy: { timestamp: "asc" } } },
+        include: {
+          markers: { orderBy: { timestamp: "asc" } },
+          loops: { orderBy: { startTime: "asc" } },
+        },
       }),
     ]);
 

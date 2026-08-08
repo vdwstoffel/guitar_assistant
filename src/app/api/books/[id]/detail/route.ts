@@ -19,6 +19,9 @@ export async function GET(
               markers: {
                 orderBy: { timestamp: "asc" },
               },
+              loops: {
+                orderBy: { startTime: "asc" },
+              },
               tabs: {
                 orderBy: { sortOrder: "asc" },
               },
@@ -32,6 +35,9 @@ export async function GET(
                 include: {
                   markers: {
                     orderBy: { timestamp: "asc" },
+                  },
+                  loops: {
+                    orderBy: { startTime: "asc" },
                   },
                   tabs: {
                     orderBy: { sortOrder: "asc" },

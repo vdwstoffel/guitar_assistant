@@ -251,6 +251,9 @@ export async function PUT(
         markers: {
           orderBy: { timestamp: "asc" },
         },
+        loops: {
+          orderBy: { startTime: "asc" },
+        },
       },
     });
 

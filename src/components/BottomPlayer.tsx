@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState, useEffect, useCallback, memo, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { Track, Marker, JamTrack, JamTrackMarker } from "@/types";
 import WaveSurfer from "wavesurfer.js";
 import RegionsPlugin from "wavesurfer.js/dist/plugins/regions.js";
@@ -52,6 +53,8 @@ interface BottomPlayerProps {
   compact?: boolean;
   onTrackTabs?: () => void;
   trackTabsCount?: number;
+  onLoopSave: (trackId: string, name: string, startTime: number, endTime: number) => void;
+  onLoopDelete: (loopId: string) => void;
 }
 
 function BottomPlayer({
@@ -68,6 +71,8 @@ function BottomPlayer({
   compact = false,
   onTrackTabs,
   trackTabsCount = 0,
+  onLoopSave,
+  onLoopDelete,
 }: BottomPlayerProps) {
   const waveformRef = useRef<HTMLDivElement>(null);
   const waveformContainerRef = useRef<HTMLDivElement>(null);
@@ -100,6 +105,11 @@ function BottomPlayer({
   const [editingMarkerName, setEditingMarkerName] = useState("");
   const [showMarkerDialog, setShowMarkerDialog] = useState(false);
   const [pendingMarkerTimestamp, setPendingMarkerTimestamp] = useState(0);
+  const [showLoopDialog, setShowLoopDialog] = useState(false);
+  const [showLoopsPanel, setShowLoopsPanel] = useState(false);
+  const [loopsButtonRect, setLoopsButtonRect] = useState<DOMRect | null>(null);
+  const loopsButtonRef = useRef<HTMLButtonElement>(null);
+  const loopsPanelRef = useRef<HTMLDivElement>(null);
   const [scrollLeft, setScrollLeft] = useState(0);
   const [containerWidth, setContainerWidth] = useState(0);
   const [isCountingIn, setIsCountingIn] = useState(false);
@@ -890,6 +900,50 @@ function BottomPlayer({
     }
   }, []);
 
+  // Apply a saved loop: set A/B points; region redraws via the loopA/loopB effect.
+  const applyLoop = useCallback((startTime: number, endTime: number) => {
+    setLoopA(startTime);
+    setLoopB(endTime);
+    lastSeekPositionRef.current = null;
+    setShowLoopsPanel(false);
+  }, []);
+
+  // Persist the current A/B loop under a name.
+  const handleSaveLoop = useCallback((name: string) => {
+    if (!track || loopARef.current === null || loopBRef.current === null) return;
+    onLoopSave(track.id, name, loopARef.current, loopBRef.current);
+    setShowLoopDialog(false);
+  }, [track, onLoopSave]);
+
+  // The loops panel is portaled to document.body (position: fixed) so it escapes
+  // the player's overflow-hidden wrapper; track the button rect to anchor it.
+  useEffect(() => {
+    if (!showLoopsPanel) return;
+    const update = () => {
+      if (loopsButtonRef.current) setLoopsButtonRect(loopsButtonRef.current.getBoundingClientRect());
+    };
+    update();
+    window.addEventListener("resize", update);
+    window.addEventListener("scroll", update, true);
+    return () => {
+      window.removeEventListener("resize", update);
+      window.removeEventListener("scroll", update, true);
+    };
+  }, [showLoopsPanel]);
+
+  // Close the loops panel on outside click.
+  useEffect(() => {
+    if (!showLoopsPanel) return;
+    const onDocMouseDown = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (loopsButtonRef.current?.contains(target)) return;
+      if (loopsPanelRef.current?.contains(target)) return;
+      setShowLoopsPanel(false);
+    };
+    document.addEventListener("mousedown", onDocMouseDown);
+    return () => document.removeEventListener("mousedown", onDocMouseDown);
+  }, [showLoopsPanel]);
+
   const jumpToMarker = useCallback(async (timestamp: number) => {
     if (!wavesurferRef.current || !duration) return;
     console.log("[BP] jumpToMarker  timestamp=", timestamp, " duration=", duration, " tempo=", track?.tempo);
@@ -1186,7 +1240,76 @@ function BottomPlayer({
                   </svg>
                 </button>
               )}
+              {loopA !== null && loopB !== null && (
+                <button
+                  onClick={() => setShowLoopDialog(true)}
+                  className="w-5 h-5 flex items-center justify-center text-gray-400 hover:text-blue-400 transition-colors"
+                  title="Save this A/B loop"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+                  </svg>
+                </button>
+              )}
             </div>
+
+            {(track?.loops?.length ?? 0) > 0 && (
+              <div className="flex items-center shrink-0">
+                <button
+                  ref={loopsButtonRef}
+                  onClick={() => setShowLoopsPanel(v => !v)}
+                  className="h-11 sm:h-10 md:h-8 flex items-center gap-1 px-2 sm:px-3 rounded-full text-xs font-medium bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors"
+                  title="Saved loops"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+                  </svg>
+                  <span className="hidden sm:inline">Loops ({track?.loops?.length ?? 0})</span>
+                </button>
+                {showLoopsPanel && loopsButtonRect && typeof document !== "undefined" &&
+                  createPortal(
+                    <div
+                      ref={loopsPanelRef}
+                      style={{
+                        position: "fixed",
+                        bottom: window.innerHeight - loopsButtonRect.top + 8,
+                        left: Math.max(8, Math.min(loopsButtonRect.left, window.innerWidth - 224 - 8)),
+                        width: 224,
+                        zIndex: 100,
+                      }}
+                      className="max-h-64 overflow-y-auto rounded-lg bg-gray-800 border border-gray-700 shadow-xl p-1"
+                    >
+                      {(track?.loops ?? []).map((loop) => (
+                        <div
+                          key={loop.id}
+                          className="group flex items-center justify-between gap-2 px-2 py-1.5 rounded hover:bg-gray-700"
+                        >
+                          <button
+                            onClick={() => applyLoop(loop.startTime, loop.endTime)}
+                            className="flex-1 min-w-0 text-left"
+                            title={`Apply loop ${loop.name}`}
+                          >
+                            <div className="truncate text-sm text-gray-200">{loop.name}</div>
+                            <div className="text-[10px] text-gray-400 tabular-nums">
+                              {formatTime(loop.startTime)}–{formatTime(loop.endTime)}
+                            </div>
+                          </button>
+                          <button
+                            onClick={() => onLoopDelete(loop.id)}
+                            className="w-5 h-5 flex items-center justify-center text-gray-500 hover:text-red-400 transition-colors"
+                            title="Delete loop"
+                          >
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                        </div>
+                      ))}
+                    </div>,
+                    document.body,
+                  )}
+              </div>
+            )}
 
             {/* Play Button */}
             <button
@@ -1554,6 +1677,16 @@ function BottomPlayer({
           formatTime={formatTime}
           onSave={(name, pdfPage) => addMarker(name, pendingMarkerTimestamp, pdfPage)}
           onCancel={handleCancelMarkerDialog}
+        />
+        <MarkerNameDialog
+          isOpen={showLoopDialog}
+          timestamp={loopA ?? 0}
+          formatTime={formatTime}
+          onSave={(name) => handleSaveLoop(name)}
+          onCancel={() => setShowLoopDialog(false)}
+          hasPdf={false}
+          title="Save loop"
+          placeholder="Enter loop name..."
         />
     </div>
   );

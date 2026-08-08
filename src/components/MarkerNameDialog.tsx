@@ -13,6 +13,8 @@ interface MarkerNameDialogProps {
   // Edit mode: pre-fill with existing values
   initialName?: string;
   initialPdfPage?: number | null;
+  title?: string;
+  placeholder?: string;
 }
 
 export default function MarkerNameDialog({
@@ -25,6 +27,8 @@ export default function MarkerNameDialog({
   hasPdf = false,
   initialName,
   initialPdfPage,
+  title,
+  placeholder,
 }: MarkerNameDialogProps) {
   const [markerName, setMarkerName] = useState("");
   const [pageNumber, setPageNumber] = useState("");
@@ -69,7 +73,7 @@ export default function MarkerNameDialog({
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
       <div className="bg-gray-800 border border-gray-700 rounded-lg p-6 shadow-xl max-w-md w-full mx-4">
         <h3 className="text-lg font-semibold text-white mb-4">
-          {isEditMode ? "Edit Marker" : "Add Marker"}
+          {title ?? (isEditMode ? "Edit Marker" : "Add Marker")}
         </h3>
 
         <div className="mb-4">
@@ -82,7 +86,7 @@ export default function MarkerNameDialog({
             value={markerName}
             onChange={(e) => setMarkerName(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Enter marker name..."
+            placeholder={placeholder ?? "Enter marker name..."}
             className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm focus:outline-none focus:border-green-500"
           />
         </div>

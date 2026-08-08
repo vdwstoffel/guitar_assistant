@@ -15,6 +15,14 @@ export interface Marker {
   trackId: string;
 }
 
+export interface SavedLoop {
+  id: string;
+  name: string;
+  startTime: number;
+  endTime: number;
+  trackId: string;
+}
+
 export interface Track {
   id: string;
   title: string;
@@ -26,6 +34,7 @@ export interface Track {
   sortOrder: number;
   pdfPage: number | null;
   markers: Marker[];
+  loops: SavedLoop[];
   tabs: TrackTab[];
   completed: boolean;
   inProgress: boolean;
@@ -130,6 +139,14 @@ export interface JamTrackMarker {
   jamTrackId: string;
 }
 
+export interface JamTrackLoop {
+  id: string;
+  name: string;
+  startTime: number;
+  endTime: number;
+  jamTrackId: string;
+}
+
 export interface JamTrack {
   id: string;
   title: string;
@@ -145,6 +162,7 @@ export interface JamTrack {
   lufs: number | null;
   gpFilePath: string | null;
   markers: JamTrackMarker[];
+  loops: JamTrackLoop[];
   createdAt: string;
 }
 
