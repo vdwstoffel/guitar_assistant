@@ -114,3 +114,12 @@ When adding new features, check if they should be documented in [README.md](READ
 
 ## Task Cleanup
 When a feature or task is fully implemented, delete the corresponding file from `tasks/` or `tasks/features/`. Do not leave completed task files around.
+
+## Git Workflow
+**Always squash-merge feature branches into `main`.** Do not fast-forward or create merge commits that replay every intermediate commit — it clutters the main history. Collapse the branch into a single commit with a clear summary message:
+```bash
+git checkout main
+git merge --squash <feature-branch>
+git commit   # one commit summarizing the whole feature
+git branch -D <feature-branch>
+```
