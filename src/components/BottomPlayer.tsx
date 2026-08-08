@@ -10,7 +10,7 @@ import KeyboardShortcutsHelp from "./KeyboardShortcutsHelp";
 import MarkerNameDialog from "./MarkerNameDialog";
 import { usePracticeSessionTracker } from "@/hooks/usePracticeSessionTracker";
 import {
-  AUTO_SPARK_ID,
+  DEFAULT_DEVICE_ID,
   applyAudioContextSink,
   getAudioSinkPreference,
   subscribeToAudioSinkChanges,
@@ -134,11 +134,10 @@ function BottomPlayer({
   });
 
   // Audio output device (persisted).
-  //   AUTO_SPARK_ID = use Spark 2 if detected, else system default
-  //   "default"     = follow system setting
-  //   "<deviceId>"  = specific device
+  //   "default"    = follow system setting
+  //   "<deviceId>" = specific device
   const [audioOutputDeviceId, setAudioOutputDeviceIdState] = useState<string>(
-    () => (typeof window !== 'undefined' ? getAudioSinkPreference() : AUTO_SPARK_ID),
+    () => (typeof window !== 'undefined' ? getAudioSinkPreference() : DEFAULT_DEVICE_ID),
   );
   const audioOutputDeviceIdRef = useRef(audioOutputDeviceId);
   audioOutputDeviceIdRef.current = audioOutputDeviceId;

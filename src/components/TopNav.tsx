@@ -39,10 +39,10 @@ const TopNav = memo(function TopNav({ activeSection, onSectionChange, onSearchTr
   const [showTuner, setShowTuner] = useState(false);
   const [showRecorder, setShowRecorder] = useState(false);
   const [outputDeviceId, setOutputDeviceId] = useState<string>(() =>
-    typeof window !== "undefined" ? getAudioSinkPreference() : "auto-spark",
+    typeof window !== "undefined" ? getAudioSinkPreference() : "default",
   );
   const [inputDeviceId, setInputDeviceId] = useState<string>(() =>
-    typeof window !== "undefined" ? getAudioInputPreference() : "auto-spark",
+    typeof window !== "undefined" ? getAudioInputPreference() : "default",
   );
   const [recorderUploading, setRecorderUploading] = useState(false);
   const [showTheory, setShowTheory] = useState(false);

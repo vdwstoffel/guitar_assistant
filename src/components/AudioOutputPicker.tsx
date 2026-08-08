@@ -12,8 +12,6 @@ interface AudioOutputPickerProps {
 
 const DEFAULT_DEVICE_ID = "default";
 const COMMUNICATIONS_DEVICE_ID = "communications";
-const AUTO_SPARK_ID = "auto-spark";
-const SPARK_LABEL_RE = /spark\s*2/i;
 
 function detectSupport(): boolean {
   if (typeof document === "undefined") return true;
@@ -35,9 +33,6 @@ function DeviceSection({
   selectedId: string;
   onSelect: (id: string) => void;
 }) {
-  const sparkDevice = devices.find(
-    (d) => d.kind === kind && SPARK_LABEL_RE.test(d.label) && d.deviceId !== COMMUNICATIONS_DEVICE_ID,
-  );
   const visible = devices.filter(
     (d) =>
       d.kind === kind &&
@@ -50,19 +45,6 @@ function DeviceSection({
       <div className="px-3 py-1.5 text-[10px] uppercase tracking-wide text-gray-500 border-b border-gray-700">
         {title}
       </div>
-      <button
-        role="option"
-        aria-selected={selectedId === AUTO_SPARK_ID}
-        onClick={() => onSelect(AUTO_SPARK_ID)}
-        className={`w-full text-left px-3 py-1.5 flex items-center gap-2 hover:bg-gray-700 ${
-          selectedId === AUTO_SPARK_ID ? "text-green-400" : "text-gray-200"
-        }`}
-      >
-        <span className="w-3 inline-block">{selectedId === AUTO_SPARK_ID ? "✓" : ""}</span>
-        <span className="flex-1 truncate">
-          Auto{sparkDevice ? " → Spark 2" : " (Spark 2 not detected)"}
-        </span>
-      </button>
       <button
         role="option"
         aria-selected={selectedId === DEFAULT_DEVICE_ID}

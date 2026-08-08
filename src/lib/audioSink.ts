@@ -2,9 +2,10 @@
 // a window CustomEvent so every player (BottomPlayer WaveSurfer, AlphaTab-based
 // tab practice) can react to changes.
 
-export const AUTO_SPARK_ID = "auto-spark";
 export const DEFAULT_DEVICE_ID = "default";
-const SPARK_LABEL_RE = /spark\s*2/i;
+// Legacy preference value from when the app defaulted to a "Spark 2" device.
+// Normalized to the system default on read so old saved settings still work.
+const LEGACY_AUTO_SPARK_ID = "auto-spark";
 const STORAGE_KEY = "audioOutputDeviceId";
 const CHANGE_EVENT = "guitarAssistant:audioSinkChanged";
 
@@ -13,9 +14,14 @@ type AudioContextWithSink = AudioContext & {
   sinkId?: string;
 };
 
+function normalizePref(stored: string | null): string {
+  if (!stored || stored === LEGACY_AUTO_SPARK_ID) return DEFAULT_DEVICE_ID;
+  return stored;
+}
+
 export function getAudioSinkPreference(): string {
-  if (typeof window === "undefined") return AUTO_SPARK_ID;
-  return localStorage.getItem(STORAGE_KEY) || AUTO_SPARK_ID;
+  if (typeof window === "undefined") return DEFAULT_DEVICE_ID;
+  return normalizePref(localStorage.getItem(STORAGE_KEY));
 }
 
 export function setAudioSinkPreference(pref: string): void {
@@ -31,19 +37,10 @@ export function subscribeToAudioSinkChanges(cb: (pref: string) => void): () => v
   return () => window.removeEventListener(CHANGE_EVENT, handler);
 }
 
-// Resolve the stored preference to an actual audio-output deviceId.
-// AUTO_SPARK_ID → the Spark 2's deviceId if plugged in, otherwise "default".
+// Resolve the stored preference to an actual audio-output deviceId. The stored
+// value is already a concrete deviceId or "default"; legacy values map to default.
 export async function resolveDeviceId(pref: string): Promise<string> {
-  if (pref !== AUTO_SPARK_ID) return pref;
-  try {
-    const devices = await navigator.mediaDevices.enumerateDevices();
-    const spark = devices.find(
-      (d) => d.kind === "audiooutput" && SPARK_LABEL_RE.test(d.label),
-    );
-    return spark?.deviceId ?? DEFAULT_DEVICE_ID;
-  } catch {
-    return DEFAULT_DEVICE_ID;
-  }
+  return pref === LEGACY_AUTO_SPARK_ID ? DEFAULT_DEVICE_ID : pref;
 }
 
 // Apply the sink to a Web Audio AudioContext. Chrome quirk: setSinkId on an
@@ -115,8 +112,8 @@ const INPUT_STORAGE_KEY = "audioInputDeviceId";
 const INPUT_CHANGE_EVENT = "guitarAssistant:audioInputChanged";
 
 export function getAudioInputPreference(): string {
-  if (typeof window === "undefined") return AUTO_SPARK_ID;
-  return localStorage.getItem(INPUT_STORAGE_KEY) || AUTO_SPARK_ID;
+  if (typeof window === "undefined") return DEFAULT_DEVICE_ID;
+  return normalizePref(localStorage.getItem(INPUT_STORAGE_KEY));
 }
 
 export function setAudioInputPreference(pref: string): void {
@@ -134,19 +131,9 @@ export function subscribeToAudioInputChanges(cb: (pref: string) => void): () => 
 
 // Resolve the stored input preference to a concrete deviceId, or null when the
 // selection means "system default" (so callers omit the deviceId constraint).
-// AUTO_SPARK_ID → the Spark 2 input deviceId if present, otherwise null.
 export async function resolveInputDeviceId(pref: string): Promise<string | null> {
-  if (pref === DEFAULT_DEVICE_ID) return null;
-  if (pref !== AUTO_SPARK_ID) return pref;
-  try {
-    const devices = await navigator.mediaDevices.enumerateDevices();
-    const spark = devices.find(
-      (d) => d.kind === "audioinput" && SPARK_LABEL_RE.test(d.label),
-    );
-    return spark?.deviceId ?? null;
-  } catch {
-    return null;
-  }
+  if (pref === DEFAULT_DEVICE_ID || pref === LEGACY_AUTO_SPARK_ID) return null;
+  return pref;
 }
 
 // Merge the globally selected input device into a getUserMedia audio constraint.
