@@ -178,19 +178,6 @@ export interface Recording {
   createdAt: string;
 }
 
-export interface PracticeSession {
-  id: string;
-  trackId: string | null;
-  jamTrackId: string | null;
-  bookVideoId: string | null;
-  startTime: string;
-  durationSeconds: number;
-  playbackSpeed: number;
-  completedSession: boolean;
-  trackTitle: string;
-  createdAt: string;
-}
-
 // Search result types (lightweight, only fields returned by /api/search)
 export interface SearchResultTrack {
   id: string;

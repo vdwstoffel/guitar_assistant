@@ -57,6 +57,8 @@ model Track {
   completed     Boolean  @default(false)
   inProgress    Boolean  @default(false)
   favorite      Boolean  @default(false)
+  lastPlayedAt  DateTime?
+  completedAt   DateTime?
   tempo         Int?
   timeSignature String   @default("4/4")
   playbackSpeed Int?
@@ -66,7 +68,6 @@ model Track {
   sourceVideoId     String?  @unique
   markers           Marker[]
   tabs              TrackTab[]
-  practiceSessions  PracticeSession[]
   book              Book     @relation(fields: [bookId], references: [id], onDelete: Cascade)
   chapter           Chapter? @relation(fields: [chapterId], references: [id], onDelete: SetNull)
   sourceVideo       BookVideo? @relation("ExtractedAudio", fields: [sourceVideoId], references: [id], onDelete: SetNull)
@@ -109,13 +110,14 @@ model BookVideo {
   pdfPage          Int?
   completed        Boolean           @default(false)
   inProgress       Boolean           @default(false)
+  lastPlayedAt     DateTime?
+  completedAt      DateTime?
   notes            String?
   bookId           String
   chapterId        String?
   book             Book              @relation(fields: [bookId], references: [id], onDelete: Cascade)
   chapter          Chapter?          @relation(fields: [chapterId], references: [id], onDelete: SetNull)
   extractedTrack   Track?            @relation("ExtractedAudio")
-  practiceSessions PracticeSession[]
   markers          BookVideoMarker[]
   createdAt   DateTime @default(now())
 
@@ -131,13 +133,14 @@ model Video {
   category         String?
   completed        Boolean           @default(false)
   inProgress       Boolean           @default(false)
+  lastPlayedAt     DateTime?
+  completedAt      DateTime?
   notes            String?
   localPath        String?
   duration         Float?
   status           String            @default("pending")
   errorMessage     String?
   createdAt        DateTime          @default(now())
-  practiceSessions PracticeSession[]
   markers          VideoMarker[]
 }
 
@@ -169,6 +172,8 @@ model JamTrack {
   completed     Boolean          @default(false)
   inProgress    Boolean          @default(false)
   favorite      Boolean          @default(false)
+  lastPlayedAt  DateTime?
+  completedAt   DateTime?
   tempo         Int?
   timeSignature String           @default("4/4")
   playbackSpeed Int?
@@ -176,7 +181,6 @@ model JamTrack {
   lufs          Float?
   gpFilePath    String?
   markers           JamTrackMarker[]
-  practiceSessions  PracticeSession[]
   createdAt         DateTime         @default(now())
 }
 
@@ -214,29 +218,6 @@ model Recording {
   @@index([createdAt])
 }
 
-model PracticeSession {
-  id               String     @id @default(uuid())
-  trackId          String?
-  jamTrackId       String?
-  bookVideoId      String?
-  videoId          String?
-  track            Track?     @relation(fields: [trackId], references: [id], onDelete: Cascade)
-  jamTrack         JamTrack?  @relation(fields: [jamTrackId], references: [id], onDelete: Cascade)
-  bookVideo        BookVideo? @relation(fields: [bookVideoId], references: [id], onDelete: Cascade)
-  video            Video?     @relation(fields: [videoId], references: [id], onDelete: Cascade)
-  startTime        DateTime   @default(now())
-  durationSeconds  Float
-  playbackSpeed    Int        @default(100)
-  completedSession Boolean    @default(false)
-  trackTitle       String
-  createdAt        DateTime   @default(now())
-
-  @@index([trackId])
-  @@index([jamTrackId])
-  @@index([bookVideoId])
-  @@index([videoId])
-  @@index([startTime])
-}
 
 model BackingTrack {
   id           String   @id @default(uuid())

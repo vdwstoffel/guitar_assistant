@@ -5,50 +5,25 @@ export async function GET() {
   try {
     const [tracks, jamTracks, bookVideos, videos] = await Promise.all([
       prisma.track.findMany({
-        where: {
-          inProgress: true,
-          completed: false,
-          book: { inProgress: true },
-        },
+        where: { inProgress: true, completed: false, book: { inProgress: true } },
         select: {
           id: true,
           title: true,
           bookId: true,
           sourceVideoId: true,
+          lastPlayedAt: true,
           book: { select: { name: true, authorId: true } },
-          practiceSessions: {
-            orderBy: { startTime: "desc" },
-            take: 1,
-            select: { startTime: true },
-          },
-          sourceVideo: {
-            select: {
-              practiceSessions: {
-                orderBy: { startTime: "desc" },
-                take: 1,
-                select: { startTime: true },
-              },
-            },
-          },
+          sourceVideo: { select: { lastPlayedAt: true } },
         },
       }),
       prisma.jamTrack.findMany({
         where: { inProgress: true, completed: false },
-        select: {
-          id: true,
-          title: true,
-          practiceSessions: {
-            orderBy: { startTime: "desc" },
-            take: 1,
-            select: { startTime: true },
-          },
-        },
+        select: { id: true, title: true, lastPlayedAt: true },
       }),
       prisma.bookVideo.findMany({
         where: {
           inProgress: true,
           completed: false,
-          // Exclude videos that have a linked audio track (track is the canonical item)
           extractedTrack: null,
           book: { inProgress: true },
         },
@@ -57,60 +32,51 @@ export async function GET() {
           title: true,
           filename: true,
           bookId: true,
+          lastPlayedAt: true,
           book: { select: { name: true, authorId: true } },
-          practiceSessions: {
-            orderBy: { startTime: "desc" },
-            take: 1,
-            select: { startTime: true },
-          },
         },
       }),
       prisma.video.findMany({
         where: { inProgress: true, completed: false },
-        select: {
-          id: true,
-          title: true,
-          practiceSessions: {
-            orderBy: { startTime: "desc" },
-            take: 1,
-            select: { startTime: true },
-          },
-        },
+        select: { id: true, title: true, lastPlayedAt: true },
       }),
     ]);
 
     const items = [
       ...tracks.map((t) => {
-        // Merge lastPracticed from track and linked video sessions
-        const trackLast = t.practiceSessions[0]?.startTime;
-        const videoLast = t.sourceVideo?.practiceSessions[0]?.startTime;
-        const lastPracticed = trackLast && videoLast
-          ? (trackLast > videoLast ? trackLast : videoLast)
-          : trackLast ?? videoLast ?? null;
+        // Merge lastPlayed from the track and its linked extracted video; take the later.
+        const trackLast = t.lastPlayedAt;
+        const videoLast = t.sourceVideo?.lastPlayedAt ?? null;
+        const lastPlayed =
+          trackLast && videoLast
+            ? trackLast > videoLast
+              ? trackLast
+              : videoLast
+            : trackLast ?? videoLast ?? null;
         return {
           trackId: t.id, jamTrackId: null, bookVideoId: null, videoId: null,
           title: t.title, bookName: t.book.name, authorId: t.book.authorId, bookId: t.bookId,
-          lastPracticed: lastPracticed?.toISOString() ?? null,
+          lastPracticed: lastPlayed?.toISOString() ?? null,
         };
       }),
       ...jamTracks.map((jt) => ({
         trackId: null, jamTrackId: jt.id, bookVideoId: null, videoId: null,
         title: jt.title, bookName: null, authorId: null, bookId: null,
-        lastPracticed: jt.practiceSessions[0]?.startTime.toISOString() ?? null,
+        lastPracticed: jt.lastPlayedAt?.toISOString() ?? null,
       })),
       ...bookVideos.map((bv) => ({
         trackId: null, jamTrackId: null, bookVideoId: bv.id, videoId: null,
         title: bv.title ?? bv.filename, bookName: bv.book.name, authorId: bv.book.authorId, bookId: bv.bookId,
-        lastPracticed: bv.practiceSessions[0]?.startTime.toISOString() ?? null,
+        lastPracticed: bv.lastPlayedAt?.toISOString() ?? null,
       })),
       ...videos.map((v) => ({
         trackId: null, jamTrackId: null, bookVideoId: null, videoId: v.id,
         title: v.title, bookName: null, authorId: null, bookId: null,
-        lastPracticed: v.practiceSessions[0]?.startTime.toISOString() ?? null,
+        lastPracticed: v.lastPlayedAt?.toISOString() ?? null,
       })),
     ];
 
-    // Not-practiced-today first, then practiced-today at the bottom
+    // Not-practiced-today first, practiced-today at the bottom.
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
     items.sort((a, b) => {

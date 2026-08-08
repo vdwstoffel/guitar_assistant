@@ -1,95 +1,53 @@
 "use client";
 
 import { useRef, useCallback, useEffect } from "react";
-import { Track, JamTrack, BookVideo, Video } from "@/types";
+import { playedRefForItem, type PlayedRef, type TrackableItem } from "@/lib/metrics/playedRef";
 
-const MIN_SESSION_SECONDS = 4;
+const MIN_PLAY_SECONDS = 4;
 
-type TrackableItem = Track | JamTrack | BookVideo | Video;
-
-interface SessionState {
-  playStartedAt: number | null; // Date.now() when play started
+interface TrackerState {
+  playStartedAt: number | null; // Date.now() when play started, else null
   accumulatedSeconds: number;
-  trackId: string | null;
-  jamTrackId: string | null;
-  bookVideoId: string | null;
-  videoId: string | null;
-  trackTitle: string;
+  marked: boolean; // whether a play has already been recorded for the current item
+  ref: PlayedRef | null;
 }
 
-function isJamTrack(item: TrackableItem): item is JamTrack {
-  return "pdfs" in item;
-}
-
-function isBookVideo(item: TrackableItem): item is BookVideo {
-  return "filename" in item;
-}
-
-function isVideo(item: TrackableItem): item is Video {
-  return "youtubeId" in item;
-}
-
-async function saveSession(
-  state: SessionState,
-  playbackSpeed: number,
-  completed: boolean
-) {
-  const totalSeconds =
+// Records lastPlayedAt once per item selection, after >= 4s of accumulated playback.
+async function markPlayed(state: TrackerState) {
+  const total =
     state.accumulatedSeconds +
     (state.playStartedAt ? (Date.now() - state.playStartedAt) / 1000 : 0);
 
-  if (totalSeconds < MIN_SESSION_SECONDS) return;
+  if (state.marked || !state.ref || total < MIN_PLAY_SECONDS) return;
+  state.marked = true;
 
   try {
-    await fetch("/api/metrics/sessions", {
+    await fetch("/api/metrics/played", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        trackId: state.trackId,
-        jamTrackId: state.jamTrackId,
-        bookVideoId: state.bookVideoId,
-        videoId: state.videoId,
-        durationSeconds: Math.round(totalSeconds),
-        playbackSpeed,
-        completedSession: completed,
-      }),
+      body: JSON.stringify(state.ref),
     });
   } catch {
     // Don't block playback on tracking failures
   }
 }
 
-export function usePracticeSessionTracker(
-  track: TrackableItem | null,
-  playbackSpeed: number
-) {
-  const stateRef = useRef<SessionState>({
+export function usePracticeSessionTracker(track: TrackableItem | null) {
+  const stateRef = useRef<TrackerState>({
     playStartedAt: null,
     accumulatedSeconds: 0,
-    trackId: null,
-    jamTrackId: null,
-    bookVideoId: null,
-    videoId: null,
-    trackTitle: "",
+    marked: false,
+    ref: null,
   });
-  const speedRef = useRef(playbackSpeed);
-  speedRef.current = playbackSpeed;
 
-  // Reset session when track changes, saving any in-progress session
+  // On item change: flush any pending play for the previous item, then reset.
   useEffect(() => {
-    const prev = stateRef.current;
-    if (prev.playStartedAt || prev.accumulatedSeconds > 0) {
-      saveSession(prev, speedRef.current, false);
-    }
-
+    markPlayed(stateRef.current);
     stateRef.current = {
       playStartedAt: null,
       accumulatedSeconds: 0,
-      trackId: track && !isJamTrack(track) && !isBookVideo(track) && !isVideo(track) ? track.id : null,
-      jamTrackId: track && isJamTrack(track) ? track.id : null,
-      bookVideoId: track && isBookVideo(track) ? track.id : null,
-      videoId: track && isVideo(track) ? track.id : null,
-      trackTitle: track ? (isBookVideo(track) ? (track.title || track.filename) : track.title) : "",
+      marked: false,
+      ref: track ? playedRefForItem(track) : null,
     };
   }, [track?.id]);
 
@@ -103,37 +61,24 @@ export function usePracticeSessionTracker(
       state.accumulatedSeconds += (Date.now() - state.playStartedAt) / 1000;
       state.playStartedAt = null;
     }
+    markPlayed(state);
   }, []);
 
   const onFinish = useCallback(() => {
-    const state = stateRef.current;
-    saveSession(state, speedRef.current, true);
-    // Reset for next play-through
-    state.playStartedAt = null;
-    state.accumulatedSeconds = 0;
+    markPlayed(stateRef.current);
   }, []);
 
-  // Flush session on section change (fires before component unmounts)
+  // Flush on section change (dispatched as 'practiceSessionFlush' by the page shell).
   useEffect(() => {
-    const handleFlush = () => {
-      const state = stateRef.current;
-      if (state.playStartedAt || state.accumulatedSeconds > 0) {
-        saveSession(state, speedRef.current, false);
-        state.playStartedAt = null;
-        state.accumulatedSeconds = 0;
-      }
-    };
-    window.addEventListener('practiceSessionFlush', handleFlush);
-    return () => window.removeEventListener('practiceSessionFlush', handleFlush);
+    const handleFlush = () => markPlayed(stateRef.current);
+    window.addEventListener("practiceSessionFlush", handleFlush);
+    return () => window.removeEventListener("practiceSessionFlush", handleFlush);
   }, []);
 
-  // Save session on unmount
+  // Flush on unmount.
   useEffect(() => {
     return () => {
-      const state = stateRef.current;
-      if (state.playStartedAt || state.accumulatedSeconds > 0) {
-        saveSession(state, speedRef.current, false);
-      }
+      markPlayed(stateRef.current);
     };
   }, []);
 

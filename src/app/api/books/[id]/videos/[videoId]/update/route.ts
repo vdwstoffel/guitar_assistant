@@ -129,6 +129,7 @@ export async function PUT(
       trackNumber?: number | null;
       pdfPage?: number | null;
       completed?: boolean;
+      completedAt?: Date | null;
       inProgress?: boolean;
       chapterId?: string | null;
       notes?: string | null;
@@ -149,6 +150,7 @@ export async function PUT(
     }
     if (completed !== undefined) {
       updateData.completed = completed;
+      updateData.completedAt = completed ? new Date() : null;
       if (completed) updateData.inProgress = false;
     }
     if (inProgress !== undefined) {
@@ -174,12 +176,13 @@ export async function PUT(
         select: { id: true },
       });
       if (linkedTrack) {
-        const trackData: { title?: string; completed?: boolean; inProgress?: boolean } = {};
+        const trackData: { title?: string; completed?: boolean; completedAt?: Date | null; inProgress?: boolean } = {};
         if (updateData.title !== undefined && updateData.title !== null) {
           trackData.title = updateData.title;
         }
         if (updateData.completed !== undefined) {
           trackData.completed = updateData.completed;
+          trackData.completedAt = updateData.completed ? new Date() : null;
           if (updateData.completed) trackData.inProgress = false;
         }
         if (updateData.inProgress !== undefined) {

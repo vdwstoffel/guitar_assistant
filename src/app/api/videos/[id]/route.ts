@@ -22,6 +22,7 @@ export async function PUT(
     };
     if (completed !== undefined) {
       data.completed = completed;
+      data.completedAt = completed ? new Date() : null;
       if (completed) data.inProgress = false;
     }
     if (inProgress !== undefined) {

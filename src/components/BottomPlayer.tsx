@@ -86,7 +86,7 @@ function BottomPlayer({
   const [isLoading, setIsLoading] = useState(false);
   const [zoom, setZoom] = useState(1);
   const [playbackSpeed, setPlaybackSpeed] = useState(100);
-  const sessionTracker = usePracticeSessionTracker(track, playbackSpeed);
+  const sessionTracker = usePracticeSessionTracker(track);
   const sessionTrackerRef = useRef(sessionTracker);
   sessionTrackerRef.current = sessionTracker;
   const [speedInputValue, setSpeedInputValue] = useState("");

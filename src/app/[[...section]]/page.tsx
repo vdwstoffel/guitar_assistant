@@ -17,7 +17,6 @@ import PdfViewer from "@/components/PdfViewer";
 import Videos from "@/components/Videos";
 import RecordingsView from "@/components/RecordingsView";
 import Tools from "@/components/Tools";
-import MetricsView from "@/components/MetricsView";
 import CAGEDSystem from "@/components/CAGEDSystem";
 import HomeView from "@/components/HomeView";
 import GuitarProViewer from "@/components/GuitarProViewer";
@@ -26,12 +25,12 @@ import VideoPlayer from "@/components/VideoPlayer";
 import { AuthorSummary, BookSummary, Book, Track, TrackTab, Marker, JamTrack, JamTrackMarker, BookVideo, BookVideoMarker, SearchResultTrack, SearchResultBook, SearchResultJamTrack } from "@/types";
 import TrackTabsModal from "@/components/TrackTabsModal";
 
-type Section = 'home' | 'lessons' | 'videos' | 'fretboard' | 'chords' | 'tools' | 'circle' | 'jamtracks' | 'recordings' | 'metrics' | 'caged';
+type Section = 'home' | 'lessons' | 'videos' | 'fretboard' | 'chords' | 'tools' | 'circle' | 'jamtracks' | 'recordings' | 'caged';
 
 const getSectionFromPath = (section: string[] | undefined): Section => {
   if (!section || section.length === 0) return 'home';
   const first = section[0];
-  if (first === 'home' || first === 'lessons' || first === 'videos' || first === 'fretboard' || first === 'chords' || first === 'tools' || first === 'circle' || first === 'jamtracks' || first === 'recordings' || first === 'metrics' || first === 'caged') {
+  if (first === 'home' || first === 'lessons' || first === 'videos' || first === 'fretboard' || first === 'chords' || first === 'tools' || first === 'circle' || first === 'jamtracks' || first === 'recordings' || first === 'caged') {
     return first;
   }
   return 'home';
@@ -2226,8 +2225,6 @@ export default function Home() {
         <CircleOfFifths />
       ) : activeSection === 'chords' ? (
         <ChordBuilder />
-      ) : activeSection === 'metrics' ? (
-        <MetricsView onGoToTrack={handleGoToTrackFromMetrics} />
       ) : activeSection === 'caged' ? (
         <CAGEDSystem />
       ) : (

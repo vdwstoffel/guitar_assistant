@@ -49,10 +49,11 @@ export async function PATCH(
     const { id } = await params;
     const body: UpdateJamTrackBody = await request.json();
 
-    const updateData: Partial<UpdateJamTrackBody> = {};
+    const updateData: Partial<UpdateJamTrackBody> & { completedAt?: Date | null } = {};
     if (body.title !== undefined) updateData.title = body.title.trim();
     if (body.completed !== undefined) {
       updateData.completed = body.completed;
+      updateData.completedAt = body.completed ? new Date() : null;
       if (body.completed) updateData.inProgress = false;
     }
     if (body.inProgress !== undefined) {

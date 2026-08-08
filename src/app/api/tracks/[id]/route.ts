@@ -68,6 +68,7 @@ export async function PATCH(
 
     const data: {
       completed?: boolean;
+      completedAt?: Date | null;
       inProgress?: boolean;
       favorite?: boolean;
       pdfPage?: number | null;
@@ -77,6 +78,7 @@ export async function PATCH(
     } = {};
     if (body.completed !== undefined) {
       data.completed = body.completed;
+      data.completedAt = body.completed ? new Date() : null;
       if (body.completed) data.inProgress = false;
     }
     if (body.inProgress !== undefined) {
@@ -113,9 +115,10 @@ export async function PATCH(
 
     // Sync status to linked video if exists
     if (updatedTrack.sourceVideoId && (data.completed !== undefined || data.inProgress !== undefined)) {
-      const videoData: { completed?: boolean; inProgress?: boolean } = {};
+      const videoData: { completed?: boolean; completedAt?: Date | null; inProgress?: boolean } = {};
       if (data.completed !== undefined) {
         videoData.completed = data.completed;
+        videoData.completedAt = data.completed ? new Date() : null;
         if (data.completed) videoData.inProgress = false;
       }
       if (data.inProgress !== undefined) {

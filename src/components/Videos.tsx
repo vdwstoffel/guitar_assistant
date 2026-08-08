@@ -438,7 +438,7 @@ export default function Videos({ initialVideoId }: VideosProps) {
 
   // ---- Practice session tracking ------------------------------------------
 
-  const { onPlay, onPause, onFinish } = usePracticeSessionTracker(activeVideo ?? null, 100);
+  const { onPlay, onPause, onFinish } = usePracticeSessionTracker(activeVideo ?? null);
   const trackerRef = useRef({ onPlay, onPause, onFinish });
   trackerRef.current = { onPlay, onPause, onFinish };
 

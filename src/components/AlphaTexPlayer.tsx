@@ -51,7 +51,7 @@ export default function AlphaTexPlayer({ track, tab, onClose, onSave }: AlphaTex
   const [isSaving, setIsSaving] = useState(false);
   const [currentTab, setCurrentTab] = useState(tab);
   const pendingAutoPlay = useRef(false);
-  const sessionTracker = usePracticeSessionTracker(track, practiseBpm);
+  const sessionTracker = usePracticeSessionTracker(track);
   const sessionTrackerRef = useRef(sessionTracker);
   sessionTrackerRef.current = sessionTracker;
 

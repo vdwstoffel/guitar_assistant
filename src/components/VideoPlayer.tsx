@@ -25,7 +25,7 @@ export default function VideoPlayer({
   onClearMarkers,
 }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const { onPlay, onPause, onFinish } = usePracticeSessionTracker(video, 100);
+  const { onPlay, onPause, onFinish } = usePracticeSessionTracker(video);
   const [currentTime, setCurrentTime] = useState(0);
   const [volume, setVolume] = useState(() => {
     // Initialize from sessionStorage, default to 1.0
