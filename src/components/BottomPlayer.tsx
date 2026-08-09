@@ -1606,7 +1606,8 @@ function BottomPlayer({
                         tabIndex={0}
                         onKeyDown={(e) => {
                           if (editingMarkerId === marker.id) return;
-                          if (e.key === "Enter" || e.key === " ") {
+                          // Enter activates (jump); Space is reserved for play/pause.
+                          if (e.key === "Enter") {
                             e.preventDefault();
                             jumpToMarker(marker.timestamp);
                           }

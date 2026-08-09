@@ -303,7 +303,8 @@ const MarkersBar = memo(function MarkersBar({
                 role="button"
                 tabIndex={0}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
+                  // Enter activates (jump); Space is reserved for play/pause.
+                  if (e.key === "Enter") {
                     e.preventDefault();
                     onJumpToMarker(marker.timestamp);
                   }
