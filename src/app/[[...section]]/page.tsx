@@ -4,10 +4,11 @@ import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import BookGrid from "@/components/BookGrid";
 import TrackListView from "@/components/TrackListView";
-import JamTracksView from "@/components/JamTracksView";
-import JamTrackCompactSelector from "@/components/JamTrackCompactSelector";
+import JamTrackList from "@/components/JamTrackList";
+import JamTrackPdfPanel from "@/components/JamTrackPdfPanel";
 import BottomPlayer, { MarkerBarState } from "@/components/BottomPlayer";
 import MarkersBar from "@/components/MarkersBar";
+import PageFlipDialog from "@/components/PageFlipDialog";
 import TopNav from "@/components/TopNav";
 import Fretboard from "@/components/Fretboard";
 import CircleOfFifths from "@/components/CircleOfFifths";
@@ -19,11 +20,11 @@ import RecordingsView from "@/components/RecordingsView";
 import Tools from "@/components/Tools";
 import CAGEDSystem from "@/components/CAGEDSystem";
 import HomeView from "@/components/HomeView";
-import GuitarProViewer from "@/components/GuitarProViewer";
 import UploadModal from "@/components/UploadModal";
 import VideoPlayer from "@/components/VideoPlayer";
 import { AuthorSummary, BookSummary, Book, Track, TrackTab, Marker, JamTrack, JamTrackMarker, BookVideo, BookVideoMarker, SearchResultTrack, SearchResultBook, SearchResultJamTrack, SavedLoop, JamTrackLoop } from "@/types";
 import TrackTabsModal from "@/components/TrackTabsModal";
+import { resolvePageFlip } from "@/lib/pageFlips";
 
 type Section = 'home' | 'lessons' | 'videos' | 'fretboard' | 'chords' | 'tools' | 'circle' | 'jamtracks' | 'recordings' | 'caged';
 
@@ -144,14 +145,31 @@ export default function Home() {
   const [currentAudioTime, setCurrentAudioTime] = useState(0);
   const [audioIsPlaying, setAudioIsPlaying] = useState(false);
   const seekFnRef = useRef<((time: number) => void) | null>(null);
-  const lastTrackAutoFlipPage = useRef<number>(0);
+  const lastAutoFlipPage = useRef<number | null>(null);
+
+  // Page-flip dialog state (editFlipId is set when editing an existing flip)
+  const [pageFlipDialog, setPageFlipDialog] = useState<{ open: boolean; timestamp: number; defaultPage: number; editFlipId?: string } | null>(null);
 
   // Mobile responsive state
   const [mobileView, setMobileView] = useState<'library' | 'player' | 'pdf'>('library');
 
+  // Active PDF tab state for the JamTrackPdfPanel
+  const [activeJamPdfId, setActiveJamPdfId] = useState<string | null>(null);
+  // Keep the active PDF valid: preserve the selection when it still exists
+  // (uploads/renames), else fall back to the first PDF (track change or the
+  // active PDF being deleted).
+  useEffect(() => {
+    const pdfs = currentJamTrack?.pdfs ?? [];
+    setActiveJamPdfId((prev) =>
+      prev && pdfs.some((p) => p.id === prev) ? prev : (pdfs[0]?.id ?? null)
+    );
+  }, [currentJamTrack?.id, currentJamTrack?.pdfs]);
+
   // Refs for stable BottomPlayer callbacks (avoids new function references every render)
   const currentJamTrackRef = useRef(currentJamTrack);
   currentJamTrackRef.current = currentJamTrack;
+  const currentTrackRef = useRef(currentTrack);
+  currentTrackRef.current = currentTrack;
 
   // Get active section from URL path
   const activeSection = getSectionFromPath(params.section as string[] | undefined);
@@ -354,7 +372,7 @@ export default function Home() {
               setCurrentAuthorId(foundAuthor!.id);
               setCurrentBookId(bookId);
               if (track.pdfPage) {
-                lastTrackAutoFlipPage.current = track.pdfPage;
+                lastAutoFlipPage.current = track.pdfPage;
                 setPdfPage(track.pdfPage);
               }
             }
@@ -509,7 +527,7 @@ export default function Home() {
     }
     // Always reset to track's initial PDF page on selection (including re-select)
     if (track.pdfPage) {
-      lastTrackAutoFlipPage.current = track.pdfPage;
+      lastAutoFlipPage.current = track.pdfPage;
       setPdfPage(track.pdfPage);
     }
     // Update URL with track selection
@@ -610,7 +628,6 @@ export default function Home() {
     trackId: string,
     name: string,
     timestamp: number,
-    pdfPage?: number | null
   ) => {
     const isJamTrack = jamTracks.some(jt => jt.id === trackId);
     try {
@@ -631,7 +648,7 @@ export default function Home() {
       const response = await fetch("/api/markers", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ trackId, name, timestamp, pdfPage }),
+        body: JSON.stringify({ trackId, name, timestamp }),
       });
       if (response.ok) {
         const newMarker: Marker = await response.json();
@@ -684,7 +701,7 @@ export default function Home() {
     }
   };
 
-  const handleMarkerRename = async (markerId: string, name: string, pdfPage?: number | null) => {
+  const handleMarkerRename = async (markerId: string, name: string) => {
     const owningJamTrack = findJamTrackForMarker(markerId);
     try {
       if (owningJamTrack) {
@@ -702,16 +719,14 @@ export default function Home() {
         }
         return;
       }
-      const body: Record<string, unknown> = { name };
-      if (pdfPage !== undefined) body.pdfPage = pdfPage;
       const response = await fetch(`/api/markers/${markerId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ name }),
       });
       if (response.ok) {
         const updateMarkers = (markers: Marker[]) =>
-          markers.map(m => m.id === markerId ? { ...m, name, ...(pdfPage !== undefined ? { pdfPage } : {}) } : m);
+          markers.map(m => m.id === markerId ? { ...m, name } : m);
         setCurrentTrack(prev =>
           prev ? { ...prev, markers: updateMarkers(prev.markers) } : prev
         );
@@ -1650,41 +1665,36 @@ export default function Home() {
     }
   };
 
-  const handleJamTrackGpUpload = async (jamTrackId: string, file: File) => {
-    const formData = new FormData();
-    formData.append("file", file);
-
-    try {
-      const response = await fetch(`/api/jamtracks/${jamTrackId}/gp`, {
-        method: "POST",
-        body: formData,
-      });
-
-      if (response.ok) {
-        const updated = await response.json();
-        setJamTracks((prev) => prev.map((jt) => (jt.id === jamTrackId ? updated : jt)));
-      } else {
-        const data = await response.json().catch(() => ({}));
-        console.error("GP upload failed:", data);
-      }
-    } catch (error) {
-      console.error("Error uploading GP file:", error);
+  // Refetch the current jam track after PDF add/rename/delete
+  const refreshCurrentJamTrack = useCallback(async () => {
+    if (!currentJamTrackRef.current) return;
+    const res = await fetch(`/api/jamtracks/${currentJamTrackRef.current.id}`);
+    if (res.ok) {
+      const updated = await res.json();
+      setJamTracks((prev) => prev.map((jt) => (jt.id === updated.id ? updated : jt)));
     }
-  };
+  }, []);
 
-  const handleJamTrackGpDelete = async (jamTrackId: string) => {
-    try {
-      const response = await fetch(`/api/jamtracks/${jamTrackId}/gp`, {
-        method: "DELETE",
-      });
-      if (response.ok) {
-        const updated = await response.json();
-        setJamTracks((prev) => prev.map((jt) => (jt.id === jamTrackId ? updated : jt)));
+  // Refetch the current track (incl. pageFlips) after a page-flip is added/deleted
+  const refreshCurrentTrack = useCallback(async () => {
+    const track = currentTrackRef.current;
+    if (!track) return;
+    const bookId = track.bookId;
+    const res = await fetch(`/api/books/${bookId}/detail`);
+    if (res.ok) {
+      const bookData = await res.json();
+      // Find the refreshed track in the book data
+      const allTracks: Track[] = [
+        ...(bookData.tracks ?? []),
+        ...(bookData.chapters ?? []).flatMap((ch: { tracks: Track[] }) => ch.tracks),
+      ];
+      const refreshed = allTracks.find((t) => t.id === track.id);
+      if (refreshed) {
+        setCurrentTrack(refreshed);
+        updateTrackInBookDetail(refreshed.id, () => refreshed);
       }
-    } catch (error) {
-      console.error("Error removing GP file:", error);
     }
-  };
+  }, [updateTrackInBookDetail]);
 
   // Refs for handler functions so useCallback wrappers stay stable.
   // Handlers internally branch on whether the target is a track or jam track.
@@ -1699,16 +1709,16 @@ export default function Home() {
   const handleMarkersClearRef = useRef(handleMarkersClear);
   handleMarkersClearRef.current = handleMarkersClear;
 
-  const stableOnMarkerAdd = useCallback((trackId: string, name: string, timestamp: number, pdfPage?: number | null) => {
-    handleMarkerAddRef.current(trackId, name, timestamp, pdfPage);
+  const stableOnMarkerAdd = useCallback((trackId: string, name: string, timestamp: number) => {
+    handleMarkerAddRef.current(trackId, name, timestamp);
   }, []);
 
   const stableOnMarkerUpdate = useCallback((markerId: string, timestamp: number) => {
     handleMarkerUpdateRef.current(markerId, timestamp);
   }, []);
 
-  const stableOnMarkerRename = useCallback((markerId: string, name: string, pdfPage?: number | null) => {
-    handleMarkerRenameRef.current(markerId, name, pdfPage);
+  const stableOnMarkerRename = useCallback((markerId: string, name: string) => {
+    handleMarkerRenameRef.current(markerId, name);
   }, []);
 
   const stableOnMarkerDelete = useCallback((markerId: string) => {
@@ -1735,6 +1745,74 @@ export default function Home() {
     handleLoopDeleteRef.current(loopId);
   }, []);
 
+  // Page-flip save/delete handlers (stable via refs)
+  const activeJamPdfIdRef = useRef(activeJamPdfId);
+  activeJamPdfIdRef.current = activeJamPdfId;
+  const refreshCurrentJamTrackRef = useRef(refreshCurrentJamTrack);
+  refreshCurrentJamTrackRef.current = refreshCurrentJamTrack;
+  const refreshCurrentTrackRef = useRef(refreshCurrentTrack);
+  refreshCurrentTrackRef.current = refreshCurrentTrack;
+
+  const savePageFlip = useCallback(async (page: number, timestamp: number, editFlipId?: string) => {
+    try {
+      if (activeSection === "jamtracks" && activeJamPdfIdRef.current && currentJamTrackRef.current) {
+        const base = `/api/jamtracks/${currentJamTrackRef.current.id}/pdf/${activeJamPdfIdRef.current}/pageflips`;
+        if (editFlipId) {
+          await fetch(`${base}/${editFlipId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ pdfPage: page }),
+          });
+        } else {
+          await fetch(base, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ timestamp, pdfPage: page }),
+          });
+        }
+        await refreshCurrentJamTrackRef.current();
+      } else if (currentTrackRef.current) {
+        const base = `/api/tracks/${currentTrackRef.current.id}/pageflips`;
+        if (editFlipId) {
+          await fetch(`${base}/${editFlipId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ pdfPage: page }),
+          });
+        } else {
+          await fetch(base, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ timestamp, pdfPage: page }),
+          });
+        }
+        await refreshCurrentTrackRef.current();
+      }
+    } catch (err) {
+      console.error("Failed to save page flip:", err);
+    }
+  }, [activeSection]);
+
+  const handlePageFlipDelete = useCallback(async (id: string) => {
+    try {
+      // Determine if we're in jamtracks or lessons
+      if (activeSection === "jamtracks" && currentJamTrackRef.current && activeJamPdfIdRef.current) {
+        await fetch(
+          `/api/jamtracks/${currentJamTrackRef.current.id}/pdf/${activeJamPdfIdRef.current}/pageflips/${id}`,
+          { method: "DELETE" }
+        );
+        await refreshCurrentJamTrackRef.current();
+      } else if (currentTrackRef.current) {
+        await fetch(`/api/tracks/${currentTrackRef.current.id}/pageflips/${id}`, {
+          method: "DELETE",
+        });
+        await refreshCurrentTrackRef.current();
+      }
+    } catch (err) {
+      console.error("Failed to delete page flip:", err);
+    }
+  }, [activeSection]);
+
   const stableOnTimeUpdate = useCallback((time: number, playing: boolean) => {
     setCurrentAudioTime(time);
     setAudioIsPlaying(playing);
@@ -1744,50 +1822,40 @@ export default function Home() {
     seekFnRef.current = seekFn;
   }, []);
 
-  // Reset page flip tracking when track changes
+  // Reset page flip tracking when track/jamtrack/activePdf changes
   const prevTrackIdRef = useRef<string | null>(null);
   useEffect(() => {
     if (currentTrack?.id !== prevTrackIdRef.current) {
-      lastTrackAutoFlipPage.current = 0;
+      lastAutoFlipPage.current = null;
       prevTrackIdRef.current = currentTrack?.id ?? null;
       // Immediately navigate to track's initial pdfPage on selection
       if (currentTrack?.pdfPage) {
         setPdfPage(currentTrack.pdfPage);
-        lastTrackAutoFlipPage.current = currentTrack.pdfPage;
+        lastAutoFlipPage.current = currentTrack.pdfPage;
       }
     }
   }, [currentTrack?.id, currentTrack?.pdfPage]);
 
-  // Auto-flip PDF page based on marker pdfPages during playback
+  // Reset lastAutoFlipPage when jamtrack or active PDF changes
   useEffect(() => {
-    if (!currentTrack) return;
+    lastAutoFlipPage.current = null;
+  }, [currentJamTrackId, activeJamPdfId]);
 
-    // Markers with pdfPage, sorted by timestamp
-    const pageMarkers = currentTrack.markers
-      .filter((m): m is Marker & { pdfPage: number } => m.pdfPage != null)
-      .sort((a, b) => a.timestamp - b.timestamp);
-
-    if (pageMarkers.length === 0) return;
-
-    const offset = pageFlipAnticipation ? 1 : 0;
-    let targetPage: number | null = null;
-    for (let i = pageMarkers.length - 1; i >= 0; i--) {
-      if (currentAudioTime >= pageMarkers[i].timestamp - offset) {
-        targetPage = pageMarkers[i].pdfPage;
-        break;
-      }
+  // Auto-flip PDF page using resolvePageFlip — works for both Lessons and Jam Tracks
+  useEffect(() => {
+    const flips =
+      activeSection === "jamtracks"
+        ? (currentJamTrack?.pdfs?.find((p) => p.id === activeJamPdfId)?.pageFlips ?? [])
+        : (currentTrack?.pageFlips ?? []);
+    if (flips.length === 0) return;
+    const fallback =
+      activeSection === "jamtracks" ? null : (currentTrack?.pdfPage ?? null);
+    const target = resolvePageFlip(flips, currentAudioTime, pageFlipAnticipation ? 1 : 0, fallback);
+    if (target != null && target !== lastAutoFlipPage.current) {
+      lastAutoFlipPage.current = target;
+      setPdfPage(target);
     }
-
-    // Before any marker is reached, fall back to track's initial pdfPage
-    if (targetPage === null && currentTrack.pdfPage) {
-      targetPage = currentTrack.pdfPage;
-    }
-
-    if (targetPage !== null && targetPage !== lastTrackAutoFlipPage.current) {
-      lastTrackAutoFlipPage.current = targetPage;
-      setPdfPage(targetPage);
-    }
-  }, [currentTrack?.id, currentTrack?.markers, currentAudioTime, pageFlipAnticipation]);
+  }, [activeSection, currentTrack?.id, currentJamTrack?.id, activeJamPdfId, currentAudioTime, pageFlipAnticipation, currentTrack?.pageFlips, currentJamTrack?.pdfs]);
 
   // Auto-navigate to video's PDF page when video changes
   useEffect(() => {
@@ -1910,6 +1978,16 @@ export default function Home() {
                   onSeekReady={stableOnSeekReady}
                   onTrackTabs={currentTrack ? () => setTabsTrack(currentTrack) : undefined}
                   trackTabsCount={currentTrack?.tabs?.length ?? 0}
+                  currentPdfPage={pdfPage}
+                  onPageFlipAdd={(t, p) => setPageFlipDialog({ open: true, timestamp: t, defaultPage: p })}
+                  pageFlips={currentTrack?.pageFlips ?? []}
+                  onPageFlipEdit={(id) => {
+                    const flip = currentTrack?.pageFlips?.find((f) => f.id === id);
+                    if (flip) {
+                      setPageFlipDialog({ open: true, timestamp: flip.timestamp, defaultPage: flip.pdfPage, editFlipId: id });
+                    }
+                  }}
+                  onPageFlipDelete={handlePageFlipDelete}
                 />
               </div>
             </div>
@@ -1966,8 +2044,8 @@ export default function Home() {
                           markerBarState.setEditingMarkerName(name);
                         }}
                         onEditNameChange={markerBarState.setEditingMarkerName}
-                        onSaveEdit={(markerId, name, markerPdfPage) => {
-                          handleMarkerRename(markerId, name, markerPdfPage);
+                        onSaveEdit={(markerId, name) => {
+                          handleMarkerRename(markerId, name);
                           markerBarState.setEditingMarkerId(null);
                         }}
                         onCancelEdit={() => markerBarState.setEditingMarkerId(null)}
@@ -1982,8 +2060,6 @@ export default function Home() {
                         trackTempo={markerBarState.trackTempo}
                         trackTimeSignature={markerBarState.trackTimeSignature}
                         onTempoChange={handleTempoChange}
-                        currentPdfPage={pdfPage}
-                        hasPdf={!!pdfPath}
                         pageFlipAnticipation={pageFlipAnticipation}
                         onPageFlipAnticipationChange={handlePageFlipAnticipationChange}
                       />
@@ -2020,8 +2096,8 @@ export default function Home() {
                 markerBarState.setEditingMarkerName(name);
               }}
               onEditNameChange={markerBarState.setEditingMarkerName}
-              onSaveEdit={(markerId, name, markerPdfPage) => {
-                handleMarkerRename(markerId, name, markerPdfPage);
+              onSaveEdit={(markerId, name) => {
+                handleMarkerRename(markerId, name);
                 markerBarState.setEditingMarkerId(null);
               }}
               onCancelEdit={() => markerBarState.setEditingMarkerId(null)}
@@ -2036,8 +2112,6 @@ export default function Home() {
               trackTempo={markerBarState.trackTempo}
               trackTimeSignature={markerBarState.trackTimeSignature}
               onTempoChange={handleTempoChange}
-              currentPdfPage={pdfPage}
-              hasPdf={!!pdfPath}
               pageFlipAnticipation={pageFlipAnticipation}
               onPageFlipAnticipationChange={handlePageFlipAnticipationChange}
             />
@@ -2086,134 +2160,25 @@ export default function Home() {
           </div>
         </>
       ) : activeSection === 'jamtracks' ? (
-        <>
-          {/* Show full layout when no track selected */}
-          {!currentJamTrack ? (
-            <div className="flex flex-col xl:flex-row flex-1 min-h-0">
-              {/* Left: Full track list */}
-              <div className="w-full xl:w-1/2 flex flex-col min-w-0 xl:border-r border-gray-700">
-                <div className="flex-1 min-w-0 overflow-y-auto">
-                  <JamTracksView
-                    jamTracks={jamTracks}
-                    currentJamTrack={currentJamTrack}
-                    onJamTrackSelect={handleJamTrackSelect}
-                    onJamTrackUpdate={handleJamTrackUpdate}
-                    onJamTrackComplete={handleJamTrackComplete}
-                    onJamTrackInProgress={handleJamTrackInProgress}
-                    onJamTrackFavorite={handleJamTrackFavorite}
-                    onJamTrackDelete={handleJamTrackDelete}
-                    onGpUpload={handleJamTrackGpUpload}
-                    onGpDelete={handleJamTrackGpDelete}
-                    onUpload={handleJamTrackUpload}
-                    isUploading={isUploadingJamTracks}
-                    onYouTubeImport={handleYouTubeImport}
-                    isImportingFromYouTube={isImportingFromYouTube}
-                  />
-                </div>
-              </div>
-
-              {/* Right: Empty state */}
-              <div className="hidden xl:flex xl:w-1/2 flex-col items-center justify-center bg-gray-900 text-gray-500">
-                <div className="text-center">
-                  <svg className="w-16 h-16 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
-                  </svg>
-                  <p className="text-lg">Select a jam track to get started</p>
-                </div>
-              </div>
+        <div className="flex h-full overflow-hidden">
+          {/* Left half: track list (top) stacked over the waveform (bottom) */}
+          <div className="w-1/2 flex flex-col min-h-0 border-r border-gray-700">
+            <div className="flex-1 min-h-0 overflow-y-auto">
+              <JamTrackList
+                jamTracks={jamTracks}
+                currentJamTrackId={currentJamTrack?.id ?? null}
+                onSelect={(id) => {
+                  const jt = jamTracks.find((t) => t.id === id);
+                  if (jt) handleJamTrackSelect(jt);
+                }}
+                onUpload={handleJamTrackUpload}
+                isUploading={isUploadingJamTracks}
+                onYouTubeImport={handleYouTubeImport}
+                isImportingFromYouTube={isImportingFromYouTube}
+              />
             </div>
-          ) : (
-            /* Compact layout when track selected */
-            <div className="flex flex-col h-full overflow-hidden">
-              {/* Top: Compact selector - Desktop only */}
-              <div className="hidden xl:block shrink-0">
-                <JamTrackCompactSelector
-                  jamTracks={jamTracks}
-                  currentJamTrack={currentJamTrack}
-                  onJamTrackSelect={handleJamTrackSelect}
-                  onJamTrackUpdate={handleJamTrackUpdate}
-                  onUpload={handleJamTrackUpload}
-                  isUploading={isUploadingJamTracks}
-                  onYouTubeImport={handleYouTubeImport}
-                  isImportingFromYouTube={isImportingFromYouTube}
-                />
-              </div>
-
-              {/* Mobile: Keep full JamTracksView */}
-              <div className="xl:hidden flex-1 overflow-y-auto">
-                <JamTracksView
-                  jamTracks={jamTracks}
-                  currentJamTrack={currentJamTrack}
-                  onJamTrackSelect={handleJamTrackSelect}
-                  onJamTrackUpdate={handleJamTrackUpdate}
-                  onJamTrackComplete={handleJamTrackComplete}
-                  onJamTrackInProgress={handleJamTrackInProgress}
-                  onJamTrackDelete={handleJamTrackDelete}
-                  onGpUpload={handleJamTrackGpUpload}
-                  onGpDelete={handleJamTrackGpDelete}
-                  onUpload={handleJamTrackUpload}
-                  isUploading={isUploadingJamTracks}
-                  onYouTubeImport={handleYouTubeImport}
-                  isImportingFromYouTube={isImportingFromYouTube}
-                />
-              </div>
-
-              {/* Middle: Guitar Pro tab viewer + optional markers sidebar */}
-              <div className="hidden xl:flex flex-1 min-h-0 overflow-hidden" style={{ maxHeight: 'calc(100vh - 280px)' }}>
-                <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-                  {currentJamTrack.gpFilePath ? (
-                    <GuitarProViewer filePath={currentJamTrack.gpFilePath} />
-                  ) : (
-                    <div className="h-full flex items-center justify-center bg-gray-900 text-gray-500">
-                      <div className="text-center">
-                        <svg className="w-16 h-16 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                        </svg>
-                        <p className="text-lg">No Guitar Pro tab attached</p>
-                        <p className="text-sm mt-2">Use &quot;Add Guitar Pro tab&quot; on the track row to attach a .gp / .gpx / .gp5 file.</p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-                {markerBarState && markerBarState.showMarkers && (
-                  <div className="w-64 border-l border-gray-700 bg-gray-900 flex flex-col overflow-hidden">
-                    <MarkersBar
-                      markers={currentJamTrack.markers}
-                      visible={true}
-                      layout="vertical"
-                      leadIn={markerBarState.leadIn}
-                      editingMarkerId={markerBarState.editingMarkerId}
-                      editingMarkerName={markerBarState.editingMarkerName}
-                      currentTime={markerBarState.currentTime}
-                      onLeadInChange={markerBarState.setLeadIn}
-                      onAddMarker={markerBarState.addMarker}
-                      onJumpToMarker={markerBarState.jumpToMarker}
-                      onStartEdit={(id, name) => {
-                        markerBarState.setEditingMarkerId(id);
-                        markerBarState.setEditingMarkerName(name);
-                      }}
-                      onEditNameChange={markerBarState.setEditingMarkerName}
-                      onSaveEdit={(markerId, name) => {
-                        handleMarkerRename(markerId, name);
-                        markerBarState.setEditingMarkerId(null);
-                      }}
-                      onCancelEdit={() => markerBarState.setEditingMarkerId(null)}
-                      onDelete={(markerId) => handleMarkerDelete(markerId)}
-                      onClearAll={() => handleMarkersClear(currentJamTrack.id)}
-                      formatTime={markerBarState.formatTime}
-                      isCountingIn={markerBarState.isCountingIn}
-                      currentCountInBeat={markerBarState.currentCountInBeat}
-                      totalCountInBeats={markerBarState.totalCountInBeats}
-                      trackTempo={markerBarState.trackTempo}
-                      trackTimeSignature={markerBarState.trackTimeSignature}
-                      onTempoChange={handleTempoChange}
-                    />
-                  </div>
-                )}
-              </div>
-
-              {/* Bottom: Player - compact on desktop, full on mobile */}
-              <div className={`shrink-0 overflow-hidden transition-all duration-300 xl:overflow-visible ${currentJamTrack ? "h-[30vh] min-h-55 max-h-80 xl:h-auto xl:min-h-0 xl:max-h-none" : "h-0 xl:h-0"}`}>
+            {currentJamTrack && (
+              <div className="shrink-0 border-t border-gray-700">
                 <BottomPlayer
                   track={currentJamTrack}
                   compact={true}
@@ -2224,86 +2189,43 @@ export default function Home() {
                   onMarkersClear={stableOnMarkersClear}
                   onLoopSave={stableOnLoopSave}
                   onLoopDelete={stableOnLoopDelete}
-                  externalMarkersBar={true}
-                  onMarkerBarStateChange={setMarkerBarState}
                   onTimeUpdate={stableOnTimeUpdate}
                   onSeekReady={stableOnSeekReady}
+                  currentPdfPage={pdfPage}
+                  onPageFlipAdd={(t, p) => setPageFlipDialog({ open: true, timestamp: t, defaultPage: p })}
+                  pageFlips={currentJamTrack.pdfs?.find((p) => p.id === activeJamPdfId)?.pageFlips ?? []}
+                  onPageFlipEdit={(id) => {
+                    const flip = currentJamTrack.pdfs?.find((p) => p.id === activeJamPdfId)?.pageFlips?.find((f) => f.id === id);
+                    if (flip) {
+                      setPageFlipDialog({ open: true, timestamp: flip.timestamp, defaultPage: flip.pdfPage, editFlipId: id });
+                    }
+                  }}
+                  onPageFlipDelete={handlePageFlipDelete}
                 />
               </div>
-
-              {/* Markers Bar - mobile only (desktop uses sidebar above) */}
-              {currentJamTrack && markerBarState && (
-                <div className="xl:hidden">
-                  <MarkersBar
-                    markers={currentJamTrack.markers}
-                    visible={markerBarState.showMarkers}
-                    leadIn={markerBarState.leadIn}
-                    editingMarkerId={markerBarState.editingMarkerId}
-                    editingMarkerName={markerBarState.editingMarkerName}
-                    currentTime={markerBarState.currentTime}
-                    onLeadInChange={markerBarState.setLeadIn}
-                    onAddMarker={markerBarState.addMarker}
-                    onJumpToMarker={markerBarState.jumpToMarker}
-                    onStartEdit={(id, name) => {
-                      markerBarState.setEditingMarkerId(id);
-                      markerBarState.setEditingMarkerName(name);
-                    }}
-                    onEditNameChange={markerBarState.setEditingMarkerName}
-                    onSaveEdit={(markerId, name) => {
-                      handleMarkerRename(markerId, name);
-                      markerBarState.setEditingMarkerId(null);
-                    }}
-                    onCancelEdit={() => markerBarState.setEditingMarkerId(null)}
-                    onDelete={(markerId) => handleMarkerDelete(markerId)}
-                    onClearAll={() => handleMarkersClear(currentJamTrack.id)}
-                    formatTime={markerBarState.formatTime}
-                    isCountingIn={markerBarState.isCountingIn}
-                    currentCountInBeat={markerBarState.currentCountInBeat}
-                    totalCountInBeats={markerBarState.totalCountInBeats}
-                    trackTempo={markerBarState.trackTempo}
-                    trackTimeSignature={markerBarState.trackTimeSignature}
-                    onTempoChange={handleTempoChange}
-                  />
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Mobile Bottom Navigation - unchanged */}
-          <div className="xl:hidden fixed bottom-0 left-0 right-0 bg-gray-800 border-t border-gray-700 z-30">
-            <div className="flex">
-              <button
-                className={`flex-1 flex flex-col items-center justify-center py-3 gap-1 ${mobileView === 'library' ? 'text-blue-400' : 'text-gray-400'}`}
-                onClick={() => setMobileView('library')}
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7h18M3 12h18M3 17h18" />
-                </svg>
-                <span className="text-xs">Tracks</span>
-              </button>
-              <button
-                className={`flex-1 flex flex-col items-center py-3 gap-1 ${mobileView === 'player' ? 'text-blue-400' : 'text-gray-400'} ${!currentJamTrack ? 'opacity-50' : ''}`}
-                onClick={() => currentJamTrack && setMobileView('player')}
-                disabled={!currentJamTrack}
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                </svg>
-                <span className="text-xs">Player</span>
-              </button>
-              <button
-                className={`flex-1 flex flex-col items-center py-3 gap-1 ${mobileView === 'pdf' ? 'text-blue-400' : 'text-gray-400'} ${!currentJamTrack?.gpFilePath ? 'opacity-50' : ''}`}
-                onClick={() => currentJamTrack?.gpFilePath && setMobileView('pdf')}
-                disabled={!currentJamTrack?.gpFilePath}
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                <span className="text-xs">Tabs</span>
-              </button>
-            </div>
+            )}
           </div>
-        </>
+          {/* Right half: PDF panel, fills top to bottom */}
+          <div className="w-1/2 min-w-0 min-h-0">
+            {currentJamTrack ? (
+              <JamTrackPdfPanel
+                jamTrackId={currentJamTrack.id}
+                pdfs={currentJamTrack.pdfs ?? []}
+                activePdfId={activeJamPdfId}
+                onActivePdfChange={setActiveJamPdfId}
+                currentPage={pdfPage}
+                onPageChange={setPdfPage}
+                onUploaded={refreshCurrentJamTrack}
+                onRenamed={refreshCurrentJamTrack}
+                onDeleted={refreshCurrentJamTrack}
+              />
+            ) : (
+              <div className="h-full flex items-center justify-center text-gray-500">
+                Select a jam track to get started
+              </div>
+            )}
+          </div>
+        </div>
       ) : activeSection === 'videos' ? (
         <div className="flex-1 min-h-0">
           <Videos initialVideoId={searchParams.get('video')} />
@@ -2339,6 +2261,35 @@ export default function Home() {
           onTabCreate={handleTabCreate}
           onTabUpdate={handleTabUpdate}
           onTabDelete={handleTabDelete}
+        />
+      )}
+
+      {pageFlipDialog?.open && (
+        <PageFlipDialog
+          isOpen={pageFlipDialog.open}
+          title={pageFlipDialog.editFlipId ? "Edit Page Flip" : "Add Page Flip"}
+          timestamp={pageFlipDialog.timestamp}
+          defaultPage={pageFlipDialog.defaultPage}
+          formatTime={(seconds) => {
+            const mins = Math.floor(seconds / 60);
+            const secs = Math.floor(seconds % 60);
+            return `${mins}:${secs.toString().padStart(2, "0")}`;
+          }}
+          onSave={(page) => {
+            const { timestamp, editFlipId } = pageFlipDialog;
+            setPageFlipDialog(null);
+            savePageFlip(page, timestamp, editFlipId);
+          }}
+          onCancel={() => setPageFlipDialog(null)}
+          onDelete={
+            pageFlipDialog.editFlipId
+              ? () => {
+                  const { editFlipId } = pageFlipDialog;
+                  setPageFlipDialog(null);
+                  if (editFlipId) handlePageFlipDelete(editFlipId);
+                }
+              : undefined
+          }
         />
       )}
     </div>

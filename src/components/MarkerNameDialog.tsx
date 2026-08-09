@@ -6,13 +6,10 @@ interface MarkerNameDialogProps {
   isOpen: boolean;
   timestamp: number;
   formatTime: (seconds: number) => string;
-  onSave: (name: string, pdfPage: number | null) => void;
+  onSave: (name: string) => void;
   onCancel: () => void;
-  currentPdfPage?: number | null;
-  hasPdf?: boolean;
   // Edit mode: pre-fill with existing values
   initialName?: string;
-  initialPdfPage?: number | null;
   title?: string;
   placeholder?: string;
 }
@@ -23,39 +20,26 @@ export default function MarkerNameDialog({
   formatTime,
   onSave,
   onCancel,
-  currentPdfPage,
-  hasPdf = false,
   initialName,
-  initialPdfPage,
   title,
   placeholder,
 }: MarkerNameDialogProps) {
   const [markerName, setMarkerName] = useState("");
-  const [pageNumber, setPageNumber] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const isEditMode = initialName !== undefined;
 
   useEffect(() => {
     if (isOpen) {
       setMarkerName(initialName ?? "");
-      if (initialPdfPage != null) {
-        setPageNumber(String(initialPdfPage));
-      } else if (!isEditMode && currentPdfPage) {
-        setPageNumber(String(currentPdfPage));
-      } else {
-        setPageNumber("");
-      }
       setTimeout(() => inputRef.current?.focus(), 50);
     }
-  }, [isOpen, currentPdfPage, initialName, initialPdfPage, isEditMode]);
+  }, [isOpen, initialName]);
 
   const handleSave = () => {
     const trimmed = markerName.trim();
     if (trimmed) {
-      const page = pageNumber ? parseInt(pageNumber, 10) : null;
-      onSave(trimmed, Number.isNaN(page) ? null : page);
+      onSave(trimmed);
       setMarkerName("");
-      setPageNumber("");
     }
   };
 
@@ -90,23 +74,6 @@ export default function MarkerNameDialog({
             className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm focus:outline-none focus:border-green-500"
           />
         </div>
-
-        {hasPdf && (
-          <div className="mb-4">
-            <label className="block text-sm text-gray-400 mb-2">
-              PDF Page <span className="text-gray-500">(optional - triggers page turn)</span>
-            </label>
-            <input
-              type="number"
-              min={1}
-              value={pageNumber}
-              onChange={(e) => setPageNumber(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Page number..."
-              className="w-24 px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-sm focus:outline-none focus:border-green-500"
-            />
-          </div>
-        )}
 
         <div className="flex justify-end gap-2">
           <button

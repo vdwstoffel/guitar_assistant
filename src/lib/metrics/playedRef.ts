@@ -11,10 +11,10 @@ export interface PlayedRef {
 
 // Discriminates the four playable item types by a unique property each carries,
 // mirroring the type guards previously inlined in usePracticeSessionTracker.
-// Keys used: youtubeId (Video), filename (BookVideo), gpFilePath (JamTrack), else Track.
+// Keys used: youtubeId (Video), filename (BookVideo), pdfs (JamTrack), else Track.
 export function playedRefForItem(item: TrackableItem): PlayedRef {
   const base: PlayedRef = { trackId: null, jamTrackId: null, bookVideoId: null, videoId: null };
-  if ("gpFilePath" in item) return { ...base, jamTrackId: item.id };
+  if ("pdfs" in item) return { ...base, jamTrackId: item.id };
   if ("youtubeId" in item) return { ...base, videoId: item.id };
   if ("filename" in item) return { ...base, bookVideoId: item.id };
   return { ...base, trackId: item.id };

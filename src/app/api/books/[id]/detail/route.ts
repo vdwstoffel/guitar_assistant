@@ -25,6 +25,9 @@ export async function GET(
               tabs: {
                 orderBy: { sortOrder: "asc" },
               },
+              pageFlips: {
+                orderBy: { timestamp: "asc" },
+              },
             },
           },
           chapters: {
@@ -41,6 +44,9 @@ export async function GET(
                   },
                   tabs: {
                     orderBy: { sortOrder: "asc" },
+                  },
+                  pageFlips: {
+                    orderBy: { timestamp: "asc" },
                   },
                 },
               },

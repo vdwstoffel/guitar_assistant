@@ -2,8 +2,8 @@ import { describe, it, expect } from "vitest";
 import { playedRefForItem, type TrackableItem } from "./playedRef";
 
 describe("playedRefForItem", () => {
-  it("maps a JamTrack (has gpFilePath) to jamTrackId", () => {
-    expect(playedRefForItem({ id: "j1", gpFilePath: "x.gp" } as unknown as TrackableItem)).toEqual({
+  it("maps a JamTrack (has pdfs) to jamTrackId", () => {
+    expect(playedRefForItem({ id: "j1", pdfs: [] } as unknown as TrackableItem)).toEqual({
       trackId: null, jamTrackId: "j1", bookVideoId: null, videoId: null,
     });
   });

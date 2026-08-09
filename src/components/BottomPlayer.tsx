@@ -28,7 +28,7 @@ export interface MarkerBarState {
   setEditingMarkerName: (value: string) => void;
   currentTime: number;
   jumpToMarker: (timestamp: number) => void;
-  addMarker: (name: string, timestamp: number, pdfPage?: number | null) => void;
+  addMarker: (name: string, timestamp: number) => void;
   formatTime: (seconds: number) => string;
   // Count-in state
   isCountingIn: boolean;
@@ -41,7 +41,7 @@ export interface MarkerBarState {
 
 interface BottomPlayerProps {
   track: Track | JamTrack | null;
-  onMarkerAdd: (trackId: string, name: string, timestamp: number, pdfPage?: number | null) => void;
+  onMarkerAdd: (trackId: string, name: string, timestamp: number) => void;
   onMarkerUpdate: (markerId: string, timestamp: number) => void;
   onMarkerRename: (markerId: string, name: string) => void;
   onMarkerDelete: (markerId: string) => void;
@@ -55,6 +55,12 @@ interface BottomPlayerProps {
   trackTabsCount?: number;
   onLoopSave: (trackId: string, name: string, startTime: number, endTime: number) => void;
   onLoopDelete: (loopId: string) => void;
+  // Page-flip props
+  currentPdfPage?: number;
+  onPageFlipAdd?: (timestamp: number, page: number) => void;
+  pageFlips?: { id: string; timestamp: number; pdfPage: number }[];
+  onPageFlipEdit?: (id: string) => void;
+  onPageFlipDelete?: (id: string) => void;
 }
 
 function BottomPlayer({
@@ -73,6 +79,11 @@ function BottomPlayer({
   trackTabsCount = 0,
   onLoopSave,
   onLoopDelete,
+  currentPdfPage,
+  onPageFlipAdd,
+  pageFlips = [],
+  onPageFlipEdit,
+  onPageFlipDelete,
 }: BottomPlayerProps) {
   const waveformRef = useRef<HTMLDivElement>(null);
   const waveformContainerRef = useRef<HTMLDivElement>(null);
@@ -80,6 +91,7 @@ function BottomPlayer({
   const wavesurferRef = useRef<WaveSurfer | null>(null);
   const regionsRef = useRef<RegionsPlugin | null>(null);
   const prevMarkerIdsRef = useRef<Set<string>>(new Set());
+  const prevPageFlipIdsRef = useRef<Set<string>>(new Set());
   const isInitialLoadRef = useRef(true);
   const zoomRef = useRef(1);
   const currentTimeRef = useRef(0);
@@ -120,6 +132,16 @@ function BottomPlayer({
   const [isRepeatEnabled, setIsRepeatEnabled] = useState(false);
   const isRepeatEnabledRef = useRef(false);
   const restartPlaybackRef = useRef<() => void>(() => {});
+
+  // Page-flip refs (kept in sync so keyboard handler is never stale)
+  const currentPdfPageRef = useRef<number | undefined>(undefined);
+  currentPdfPageRef.current = currentPdfPage;
+  const pageFlipsRef = useRef<{ id: string; timestamp: number; pdfPage: number }[]>([]);
+  pageFlipsRef.current = pageFlips;
+  const onPageFlipAddRef = useRef<((timestamp: number, page: number) => void) | undefined>(undefined);
+  onPageFlipAddRef.current = onPageFlipAdd;
+  const onPageFlipEditRef = useRef<((id: string) => void) | undefined>(undefined);
+  onPageFlipEditRef.current = onPageFlipEdit;
 
   // A/B loop state
   const [loopA, setLoopA] = useState<number | null>(null);
@@ -382,11 +404,42 @@ function BottomPlayer({
         }
       });
 
+      // Page-flip regions (purple, non-draggable)
+      const currentPageFlips = pageFlipsRef.current;
+      currentPageFlips.forEach((flip) => {
+        const region = regions.addRegion({
+          id: `__pf__${flip.id}`,
+          start: flip.timestamp,
+          end: flip.timestamp,
+          color: "rgba(168, 85, 247, 0.4)",
+          resize: false,
+          drag: false,
+        });
+        if (region.element) {
+          region.element.classList.add("page-flip-region");
+        }
+      });
+
       prevMarkerIdsRef.current = new Set(track.markers.map((m) => m.id));
+      prevPageFlipIdsRef.current = new Set(currentPageFlips.map((f) => f.id));
       isInitialLoadRef.current = false;
 
       regions.on("region-updated", (region) => {
-        onMarkerUpdate(region.id, region.start);
+        // Only fire marker update for actual marker regions (not page-flips or A/B loop)
+        if (!region.id.startsWith("__")) {
+          onMarkerUpdate(region.id, region.start);
+        }
+      });
+
+      regions.on("region-clicked", (region, e) => {
+        if (region.id.startsWith("__pf__")) {
+          e.stopPropagation();
+          const flipId = region.id.slice("__pf__".length);
+          if (onPageFlipEditRef.current) {
+            onPageFlipEditRef.current(flipId);
+          }
+        }
+        // Marker click: let WaveSurfer seek normally (no special handling needed)
       });
     });
 
@@ -797,9 +850,61 @@ function BottomPlayer({
         region.element.classList.add("marker-region");
       }
     });
+    // Re-add page-flip regions (clearRegions removed them)
+    pageFlipsRef.current.forEach((flip) => {
+      const region = regionsRef.current?.addRegion({
+        id: `__pf__${flip.id}`,
+        start: flip.timestamp,
+        end: flip.timestamp,
+        color: "rgba(168, 85, 247, 0.4)",
+        resize: false,
+        drag: false,
+      });
+      if (region?.element) {
+        region.element.classList.add("page-flip-region");
+      }
+    });
     // Re-add A/B loop region (clearRegions removed it)
     renderABRegion();
   }, [track?.markers, isLoading, renderABRegion]);
+
+  // Update page-flip regions on waveform when pageFlips prop changes
+  useEffect(() => {
+    if (!regionsRef.current || !track || isLoading || isInitialLoadRef.current) return;
+
+    const currentIds = new Set(pageFlips.map((f) => f.id));
+    const prevIds = prevPageFlipIdsRef.current;
+
+    const changed =
+      currentIds.size !== prevIds.size ||
+      [...currentIds].some((id) => !prevIds.has(id)) ||
+      [...prevIds].some((id) => !currentIds.has(id));
+
+    if (!changed) return;
+
+    prevPageFlipIdsRef.current = currentIds;
+
+    // Remove existing page-flip regions
+    regionsRef.current.getRegions().forEach((region) => {
+      if (region.id.startsWith("__pf__")) {
+        region.remove();
+      }
+    });
+    // Add updated page-flip regions
+    pageFlips.forEach((flip) => {
+      const region = regionsRef.current?.addRegion({
+        id: `__pf__${flip.id}`,
+        start: flip.timestamp,
+        end: flip.timestamp,
+        color: "rgba(168, 85, 247, 0.4)",
+        resize: false,
+        drag: false,
+      });
+      if (region?.element) {
+        region.element.classList.add("page-flip-region");
+      }
+    });
+  }, [pageFlips, track, isLoading]);
 
   const togglePlay = async () => {
     if (!wavesurferRef.current || !duration) return;
@@ -1011,9 +1116,9 @@ function BottomPlayer({
     }
   }, []);
 
-  const addMarker = useCallback((name: string, timestamp: number, pdfPage?: number | null) => {
+  const addMarker = useCallback((name: string, timestamp: number) => {
     if (!track || !name.trim()) return;
-    onMarkerAdd(track.id, name.trim(), timestamp, pdfPage);
+    onMarkerAdd(track.id, name.trim(), timestamp);
     setShowMarkerDialog(false);
     // Reveal the markers bar when a marker is created (e.g. the first one on a
     // track that had none and so had the bar hidden).
@@ -1057,6 +1162,11 @@ function BottomPlayer({
       if (e.code === "KeyM" && track) {
         e.preventDefault();
         handleOpenMarkerDialog();
+      }
+
+      if (e.code === "KeyP" && track && onPageFlipAddRef.current) {
+        e.preventDefault();
+        onPageFlipAddRef.current(wavesurferRef.current?.getCurrentTime() ?? 0, currentPdfPageRef.current ?? 1);
       }
 
       if (e.code === "ArrowLeft") {
@@ -1543,6 +1653,36 @@ function BottomPlayer({
                 })}
               </div>
             )}
+            {/* Page-flip labels - positioned at the BOTTOM of the waveform (purple,
+                subtle so they don't compete with the markers at the top) */}
+            {pageFlips.length > 0 && duration > 0 && !isLoading && containerWidth > 0 && (
+              <div className="absolute bottom-0 left-0 right-0 h-5 overflow-visible pointer-events-none z-10">
+                {pageFlips.map((flip) => {
+                  const waveformWidth = Math.max(containerWidth, duration * zoom);
+                  const pixelsPerSecond = waveformWidth / duration;
+                  const flipX = flip.timestamp * pixelsPerSecond - scrollLeft;
+                  if (flipX < -50 || flipX > containerWidth + 50) return null;
+
+                  return (
+                    <div
+                      key={flip.id}
+                      className="absolute bottom-0 flex flex-col items-center pointer-events-auto"
+                      style={{ left: flipX, transform: "translateX(-50%)" }}
+                    >
+                      {/* tick points up into the waveform */}
+                      <div className="w-0 h-0 mx-auto border-l-4 border-r-4 border-b-4 border-transparent border-b-purple-500/80" />
+                      <button
+                        onClick={() => onPageFlipEdit?.(flip.id)}
+                        className="inline-block text-[9px] font-semibold px-1.5 py-0.5 rounded whitespace-nowrap shadow-sm cursor-pointer transition-colors bg-purple-500/80 hover:bg-purple-400 text-white"
+                        title={`Page flip → p${flip.pdfPage} at ${formatTime(flip.timestamp)} — click to edit / delete`}
+                      >
+                        →p{flip.pdfPage}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
             <div
               ref={waveformContainerRef}
               className="overflow-hidden rounded bg-gray-900"
@@ -1676,7 +1816,7 @@ function BottomPlayer({
           isOpen={showMarkerDialog}
           timestamp={pendingMarkerTimestamp}
           formatTime={formatTime}
-          onSave={(name, pdfPage) => addMarker(name, pendingMarkerTimestamp, pdfPage)}
+          onSave={(name) => addMarker(name, pendingMarkerTimestamp)}
           onCancel={handleCancelMarkerDialog}
         />
         <MarkerNameDialog
@@ -1685,7 +1825,6 @@ function BottomPlayer({
           formatTime={formatTime}
           onSave={(name) => handleSaveLoop(name)}
           onCancel={() => setShowLoopDialog(false)}
-          hasPdf={false}
           title="Save loop"
           placeholder="Enter loop name..."
         />

@@ -21,6 +21,7 @@ const shortcuts = [
     group: "Markers",
     items: [
       { keys: ["M"], description: "Add marker at current time" },
+      { keys: ["P"], description: "Add page-flip at current time" },
       { keys: ["1"], description: "Jump to marker 1" },
       { keys: ["2"], description: "Jump to marker 2" },
       { keys: ["..."], description: "" },

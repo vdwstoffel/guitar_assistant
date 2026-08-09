@@ -64,7 +64,6 @@ interface ScannedJamTrack {
   duration: number;
   filePath: string;
   lufs: number | null;
-  gpFilePath: string | null;
 }
 
 interface ScannedVideo {
@@ -183,16 +182,12 @@ async function scanJamTracksFolder(): Promise<ScannedJamTrack[]> {
     const folderEntries = await fs.readdir(trackFolder, { withFileTypes: true });
 
     let audioFile: string | null = null;
-    let gpFile: string | null = null;
-    const gpExtensions = [".gp", ".gp3", ".gp4", ".gp5", ".gpx", ".gp7"];
 
     for (const fileEntry of folderEntries) {
       if (!fileEntry.isFile()) continue;
       const ext = path.extname(fileEntry.name).toLowerCase();
       if (SUPPORTED_EXTENSIONS.includes(ext) && !audioFile) {
         audioFile = path.join(trackFolder, fileEntry.name);
-      } else if (gpExtensions.includes(ext) && !gpFile) {
-        gpFile = path.join(trackFolder, fileEntry.name);
       }
     }
 
@@ -208,7 +203,6 @@ async function scanJamTracksFolder(): Promise<ScannedJamTrack[]> {
         duration,
         filePath: path.relative(musicPath, audioFile),
         lufs: null,
-        gpFilePath: gpFile ? path.relative(musicPath, gpFile) : null,
       });
     } catch (err) {
       console.error(`Error parsing jam track ${audioFile}:`, err);
@@ -782,17 +776,45 @@ export async function POST() {
           update: {
             title: jamTrack.title,
             duration: jamTrack.duration,
-            gpFilePath: jamTrack.gpFilePath,
           },
           create: {
             title: jamTrack.title,
             duration: jamTrack.duration,
             filePath: jamTrack.filePath,
-            gpFilePath: jamTrack.gpFilePath,
           },
         });
       }
     });
+
+    // Discover PDF files sitting in each jam-track folder and upsert JamTrackPdf rows
+    for (const scannedJt of jamTracks) {
+      const dbJamTrack = await prisma.jamTrack.findUnique({
+        where: { filePath: scannedJt.filePath },
+        select: { id: true },
+      });
+      if (!dbJamTrack) continue;
+
+      const folderAbs = path.dirname(path.join(musicPath, scannedJt.filePath));
+      const entries = await fs.readdir(folderAbs).catch(() => [] as string[]);
+      const pdfFiles = entries.filter((f) => f.toLowerCase().endsWith(".pdf"));
+
+      for (let i = 0; i < pdfFiles.length; i++) {
+        const relPath = path.relative(musicPath, path.join(folderAbs, pdfFiles[i]));
+        const existing = await prisma.jamTrackPdf.findFirst({
+          where: { jamTrackId: dbJamTrack.id, filePath: relPath },
+        });
+        if (!existing) {
+          await prisma.jamTrackPdf.create({
+            data: {
+              jamTrackId: dbJamTrack.id,
+              name: pdfFiles[i].replace(/\.pdf$/i, ""),
+              filePath: relPath,
+              sortOrder: await prisma.jamTrackPdf.count({ where: { jamTrackId: dbJamTrack.id } }),
+            },
+          });
+        }
+      }
+    }
 
     // Clean up orphaned jam tracks
     const validJamPaths = new Set(jamTracks.map((t) => t.filePath));

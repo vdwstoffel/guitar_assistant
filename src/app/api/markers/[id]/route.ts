@@ -8,14 +8,13 @@ export async function PUT(
   try {
     const { id } = await params;
     const body = await request.json();
-    const { name, timestamp, pdfPage } = body;
+    const { name, timestamp } = body;
 
     const marker = await prisma.marker.update({
       where: { id },
       data: {
         ...(name !== undefined && { name }),
         ...(timestamp !== undefined && { timestamp }),
-        ...(pdfPage !== undefined && { pdfPage }),
       },
     });
 

@@ -13,11 +13,11 @@ interface MarkersBarProps {
   editingMarkerName: string;
   currentTime: number;
   onLeadInChange: (value: number) => void;
-  onAddMarker: (name: string, timestamp: number, pdfPage?: number | null) => void;
+  onAddMarker: (name: string, timestamp: number) => void;
   onJumpToMarker: (timestamp: number) => void;
   onStartEdit: (markerId: string, name: string) => void;
   onEditNameChange: (value: string) => void;
-  onSaveEdit: (markerId: string, name: string, pdfPage?: number | null) => void;
+  onSaveEdit: (markerId: string, name: string) => void;
   onCancelEdit: () => void;
   onDelete: (markerId: string) => void;
   onClearAll: () => void;
@@ -29,9 +29,6 @@ interface MarkersBarProps {
   trackTempo?: number | null;
   trackTimeSignature?: string;
   onTempoChange?: (tempo: number | null, timeSignature: string) => void;
-  // PDF page props
-  currentPdfPage?: number | null;
-  hasPdf?: boolean;
   // Layout mode
   layout?: "horizontal" | "vertical";
   // Early page flip
@@ -57,8 +54,6 @@ const MarkersBar = memo(function MarkersBar({
   trackTempo = null,
   trackTimeSignature = "4/4",
   onTempoChange,
-  currentPdfPage,
-  hasPdf = false,
   layout = "horizontal",
   pageFlipAnticipation = false,
   onPageFlipAnticipationChange,
@@ -116,13 +111,13 @@ const MarkersBar = memo(function MarkersBar({
     setShowDialog(true);
   }, []);
 
-  const handleDialogSave = useCallback((name: string, pdfPage: number | null) => {
+  const handleDialogSave = useCallback((name: string) => {
     if (editingMarker) {
       // Edit mode
-      onSaveEdit(editingMarker.id, name, pdfPage);
+      onSaveEdit(editingMarker.id, name);
     } else {
       // Add mode
-      onAddMarker(name, pendingMarkerTimestamp, pdfPage);
+      onAddMarker(name, pendingMarkerTimestamp);
     }
     setShowDialog(false);
     setEditingMarker(null);
@@ -267,7 +262,7 @@ const MarkersBar = memo(function MarkersBar({
             </button>
           )}
 
-          {onPageFlipAnticipationChange && hasPdf && (
+          {onPageFlipAnticipationChange && (
             <button
               onClick={() => onPageFlipAnticipationChange(!pageFlipAnticipation)}
               className={`flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors ${
@@ -295,7 +290,6 @@ const MarkersBar = memo(function MarkersBar({
           {sortedMarkers.map((marker, index) => {
               const isPassed = marker.timestamp <= currentTime;
               const shortcutKey = index < 9 ? String(index + 1) : index === 9 ? '0' : null;
-              const markerPdfPage = 'pdfPage' in marker ? (marker as Marker).pdfPage : null;
               return (
               <div
                 key={marker.id}
@@ -322,31 +316,12 @@ const MarkersBar = memo(function MarkersBar({
                 <span className="truncate">
                   {marker.name}
                 </span>
-                {markerPdfPage != null && (
-                  <span className="text-[10px] text-blue-400 font-mono" title={`PDF page ${markerPdfPage}`}>
-                    p.{markerPdfPage}
-                  </span>
-                )}
-                {hasPdf && currentPdfPage && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onSaveEdit(marker.id, marker.name, currentPdfPage);
-                    }}
-                    className="p-0.5 text-white hover:text-blue-300 opacity-0 group-hover:opacity-100 transition-opacity ml-auto"
-                    title={`Assign current PDF page (${currentPdfPage})`}
-                  >
-                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
-                  </button>
-                )}
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
                     handleOpenEditDialog(marker);
                   }}
-                  className={`p-0.5 text-white hover:text-white opacity-0 group-hover:opacity-100 transition-opacity${!(hasPdf && currentPdfPage) ? " ml-auto" : ""}`}
+                  className="p-0.5 text-white hover:text-white opacity-0 group-hover:opacity-100 transition-opacity ml-auto"
                   title="Edit marker"
                 >
                   <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -374,10 +349,7 @@ const MarkersBar = memo(function MarkersBar({
         formatTime={formatTime}
         onSave={handleDialogSave}
         onCancel={handleDialogCancel}
-        currentPdfPage={currentPdfPage}
-        hasPdf={hasPdf}
         initialName={editingMarker?.name}
-        initialPdfPage={editingMarker && 'pdfPage' in editingMarker ? (editingMarker as Marker).pdfPage : undefined}
       />
     </div>
   );

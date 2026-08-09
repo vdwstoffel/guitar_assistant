@@ -172,7 +172,6 @@ export default function VideoMarkersBar({
         formatTime={formatTime}
         onSave={handleDialogSave}
         onCancel={handleDialogCancel}
-        hasPdf={false}
         initialName={editingMarker?.name}
       />
     </div>

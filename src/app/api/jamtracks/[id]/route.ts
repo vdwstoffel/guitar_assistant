@@ -26,7 +26,11 @@ export async function GET(
     const { id } = await params;
     const jamTrack = await prisma.jamTrack.findUnique({
       where: { id },
-      include: { markers: { orderBy: { timestamp: "asc" } } },
+      include: {
+        markers: { orderBy: { timestamp: "asc" } },
+        loops: true,
+        pdfs: { orderBy: { sortOrder: "asc" }, include: { pageFlips: true } },
+      },
     });
     if (!jamTrack) {
       return NextResponse.json({ error: "Jam track not found" }, { status: 404 });
@@ -112,7 +116,7 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
-    const jamTrack = await prisma.jamTrack.findUnique({ where: { id } });
+    const jamTrack = await prisma.jamTrack.findUnique({ where: { id }, include: { pdfs: true } });
     if (!jamTrack) {
       return NextResponse.json({ error: "Jam track not found" }, { status: 404 });
     }
@@ -125,12 +129,11 @@ export async function DELETE(
       console.warn(`Could not delete audio file: ${audioPath}`);
     }
 
-    if (jamTrack.gpFilePath) {
-      const gpAbsPath = path.join(musicPath, jamTrack.gpFilePath);
+    for (const pdf of jamTrack.pdfs) {
       try {
-        await fs.unlink(gpAbsPath);
+        await fs.unlink(path.join(musicPath, pdf.filePath));
       } catch {
-        console.warn(`Could not delete GP file: ${gpAbsPath}`);
+        console.warn(`Could not delete PDF file: ${pdf.filePath}`);
       }
     }
 

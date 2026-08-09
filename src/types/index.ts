@@ -11,7 +11,6 @@ export interface Marker {
   id: string;
   name: string;
   timestamp: number;
-  pdfPage: number | null;
   trackId: string;
 }
 
@@ -20,6 +19,13 @@ export interface SavedLoop {
   name: string;
   startTime: number;
   endTime: number;
+  trackId: string;
+}
+
+export interface TrackPageFlip {
+  id: string;
+  timestamp: number;
+  pdfPage: number;
   trackId: string;
 }
 
@@ -36,6 +42,7 @@ export interface Track {
   markers: Marker[];
   loops: SavedLoop[];
   tabs: TrackTab[];
+  pageFlips: TrackPageFlip[];
   completed: boolean;
   inProgress: boolean;
   favorite: boolean;
@@ -139,6 +146,23 @@ export interface JamTrackMarker {
   jamTrackId: string;
 }
 
+export interface JamTrackPageFlip {
+  id: string;
+  timestamp: number;
+  pdfPage: number;
+  jamTrackPdfId: string;
+}
+
+export interface JamTrackPdf {
+  id: string;
+  name: string;
+  filePath: string;
+  sortOrder: number;
+  jamTrackId: string;
+  pageFlips: JamTrackPageFlip[];
+  createdAt: string;
+}
+
 export interface JamTrackLoop {
   id: string;
   name: string;
@@ -160,9 +184,9 @@ export interface JamTrack {
   playbackSpeed: number | null;
   volume: number | null;
   lufs: number | null;
-  gpFilePath: string | null;
   markers: JamTrackMarker[];
   loops: JamTrackLoop[];
+  pdfs: JamTrackPdf[];
   createdAt: string;
 }
 

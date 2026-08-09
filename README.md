@@ -13,10 +13,11 @@ A web application for managing and practicing guitar exercises, method books, an
 
 ### Jam Tracks
 Standalone play-along tracks (backing tracks, songs) that live outside the book hierarchy:
+- **Master-detail layout** - Persistent track list on the left, tabbed PDF viewer on the right, and a full-width waveform player at the bottom
 - **YouTube import** - Paste a YouTube URL to download and import audio directly as a jam track
-- **Multi-PDF support** - Attach multiple named PDFs per track (e.g., "Rhythm Guitar", "Lead Guitar") displayed in a tabbed viewer
-- **Automatic page-flipping** - Page sync points map audio timestamps to PDF pages for hands-free page turns during playback
-- **Markers** - Timestamp annotations for quick navigation to sections
+- **Multiple named PDFs per track** - Attach as many PDFs as you like (e.g., "Rhythm Guitar", "Lead Guitar"), each with a custom name; switch between them via tabs; upload or rename at any time
+- **Page-flip automations** - Press `P` during playback to record a page-flip event at the current position (defaults to the currently visible PDF page); automations advance the PDF automatically during playback. Shared with Lessons, with an optional anticipation offset so the page turns slightly before the beat
+- **Markers** - Timestamp annotations shown directly on the waveform for quick navigation
 
 ### Audio Player
 - **Waveform visualization** - Powered by WaveSurfer.js
@@ -25,12 +26,12 @@ Standalone play-along tracks (backing tracks, songs) that live outside the book 
 - **A/B loop** - Set loop start/end points to repeat a section continuously, and **save named loops** per track to re-apply later
 - **Per-track volume & LUFS normalization** - Consistent loudness across tracks
 - **Audio output routing** - Route audio to any connected output device
-- **Keyboard shortcuts** - Space (play/pause), `M` (add marker), `A` (cycle A/B loop), `←` (restart), `+`/`-` (volume), `?` (shortcuts help)
+- **Keyboard shortcuts** - Space (play/pause), `M` (add marker), `A` (cycle A/B loop), `P` (add page-flip automation at current position), `←` (restart), `+`/`-` (volume), `?` (shortcuts help)
 
 ### PDF Viewer
 - Sheet music / tablature displayed alongside audio playback
-- Automatic page linking per track
-- Single-PDF mode for books, multi-PDF tabbed mode for jam tracks
+- **Page-flip automations** - Press `P` during playback to record an automation point; the viewer advances to the next page automatically as the audio reaches each point. Works in both Lessons (books/tracks) and Jam Tracks. An optional anticipation offset can flip the page slightly early so it's ready before the beat
+- Single-PDF mode for books/tracks, multi-PDF tabbed mode for jam tracks
 
 ### Practice Tools
 - **Metronome** - Adjustable BPM (20-300), time signature support (4/4, 3/4, 2/4, 6/8), visual beat indicator, volume control
@@ -92,8 +93,8 @@ Note: Some features (PDF conversion, YouTube import) require system dependencies
 #### Jam Tracks
 1. Navigate to "Jam Tracks" in the sidebar
 2. Click "Upload Files" to add local audio, or "YouTube" to import from a URL
-3. Add PDF sheet music via the "Add PDF" button on each track
-4. Set up page sync points for automatic page-flipping during playback
+3. Select a track in the list; use the PDF panel to upload one or more named PDFs (e.g., "Rhythm Guitar", "Lead Guitar") and switch between them via tabs
+4. Press `P` during playback to record page-flip automations — the viewer will flip pages automatically on future plays
 
 ## Docker Deployment
 
