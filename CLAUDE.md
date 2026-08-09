@@ -16,11 +16,13 @@ Guitar/Music Assistant - a Next.js 16 web application for managing and practicin
 - Volume mounts for persistent data (database, music files)
 - Port mapping: 3000 (host) → 3000 (container)
 
-Use `docker-compose up` to start the application. The Docker configuration handles all dependencies and environment setup.
+Use `docker compose up` to start the application. The Docker configuration handles all dependencies and environment setup.
+
+**Always use Docker Compose v2 (`docker compose`), never the v1 `docker-compose` binary.** The v1 binary is broken in this environment and stops the Caddy reverse-proxy container as an "orphan" (which takes HTTPS down). If that happens, restart Caddy with `docker start <caddy-container>`.
 
 **This is a production build with no hot reload.** Whenever a change requires the running app to pick it up, restart the container yourself — no need to ask:
 ```bash
-docker-compose restart nextjs-app
+docker compose restart nextjs-app
 ```
 
 ## Common Commands
@@ -31,8 +33,8 @@ npm run build        # Production build
 npm run lint         # ESLint
 npm start            # Production server
 
-# Docker
-docker-compose up    # Run containerized (includes Ghostscript for PDF conversion)
+# Docker (always v2: `docker compose`, not `docker-compose`)
+docker compose up    # Run containerized (includes Ghostscript for PDF conversion)
 ```
 
 ## Architecture

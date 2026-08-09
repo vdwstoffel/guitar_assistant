@@ -20,8 +20,12 @@ Standalone play-along tracks (backing tracks, songs) that live outside the book 
 
 ### Audio Player
 - **Waveform visualization** - Powered by WaveSurfer.js
-- **Playback speed control** - Slow down or speed up for practice
-- **Markers bar** - Visual marker timeline for quick navigation
+- **Playback speed control** - Slow down or speed up for practice (saved per track)
+- **Markers** - Timestamp annotations shown on the waveform and in a markers bar; click a marker to jump to it (with an optional lead-in and beat-based count-in). Any marker can be set as a **stop point** so playback halts there
+- **A/B loop** - Set loop start/end points to repeat a section continuously, and **save named loops** per track to re-apply later
+- **Per-track volume & LUFS normalization** - Consistent loudness across tracks
+- **Audio output routing** - Route audio to any connected output device
+- **Keyboard shortcuts** - Space (play/pause), `M` (add marker), `A` (cycle A/B loop), `←` (restart), `+`/`-` (volume), `?` (shortcuts help)
 
 ### PDF Viewer
 - Sheet music / tablature displayed alongside audio playback
@@ -55,7 +59,7 @@ Standalone play-along tracks (backing tracks, songs) that live outside the book 
 ### Docker (Recommended)
 
 ```bash
-docker-compose up -d
+docker compose up -d
 ```
 
 This starts the full application with all dependencies (Ghostscript for PDF processing, ffmpeg for audio/video, yt-dlp for YouTube imports).
@@ -94,8 +98,8 @@ Note: Some features (PDF conversion, YouTube import) require system dependencies
 ## Docker Deployment
 
 ```bash
-# Using docker-compose
-docker-compose up -d
+# Using Docker Compose (v2)
+docker compose up -d
 
 # Or build manually
 docker build -t guitar-assistant .
