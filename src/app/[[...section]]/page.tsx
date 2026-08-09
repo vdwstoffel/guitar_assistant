@@ -1836,9 +1836,15 @@ export default function Home() {
     }
   }, [currentTrack?.id, currentTrack?.pdfPage]);
 
-  // Reset lastAutoFlipPage when jamtrack or active PDF changes
+  // Reset page-flip tracking when the jam track or active PDF changes, and
+  // start a freshly-selected jam track / PDF at page 1 so auto page-flips have
+  // a clean baseline to advance from (otherwise a stale pdfPage can make a
+  // flip to the same page a no-op).
   useEffect(() => {
     lastAutoFlipPage.current = null;
+    if (currentJamTrackId) {
+      setPdfPage(1);
+    }
   }, [currentJamTrackId, activeJamPdfId]);
 
   // Auto-flip PDF page using resolvePageFlip — works for both Lessons and Jam Tracks
@@ -1848,8 +1854,11 @@ export default function Home() {
         ? (currentJamTrack?.pdfs?.find((p) => p.id === activeJamPdfId)?.pageFlips ?? [])
         : (currentTrack?.pageFlips ?? []);
     if (flips.length === 0) return;
+    // Baseline page before the first flip: jam-track PDFs start at page 1
+    // (so restarting the song snaps back to page 1 instead of the last page);
+    // lesson tracks fall back to their designated starting pdfPage.
     const fallback =
-      activeSection === "jamtracks" ? null : (currentTrack?.pdfPage ?? null);
+      activeSection === "jamtracks" ? 1 : (currentTrack?.pdfPage ?? null);
     const target = resolvePageFlip(flips, currentAudioTime, pageFlipAnticipation ? 1 : 0, fallback);
     if (target != null && target !== lastAutoFlipPage.current) {
       lastAutoFlipPage.current = target;
