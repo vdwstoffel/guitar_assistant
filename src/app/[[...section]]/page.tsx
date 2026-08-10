@@ -69,6 +69,13 @@ export default function Home() {
     jamTracks.find(jt => jt.id === currentJamTrackId) || null,
     [jamTracks, currentJamTrackId]
   );
+
+  const nowPlaying = useMemo<{ id: string; name: string } | null>(() => {
+    if (currentTrack) return { id: currentTrack.id, name: currentTrack.title };
+    if (currentJamTrack) return { id: currentJamTrack.id, name: currentJamTrack.title };
+    return null;
+  }, [currentTrack, currentJamTrack]);
+
   const [isScanning, setIsScanning] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isUploadingJamTracks, setIsUploadingJamTracks] = useState(false);
@@ -1890,6 +1897,7 @@ export default function Home() {
         onSearchBookSelect={handleSearchBookSelect}
         onSearchJamTrackSelect={handleSearchJamTrackSelect}
         onGoToTrack={handleGoToTrackFromMetrics}
+        nowPlaying={nowPlaying}
       />
 
       {/* Section Content */}

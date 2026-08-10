@@ -260,10 +260,21 @@ export default function RecordingsView() {
                           {rec.title}
                         </button>
                       )}
-                      <div className="text-xs text-gray-400 flex gap-2 mt-0.5">
+                      <div className="text-xs text-gray-400 flex flex-wrap items-center gap-2 mt-0.5">
                         <span>{formatDate(rec.createdAt)}</span>
                         <span>•</span>
                         <span>{formatDuration(rec.duration)}</span>
+                        {rec.trackName && (
+                          <>
+                            <span>•</span>
+                            <span className="truncate max-w-[16rem]">{rec.trackName}</span>
+                          </>
+                        )}
+                        {rec.tempo != null && (
+                          <span className="px-1.5 py-0.5 rounded bg-gray-700 text-gray-200 tabular-nums">
+                            {rec.tempo}%
+                          </span>
+                        )}
                       </div>
                     </div>
 

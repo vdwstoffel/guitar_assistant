@@ -32,9 +32,10 @@ interface TopNavProps {
   onSearchBookSelect: (result: SearchResultBook) => void;
   onSearchJamTrackSelect: (result: SearchResultJamTrack) => void;
   onGoToTrack: (trackId: string | null, jamTrackId: string | null, authorId: string | null, bookId: string | null, bookVideoId?: string | null, videoId?: string | null) => void;
+  nowPlaying: { id: string; name: string } | null;
 }
 
-const TopNav = memo(function TopNav({ activeSection, onSectionChange, onSearchTrackSelect, onSearchBookSelect, onSearchJamTrackSelect, onGoToTrack }: TopNavProps) {
+const TopNav = memo(function TopNav({ activeSection, onSectionChange, onSearchTrackSelect, onSearchBookSelect, onSearchJamTrackSelect, onGoToTrack, nowPlaying }: TopNavProps) {
   const [showMetronome, setShowMetronome] = useState(false);
   const [showTuner, setShowTuner] = useState(false);
   const [showRecorder, setShowRecorder] = useState(false);
@@ -48,6 +49,30 @@ const TopNav = memo(function TopNav({ activeSection, onSectionChange, onSearchTr
   const [showTheory, setShowTheory] = useState(false);
   const [showMobileSearch, setShowMobileSearch] = useState(false);
   const recorder = useAudioRecorder();
+  const [currentTempo, setCurrentTempo] = useState(100);
+  const nowPlayingRef = useRef(nowPlaying);
+  nowPlayingRef.current = nowPlaying;
+  const currentTempoRef = useRef(100);
+  currentTempoRef.current = currentTempo;
+
+  // Reset tempo to default whenever the playing track changes; the load-time
+  // playbackSpeedChange event (see BottomPlayer) will correct it immediately.
+  useEffect(() => {
+    setCurrentTempo(100);
+  }, [nowPlaying?.id]);
+
+  // Learn the live playback speed for the currently-playing track.
+  useEffect(() => {
+    const onSpeed = (event: Event) => {
+      const detail = (event as CustomEvent<{ trackId: string; speed: number }>).detail;
+      if (nowPlayingRef.current && detail.trackId === nowPlayingRef.current.id) {
+        setCurrentTempo(detail.speed);
+      }
+    };
+    window.addEventListener('playbackSpeedChange', onSpeed);
+    return () => window.removeEventListener('playbackSpeedChange', onSpeed);
+  }, []);
+
   const [isPlaying, setIsPlaying] = useState(false);
   const [bpm, setBpm] = useState(120);
   const [timeSignature, setTimeSignature] = useState<TimeSignature>('4/4');
@@ -209,6 +234,12 @@ const TopNav = memo(function TopNav({ activeSection, onSectionChange, onSearchTr
         const ext = result.mimeType.includes('mp4') ? 'mp4' : result.mimeType.includes('ogg') ? 'ogg' : 'webm';
         fd.append('file', new File([result.blob], `recording.${ext}`, { type: result.mimeType }));
         fd.append('duration', result.duration.toString());
+        const np = nowPlayingRef.current;
+        if (np) {
+          fd.append('trackName', np.name);
+          fd.append('trackId', np.id);
+          fd.append('tempo', Math.round(currentTempoRef.current).toString());
+        }
         const res = await fetch('/api/recordings/upload', { method: 'POST', body: fd });
         if (!res.ok) throw new Error('Upload failed');
       } catch (err) {

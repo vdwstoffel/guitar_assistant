@@ -357,6 +357,12 @@ function BottomPlayer({
       setPlaybackSpeed(speed);
       ws.setPlaybackRate(speed / 100, true);
 
+      // Announce the loaded speed so listeners (e.g. the recorder) know it
+      // without waiting for a manual speed change.
+      window.dispatchEvent(new CustomEvent('playbackSpeedChange', {
+        detail: { trackId: track.id, speed }
+      }));
+
       // Apply per-track volume (default 50%)
       const vol = track.volume ?? 50;
       setVolume(vol);

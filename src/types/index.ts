@@ -217,6 +217,9 @@ export interface Recording {
   duration: number;
   mimeType: string;
   notes: string | null;
+  trackName: string | null;
+  trackId: string | null;
+  tempo: number | null;
   createdAt: string;
 }
 

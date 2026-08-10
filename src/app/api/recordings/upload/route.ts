@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import * as fs from "fs/promises";
 import * as path from "path";
+import { parseTempo } from "@/lib/recordings/tempo";
 
 const MUSIC_DIR = process.env.MUSIC_DIR || "./music";
 const RECORDINGS_FOLDER = "Recordings";
@@ -39,6 +40,11 @@ export async function POST(request: NextRequest) {
     const file = formData.get("file") as File | null;
     const titleRaw = formData.get("title");
     const durationRaw = formData.get("duration");
+    const trackNameRaw = formData.get("trackName");
+    const trackIdRaw = formData.get("trackId");
+    const tempo = parseTempo(formData.get("tempo"));
+    const trackName = trackNameRaw ? sanitizeName(trackNameRaw.toString()) || null : null;
+    const trackId = trackIdRaw ? trackIdRaw.toString() : null;
 
     if (!file) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 });
@@ -49,7 +55,9 @@ export async function POST(request: NextRequest) {
     const ext = extFromMime(mimeType);
     const slug = timestampSlug();
     const fileName = `${slug}${ext}`;
-    const title = titleRaw ? sanitizeName(titleRaw.toString()) || `Recording ${slug}` : `Recording ${slug}`;
+    const title = titleRaw
+      ? sanitizeName(titleRaw.toString()) || `Recording ${slug}`
+      : trackName || `Recording ${slug}`;
 
     const musicPath = path.resolve(MUSIC_DIR);
     const recordingsPath = path.join(musicPath, RECORDINGS_FOLDER);
@@ -67,6 +75,9 @@ export async function POST(request: NextRequest) {
         filePath: relativePath,
         duration,
         mimeType,
+        trackName,
+        trackId,
+        tempo,
       },
     });
 

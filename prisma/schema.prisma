@@ -270,6 +270,9 @@ model Recording {
   duration  Float
   mimeType  String
   notes     String?
+  trackName String?
+  trackId   String?
+  tempo     Int?
   createdAt DateTime @default(now())
 
   @@index([createdAt])
