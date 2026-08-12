@@ -2199,6 +2199,8 @@ export default function Home() {
                 <BottomPlayer
                   track={currentJamTrack}
                   compact={true}
+                  externalMarkersBar={true}
+                  onMarkerBarStateChange={setMarkerBarState}
                   onMarkerAdd={stableOnMarkerAdd}
                   onMarkerUpdate={stableOnMarkerUpdate}
                   onMarkerRename={stableOnMarkerRename}
@@ -2218,6 +2220,42 @@ export default function Home() {
                     }
                   }}
                   onPageFlipDelete={handlePageFlipDelete}
+                />
+              </div>
+            )}
+            {currentJamTrack && markerBarState && markerBarState.showMarkers && (
+              <div className="shrink-0 border-t border-gray-700">
+                <MarkersBar
+                  markers={currentJamTrack.markers}
+                  visible={markerBarState.showMarkers}
+                  leadIn={markerBarState.leadIn}
+                  editingMarkerId={markerBarState.editingMarkerId}
+                  editingMarkerName={markerBarState.editingMarkerName}
+                  currentTime={markerBarState.currentTime}
+                  onLeadInChange={markerBarState.setLeadIn}
+                  onAddMarker={markerBarState.addMarker}
+                  onJumpToMarker={markerBarState.jumpToMarker}
+                  onStartEdit={(id, name) => {
+                    markerBarState.setEditingMarkerId(id);
+                    markerBarState.setEditingMarkerName(name);
+                  }}
+                  onEditNameChange={markerBarState.setEditingMarkerName}
+                  onSaveEdit={(markerId, name) => {
+                    handleMarkerRename(markerId, name);
+                    markerBarState.setEditingMarkerId(null);
+                  }}
+                  onCancelEdit={() => markerBarState.setEditingMarkerId(null)}
+                  onDelete={(markerId) => handleMarkerDelete(markerId)}
+                  onClearAll={() => handleMarkersClear(currentJamTrack.id)}
+                  formatTime={markerBarState.formatTime}
+                  isCountingIn={markerBarState.isCountingIn}
+                  currentCountInBeat={markerBarState.currentCountInBeat}
+                  totalCountInBeats={markerBarState.totalCountInBeats}
+                  trackTempo={markerBarState.trackTempo}
+                  trackTimeSignature={markerBarState.trackTimeSignature}
+                  onTempoChange={handleTempoChange}
+                  pageFlipAnticipation={pageFlipAnticipation}
+                  onPageFlipAnticipationChange={handlePageFlipAnticipationChange}
                 />
               </div>
             )}
