@@ -9,6 +9,7 @@ A web application for managing and practicing guitar exercises, method books, an
 - **Automatic metadata scanning** - Audio file metadata is parsed to populate titles, durations, and organization
 - **File upload** - Upload audio files, PDFs, and videos through the application UI
 - **Progress tracking** - Mark tracks and videos as completed; filter books by "In Progress" status
+- **Reset book progress** - "Edit Book Info" → "Reset Progress" returns every track and video in a book to the default state (clears completed / in-progress). Last-played dates and favourites are preserved
 - **Book covers** - Album art extracted from audio metadata
 
 ### Jam Tracks

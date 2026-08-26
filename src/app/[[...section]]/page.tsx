@@ -1145,6 +1145,25 @@ export default function Home() {
     await fetchLibrary();
   };
 
+  const handleBookResetProgress = async (bookId: string) => {
+    const response = await fetch(`/api/books/${bookId}/reset-progress`, {
+      method: "POST",
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to reset book progress");
+    }
+
+    await fetchLibrary();
+    // Refresh book detail so the track/video rows drop their status badges
+    if (selectedBookId === bookId) {
+      const detailRes = await fetch(`/api/books/${bookId}/detail`);
+      if (detailRes.ok) {
+        setSelectedBookDetail(await detailRes.json());
+      }
+    }
+  };
+
   const handleCoverUpload = async (bookId: string, file: File) => {
     const formData = new FormData();
     formData.append("cover", file);
@@ -1937,6 +1956,7 @@ export default function Home() {
                     onCoverUploadFromUrl={handleCoverUploadFromUrl}
                     onCoverDelete={handleCoverDelete}
                     onBookDelete={handleBookDelete}
+                    onBookResetProgress={handleBookResetProgress}
                     onTrackUpdate={handleMetadataUpdate}
                     onTrackComplete={handleTrackComplete}
                     onTrackInProgress={handleTrackInProgress}

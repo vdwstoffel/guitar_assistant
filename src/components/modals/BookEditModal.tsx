@@ -13,14 +13,17 @@ export interface BookEditModalProps {
   onCoverUploadFromUrl?: (bookId: string, url: string) => Promise<void>;
   onCoverDelete?: (bookId: string) => Promise<void>;
   onDelete?: (bookId: string) => Promise<void>;
+  onResetProgress?: (bookId: string) => Promise<void>;
 }
 
-export default function BookEditModal({ book, authorName, onClose, onSave, onCoverUpload, onCoverUploadFromUrl, onCoverDelete, onDelete }: BookEditModalProps) {
+export default function BookEditModal({ book, authorName, onClose, onSave, onCoverUpload, onCoverUploadFromUrl, onCoverDelete, onDelete, onResetProgress }: BookEditModalProps) {
   const [editBookName, setEditBookName] = useState(book.name);
   const [editAuthorName, setEditAuthorName] = useState(authorName);
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [isUploadingCover, setIsUploadingCover] = useState(false);
   const [coverPreview, setCoverPreview] = useState<string | null>(null);
   const [showUrlInput, setShowUrlInput] = useState(false);
@@ -29,6 +32,10 @@ export default function BookEditModal({ book, authorName, onClose, onSave, onCov
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const currentCoverUrl = coverPreview || getBookCoverUrl(book);
+
+  const videoCount = book.videos?.length ?? 0;
+  const trackLabel = `${book.trackCount} track${book.trackCount !== 1 ? "s" : ""}`;
+  const videoLabel = `${videoCount} video${videoCount !== 1 ? "s" : ""}`;
 
   const handleSave = async () => {
     if (!editBookName.trim() || !editAuthorName.trim()) return;
@@ -73,6 +80,19 @@ export default function BookEditModal({ book, authorName, onClose, onSave, onCov
       console.error("Failed to delete book:", error);
     } finally {
       setIsDeleting(false);
+    }
+  };
+
+  const handleResetConfirm = async () => {
+    if (!onResetProgress) return;
+    setIsResetting(true);
+    try {
+      await onResetProgress(book.id);
+      setShowResetConfirm(false);
+    } catch (error) {
+      console.error("Failed to reset book progress:", error);
+    } finally {
+      setIsResetting(false);
     }
   };
 
@@ -223,6 +243,49 @@ export default function BookEditModal({ book, authorName, onClose, onSave, onCov
             />
           </div>
         </div>
+        {/* Reset Progress */}
+        {onResetProgress && (
+          <div className="mt-6 pt-4 border-t border-gray-700">
+            <h4 className="text-sm font-medium text-gray-300 mb-1">Reset Progress</h4>
+            <p className="text-xs text-gray-500 mb-3">
+              Clears complete / in-progress on all {trackLabel} and {videoLabel} in this book.
+              Last-played dates and favourites are kept.
+            </p>
+            {showResetConfirm ? (
+              <div className="p-3 bg-yellow-900/20 border border-yellow-700/50 rounded-lg">
+                <p className="text-sm text-yellow-200 mb-3">
+                  Reset progress for <span className="font-semibold">{book.name}</span>?
+                  All {trackLabel} and {videoLabel} go back to the default state.
+                </p>
+                <div className="flex gap-2 justify-end">
+                  <button
+                    onClick={() => setShowResetConfirm(false)}
+                    disabled={isResetting}
+                    className="px-3 py-1.5 text-sm text-gray-300 hover:text-white transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleResetConfirm}
+                    disabled={isResetting}
+                    className="px-3 py-1.5 text-sm bg-yellow-600 hover:bg-yellow-700 disabled:bg-yellow-800 disabled:cursor-not-allowed rounded font-medium text-white transition-colors"
+                  >
+                    {isResetting ? "Resetting..." : "Yes, Reset"}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={() => setShowResetConfirm(true)}
+                disabled={isSaving || isDeleting || isResetting}
+                className="px-3 py-1.5 text-sm bg-gray-700 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed rounded text-gray-300 hover:text-white transition-colors"
+              >
+                Reset Progress
+              </button>
+            )}
+          </div>
+        )}
+
         {/* Delete Confirmation */}
         {showDeleteConfirm && onDelete && (
           <div className="mt-6 p-3 bg-red-900/30 border border-red-700/50 rounded-lg">
