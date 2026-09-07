@@ -9,6 +9,7 @@ A web application for managing and practicing guitar exercises, method books, an
 - **Automatic metadata scanning** - Audio file metadata is parsed to populate titles, durations, and organization
 - **File upload** - Upload audio files, PDFs, and videos through the application UI
 - **Progress tracking** - Mark tracks and videos as completed; filter books by "In Progress" status
+- **Per-video volume** - Lesson videos each remember their own volume level, saved to the database rather than shared across every video
 - **Reset book progress** - "Edit Book Info" → "Reset Progress" returns every track and video in a book to the default state (clears completed / in-progress). Last-played dates and favourites are preserved
 - **Book covers** - Album art extracted from audio metadata
 
@@ -33,6 +34,7 @@ Standalone play-along tracks (backing tracks, songs) that live outside the book 
 - Sheet music / tablature displayed alongside audio playback
 - **Page-flip automations** - Press `P` during playback to record an automation point; the viewer advances to the next page automatically as the audio reaches each point. Works in both Lessons (books/tracks) and Jam Tracks. An optional anticipation offset can flip the page slightly early so it's ready before the beat
 - Single-PDF mode for books/tracks, multi-PDF tabbed mode for jam tracks
+- **Full-height page** - The page controls and Fit Page toggle float over the PDF instead of taking their own row, and fade in on hover (pinned on touch screens), so the page gets the viewer's entire height — worth about 6% more sheet music in fit-to-page mode
 
 ### Practice Tools
 - **Metronome** - Adjustable BPM (20-300), time signature support (4/4, 3/4, 2/4, 6/8), visual beat indicator, volume control
@@ -45,6 +47,7 @@ Standalone play-along tracks (backing tracks, songs) that live outside the book 
 - **Markers** - Add timestamp annotations to any video for quick jump-to-section navigation; each marker supports a lead-in buffer so playback starts a few seconds before the mark
 - **A/B loop** - Set loop start/end between any two markers to repeat a section continuously for focused practice
 - **Playback speed control** - Slow down or speed up playback independently per video
+- **Per-video volume** - Each video remembers its own volume level, saved to the database so it persists across sessions and devices
 - **Audio output routing** - Route video audio to any connected output device
 - **Custom categories** - Organize videos into collapsible category sections (Warmup, Tutorial, etc.)
 - **Drag-and-drop reordering** - Reorganize both categories and videos within categories

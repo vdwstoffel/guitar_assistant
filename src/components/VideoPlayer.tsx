@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { formatDurationLong } from "@/lib/formatting";
 import { usePracticeSessionTracker } from "@/hooks/usePracticeSessionTracker";
 import { routeMediaElementToSink, subscribeToAudioSinkChanges } from "@/lib/audioSink";
+import { DEFAULT_VOLUME, storedToElementVolume, elementToStoredVolume } from "@/lib/video/volume";
 import VideoMarkersBar from "./VideoMarkersBar";
 
 interface VideoPlayerProps {
@@ -14,6 +15,7 @@ interface VideoPlayerProps {
   onRenameMarker?: (markerId: string, name: string) => void;
   onDeleteMarker?: (markerId: string) => void;
   onClearMarkers?: () => void;
+  onVolumeChange?: (volume: number) => void;
 }
 
 export default function VideoPlayer({
@@ -23,18 +25,12 @@ export default function VideoPlayer({
   onRenameMarker,
   onDeleteMarker,
   onClearMarkers,
+  onVolumeChange,
 }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const { onPlay, onPause, onFinish } = usePracticeSessionTracker(video);
   const [currentTime, setCurrentTime] = useState(0);
-  const [volume, setVolume] = useState(() => {
-    // Initialize from sessionStorage, default to 1.0
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('videoPlayerVolume');
-      return saved ? parseFloat(saved) : 1.0;
-    }
-    return 1.0;
-  });
+  const saveVolumeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     // Reload only when switching to a different video — NOT when the video
@@ -54,7 +50,7 @@ export default function VideoPlayer({
   }, []);
 
   // Keyboard shortcut: + / = raise and - lower the video volume by 0.05.
-  // Setting .volume fires onVolumeChange, which persists it to state/localStorage.
+  // Setting .volume fires onVolumeChange, which persists it against this video.
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
@@ -82,10 +78,10 @@ export default function VideoPlayer({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
-  // Restore volume after video loads
+  // Restore this video's own saved volume once it loads
   const handleLoadedMetadata = () => {
     if (videoRef.current) {
-      videoRef.current.volume = volume;
+      videoRef.current.volume = storedToElementVolume(video?.volume);
     }
   };
 
@@ -96,13 +92,27 @@ export default function VideoPlayer({
     }
   };
 
-  // Save volume when user changes it
+  // Save volume against this video. Debounced because dragging the native
+  // volume slider fires volumechange continuously. The equality check skips
+  // the event that handleLoadedMetadata itself triggers when it applies the
+  // stored value, so loading a video never writes it straight back.
   const handleVolumeChange = () => {
-    if (videoRef.current) {
-      const newVolume = videoRef.current.volume;
-      setVolume(newVolume);
-      localStorage.setItem('videoPlayerVolume', newVolume.toString());
-    }
+    const el = videoRef.current;
+    if (!el || !video) return;
+    const stored = elementToStoredVolume(el.volume);
+    if (stored === (video.volume ?? DEFAULT_VOLUME)) return;
+
+    onVolumeChange?.(stored);
+
+    const { bookId, id: videoId } = video;
+    if (saveVolumeTimeoutRef.current) clearTimeout(saveVolumeTimeoutRef.current);
+    saveVolumeTimeoutRef.current = setTimeout(() => {
+      fetch(`/api/books/${bookId}/videos/${videoId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ volume: stored }),
+      }).catch((err) => console.error("Failed to save video volume:", err));
+    }, 500);
   };
 
   if (!video) {

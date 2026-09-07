@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Video } from "@/types";
 import { clampPlaybackRate, loopSeekTarget, MIN_PLAYBACK_RATE, MAX_PLAYBACK_RATE } from "@/lib/video/playback";
-import { getVideoVolume, setVideoVolume } from "@/lib/video/volume";
+import { DEFAULT_VOLUME, storedToElementVolume, elementToStoredVolume } from "@/lib/video/volume";
 import { routeMediaElementToSink, subscribeToAudioSinkChanges } from "@/lib/audioSink";
 import { formatDurationLong } from "@/lib/formatting";
 import MarkerTimeline from "./MarkerTimeline";
@@ -29,11 +29,12 @@ interface LocalVideoPlayerProps {
   onPause: () => void;
   onEnded: () => void;
   onError?: () => void;
+  onVolumeChange?: (volume: number) => void;
 }
 
 export default function LocalVideoPlayer({
   video, videoRef, markers, loopA, loopB, onClearLoop, onSetLoopA, onSetLoopB,
-  onAddMarker, onTimeUpdate, onPlay, onPause, onEnded, onError,
+  onAddMarker, onTimeUpdate, onPlay, onPause, onEnded, onError, onVolumeChange,
 }: LocalVideoPlayerProps) {
   const [speed, setSpeed] = useState(1);
   const [speedText, setSpeedText] = useState("1");
@@ -44,6 +45,7 @@ export default function LocalVideoPlayer({
   const [muted, setMuted] = useState(false);
   const [isFs, setIsFs] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const saveVolumeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const src = `/api/video/${video.localPath!.split("/").map(encodeURIComponent).join("/")}`;
 
   const applySpeed = () => {
@@ -73,7 +75,7 @@ export default function LocalVideoPlayer({
   const handleLoadedMetadata = () => {
     const el = videoRef.current;
     if (!el) return;
-    const v = getVideoVolume(video.id);
+    const v = storedToElementVolume(video.volume);
     el.volume = v;
     el.playbackRate = speed;
     setVolumeState(v);
@@ -106,6 +108,26 @@ export default function LocalVideoPlayer({
     if (!el) return;
     el.muted = !el.muted;
     setMuted(el.muted);
+  };
+
+  // Debounced because dragging the slider fires volumechange continuously.
+  // The equality check skips the event handleLoadedMetadata triggers when it
+  // applies the stored value, so loading a video never writes it straight back.
+  const persistVolume = (elementVolume: number) => {
+    const stored = elementToStoredVolume(elementVolume);
+    if (stored === (video.volume ?? DEFAULT_VOLUME)) return;
+
+    onVolumeChange?.(stored);
+
+    const videoId = video.id;
+    if (saveVolumeTimeoutRef.current) clearTimeout(saveVolumeTimeoutRef.current);
+    saveVolumeTimeoutRef.current = setTimeout(() => {
+      fetch(`/api/videos/${videoId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ volume: stored }),
+      }).catch((err) => console.error("Failed to save video volume:", err));
+    }, 500);
   };
 
   const handleVolumeInput = (v: number) => {
@@ -151,7 +173,7 @@ export default function LocalVideoPlayer({
               if (!el) return;
               setVolumeState(el.volume);
               setMuted(el.muted);
-              setVideoVolume(video.id, el.volume);
+              persistVolume(el.volume);
             }}
             onTimeUpdate={handleTimeUpdate}
             onError={() => onError?.()}

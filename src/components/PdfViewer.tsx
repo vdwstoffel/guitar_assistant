@@ -27,6 +27,7 @@ interface SinglePdfViewerProps {
   currentPage: number;
   onPageChange: (page: number) => void;
   version?: number;
+  /** Reports the current mode so a parent can size the panel around it. */
   onFitToPageChange?: (fitToPage: boolean) => void;
 }
 
@@ -54,6 +55,11 @@ function SinglePdfViewerInner({
     return saved === null ? true : saved === "true";
   });
   const [visiblePage, setVisiblePage] = useState(1);
+  // The controls are hover-faded, so reveal them briefly whenever the page
+  // changes — wheel-paging in fit mode turns pages with the pointer nowhere
+  // near them, and otherwise nothing confirms where you landed. Starting true
+  // also flashes them once on open so they can be discovered.
+  const [recentlyPaged, setRecentlyPaged] = useState(true);
   const containerRef = useRef<HTMLDivElement>(null);
   const pageRefs = useRef<Map<number, HTMLDivElement>>(new Map());
   const isScrollingToPage = useRef(false);
@@ -68,8 +74,13 @@ function SinglePdfViewerInner({
     if (!container) return;
 
     const updateDimensions = () => {
-      setContainerWidth(container.clientWidth - 16); // Account for padding
-      setContainerHeight(container.clientHeight - 16);
+      // Padding differs by mode, so read it rather than assuming a fixed inset.
+      // clientWidth/clientHeight include padding.
+      const style = getComputedStyle(container);
+      const padX = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
+      const padY = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+      setContainerWidth(container.clientWidth - padX);
+      setContainerHeight(container.clientHeight - padY);
     };
 
     updateDimensions();
@@ -78,7 +89,19 @@ function SinglePdfViewerInner({
     resizeObserver.observe(container);
 
     return () => resizeObserver.disconnect();
-  }, []);
+    // Toggling the mode changes the padding without changing the border box,
+    // so the observer alone would not fire — re-measure on the mode change.
+  }, [fitToPage]);
+
+  useEffect(() => {
+    onFitToPageChange?.(fitToPage);
+  }, [fitToPage, onFitToPageChange]);
+
+  useEffect(() => {
+    setRecentlyPaged(true);
+    const timeout = setTimeout(() => setRecentlyPaged(false), 1500);
+    return () => clearTimeout(timeout);
+  }, [visiblePage]);
 
   // Clear caches when PDF changes or component unmounts
   useEffect(() => {
@@ -340,9 +363,17 @@ function SinglePdfViewerInner({
   };
 
   return (
-    <div className="flex flex-col h-full bg-gray-900">
-      {/* Controls */}
-      <div className="flex items-center justify-between px-3 py-2 bg-gray-800 border-b border-gray-700">
+    <div className="group relative flex flex-col h-full bg-gray-900">
+      {/* Controls. Floated over the PDF rather than given their own row, so the
+          page gets the full height (fit-to-page is height-bound). Faded out at
+          rest; revealed on hover, on keyboard focus (focus-visible only, so
+          clicking a button does not pin them on), briefly after a page
+          change, and always on touch screens, which have no hover. */}
+      <div
+        className={`absolute top-2 right-2 z-10 flex items-center gap-2 rounded-lg border border-gray-700 bg-gray-900/80 px-2 py-1 backdrop-blur-sm transition-opacity duration-200 group-hover:opacity-100 has-[:focus-visible]:opacity-100 [@media(hover:none)]:opacity-100 ${
+          recentlyPaged ? "opacity-100" : "opacity-0"
+        }`}
+      >
         <div className="flex items-center gap-1 text-xs">
           <button
             onClick={() => goToPage(visiblePage - 1)}
@@ -369,7 +400,6 @@ function SinglePdfViewerInner({
             const next = !fitToPage;
             setFitToPage(next);
             localStorage.setItem("pdfViewer.fitToPage", String(next));
-            onFitToPageChange?.(next);
           }}
           className={`flex items-center gap-1 px-2 py-1 text-xs rounded transition-colors ${
             fitToPage
@@ -396,7 +426,7 @@ function SinglePdfViewerInner({
       {/* PDF Display */}
       <div
         ref={containerRef}
-        className={`flex-1 p-2 ${fitToPage ? "overflow-hidden flex items-center justify-center" : "overflow-auto"}`}
+        className={`flex-1 ${fitToPage ? "overflow-hidden flex items-center justify-center" : "overflow-auto p-2"}`}
         onScroll={!fitToPage ? handleScroll : undefined}
         onWheel={fitToPage ? handleWheel : undefined}
       >

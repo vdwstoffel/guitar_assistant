@@ -507,6 +507,11 @@ export default function Videos({ initialVideoId }: VideosProps) {
                     onPause={() => trackerRef.current.onPause()}
                     onEnded={() => trackerRef.current.onFinish()}
                     onError={() => setPlaybackErrorIds((prev) => new Set(prev).add(activeVideo.id))}
+                    onVolumeChange={(volume) =>
+                      setVideos((prev) =>
+                        prev.map((v) => (v.id === activeVideo.id ? { ...v, volume } : v))
+                      )
+                    }
                   />
                 </div>
                 <div className="shrink-0 mt-4 max-h-40 overflow-y-auto">

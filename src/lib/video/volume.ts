@@ -1,22 +1,20 @@
-const KEY = "videoVolumeById";
+// Video volume is stored per video in the database as a whole percentage
+// (0-100), matching the Track.volume / JamTrack.volume convention. A NULL
+// column means the volume was never set, which plays at full volume.
+// Media elements use a 0-1 float, so conversion happens at the boundary.
 
-function readMap(): Record<string, number> {
-  if (typeof window === "undefined") return {};
-  try {
-    return JSON.parse(localStorage.getItem(KEY) || "{}") as Record<string, number>;
-  } catch {
-    return {};
-  }
+export const DEFAULT_VOLUME = 100;
+
+function clampStored(volume: number): number {
+  return Math.min(100, Math.max(0, volume));
 }
 
-export function getVideoVolume(id: string): number {
-  const v = readMap()[id];
-  return typeof v === "number" ? v : 1;
+export function storedToElementVolume(volume: number | null | undefined): number {
+  if (volume === null || volume === undefined || Number.isNaN(volume)) return 1;
+  return clampStored(volume) / 100;
 }
 
-export function setVideoVolume(id: string, v: number): void {
-  if (typeof window === "undefined") return;
-  const map = readMap();
-  map[id] = v;
-  localStorage.setItem(KEY, JSON.stringify(map));
+export function elementToStoredVolume(volume: number): number {
+  if (Number.isNaN(volume)) return DEFAULT_VOLUME;
+  return clampStored(Math.round(volume * 100));
 }

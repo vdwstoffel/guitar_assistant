@@ -13,11 +13,12 @@ export interface JamTrackPdfPanelProps {
   onUploaded: () => void;          // refetch jam track after upload
   onRenamed: () => void;
   onDeleted: () => void;
+  onFitToPageChange?: (fitToPage: boolean) => void;
 }
 
 export default function JamTrackPdfPanel({
   jamTrackId, pdfs, activePdfId, onActivePdfChange,
-  currentPage, onPageChange, onUploaded, onRenamed, onDeleted,
+  currentPage, onPageChange, onUploaded, onRenamed, onDeleted, onFitToPageChange,
 }: JamTrackPdfPanelProps) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
@@ -74,7 +75,7 @@ export default function JamTrackPdfPanel({
 
       <div className="flex-1 min-h-0">
         {active ? (
-          <PdfViewer pdfPath={active.filePath} currentPage={currentPage} onPageChange={onPageChange} />
+          <PdfViewer pdfPath={active.filePath} currentPage={currentPage} onPageChange={onPageChange} onFitToPageChange={onFitToPageChange} />
         ) : (
           <div className="h-full flex items-center justify-center text-gray-500 text-sm">No PDF attached — add one with ＋ Add PDF.</div>
         )}
