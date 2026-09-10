@@ -2,13 +2,14 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Video } from "@/types";
-import { clampPlaybackRate, loopSeekTarget, MIN_PLAYBACK_RATE, MAX_PLAYBACK_RATE } from "@/lib/video/playback";
+import { loopSeekTarget } from "@/lib/video/playback";
+import { clampPlaybackSpeed, speedToRate } from "@/lib/playbackSpeed";
+import PlaybackSpeedControl from "../PlaybackSpeedControl";
 import { DEFAULT_VOLUME, storedToElementVolume, elementToStoredVolume } from "@/lib/video/volume";
 import { routeMediaElementToSink, subscribeToAudioSinkChanges } from "@/lib/audioSink";
 import { formatDurationLong } from "@/lib/formatting";
 import MarkerTimeline from "./MarkerTimeline";
 
-const PRESETS = [0.5, 0.75, 1] as const;
 const SHORTCUTS_HINT =
   "Space play/pause · ←/→ seek ±5s · M add marker · A/B set loop start/end · +/− volume · 1–9,0 jump to marker";
 
@@ -30,14 +31,14 @@ interface LocalVideoPlayerProps {
   onEnded: () => void;
   onError?: () => void;
   onVolumeChange?: (volume: number) => void;
+  onPlaybackSpeedChange?: (speed: number) => void;
 }
 
 export default function LocalVideoPlayer({
   video, videoRef, markers, loopA, loopB, onClearLoop, onSetLoopA, onSetLoopB,
-  onAddMarker, onTimeUpdate, onPlay, onPause, onEnded, onError, onVolumeChange,
+  onAddMarker, onTimeUpdate, onPlay, onPause, onEnded, onError, onVolumeChange, onPlaybackSpeedChange,
 }: LocalVideoPlayerProps) {
-  const [speed, setSpeed] = useState(1);
-  const [speedText, setSpeedText] = useState("1");
+  const [speed, setSpeed] = useState(() => clampPlaybackSpeed(video.playbackSpeed));
   const [curTime, setCurTime] = useState(0);
   const [duration, setDuration] = useState<number | null>(video.duration ?? null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -46,14 +47,8 @@ export default function LocalVideoPlayer({
   const [isFs, setIsFs] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const saveVolumeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const saveSpeedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const src = `/api/video/${video.localPath!.split("/").map(encodeURIComponent).join("/")}`;
-
-  const applySpeed = () => {
-    const parsed = parseFloat(speedText);
-    const clamped = clampPlaybackRate(Number.isNaN(parsed) ? 1 : parsed);
-    setSpeed(clamped);
-    setSpeedText(String(clamped));
-  };
 
   // Re-route audio to the selected output device on mount and on change.
   useEffect(() => {
@@ -62,8 +57,15 @@ export default function LocalVideoPlayer({
   }, [videoRef]);
 
   useEffect(() => {
-    if (videoRef.current) videoRef.current.playbackRate = speed;
+    if (videoRef.current) videoRef.current.playbackRate = speedToRate(speed);
   }, [speed, videoRef]);
+
+  // Adopt the newly selected video's saved speed (the initializer runs once).
+  useEffect(() => {
+    setSpeed(clampPlaybackSpeed(video.playbackSpeed));
+    // Only the id should retrigger this; the speed is whatever that video has.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [video.id]);
 
   // Track fullscreen so the wrapper can switch between hugging the video and filling the screen.
   useEffect(() => {
@@ -77,7 +79,7 @@ export default function LocalVideoPlayer({
     if (!el) return;
     const v = storedToElementVolume(video.volume);
     el.volume = v;
-    el.playbackRate = speed;
+    el.playbackRate = speedToRate(speed);
     setVolumeState(v);
     setMuted(el.muted);
     setCurTime(el.currentTime);
@@ -127,6 +129,24 @@ export default function LocalVideoPlayer({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ volume: stored }),
       }).catch((err) => console.error("Failed to save video volume:", err));
+    }, 500);
+  };
+
+  const handlePlaybackSpeed = (next: number) => {
+    const clamped = clampPlaybackSpeed(next);
+    setSpeed(clamped);
+    if (clamped === clampPlaybackSpeed(video.playbackSpeed)) return;
+
+    onPlaybackSpeedChange?.(clamped);
+
+    const videoId = video.id;
+    if (saveSpeedTimeoutRef.current) clearTimeout(saveSpeedTimeoutRef.current);
+    saveSpeedTimeoutRef.current = setTimeout(() => {
+      fetch(`/api/videos/${videoId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ playbackSpeed: clamped }),
+      }).catch((err) => console.error("Failed to save playback speed:", err));
     }, 500);
   };
 
@@ -227,32 +247,7 @@ export default function LocalVideoPlayer({
       <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
         <div className="flex items-center gap-1">
           <span className="text-gray-400">Speed</span>
-          <input
-            type="number"
-            min={MIN_PLAYBACK_RATE}
-            max={MAX_PLAYBACK_RATE}
-            step={0.05}
-            value={speedText}
-            onChange={(e) => setSpeedText(e.target.value)}
-            onBlur={applySpeed}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") { applySpeed(); (e.target as HTMLInputElement).blur(); }
-            }}
-            title={`Playback speed (${MIN_PLAYBACK_RATE}×–${MAX_PLAYBACK_RATE}×)`}
-            className="w-14 px-2 py-0.5 rounded bg-gray-700 text-white border border-gray-600 focus:outline-none focus:border-green-500"
-          />
-          <span className="text-gray-400 mr-1">×</span>
-          {PRESETS.map((s) => (
-            <button
-              key={s}
-              onClick={() => { setSpeed(clampPlaybackRate(s)); setSpeedText(String(s)); }}
-              className={`px-1.5 py-0.5 rounded font-medium ${
-                speed === s ? "bg-green-600 text-white" : "bg-gray-700 text-gray-300 hover:bg-gray-600"
-              }`}
-            >
-              {s}×
-            </button>
-          ))}
+          <PlaybackSpeedControl speed={speed} onChange={handlePlaybackSpeed} />
         </div>
 
         <span className="w-px h-4 bg-gray-700" />

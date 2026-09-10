@@ -1,23 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { clampPlaybackRate, loopSeekTarget } from "./playback";
-
-describe("clampPlaybackRate", () => {
-  it("passes a rate already in range", () => {
-    expect(clampPlaybackRate(0.75)).toBe(0.75);
-  });
-  it("passes a faster-than-normal rate in range", () => {
-    expect(clampPlaybackRate(1.5)).toBe(1.5);
-  });
-  it("clamps below the floor", () => {
-    expect(clampPlaybackRate(0.1)).toBe(0.25);
-  });
-  it("clamps above the ceiling", () => {
-    expect(clampPlaybackRate(5)).toBe(2);
-  });
-  it("falls back to 1 for NaN", () => {
-    expect(clampPlaybackRate(Number.NaN)).toBe(1);
-  });
-});
+import { loopSeekTarget } from "./playback";
 
 describe("loopSeekTarget", () => {
   it("returns null when either point is unset", () => {

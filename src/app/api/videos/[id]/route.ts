@@ -45,28 +45,42 @@ export async function PUT(
   }
 }
 
-// PATCH - Update playback settings (volume). Kept separate from the PUT
-// handler above, which requires a title.
+// PATCH - Update playback settings (volume, playback speed). Kept separate
+// from the PUT handler above, which requires a title.
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params;
-    const { volume } = await request.json();
+    const { volume, playbackSpeed } = await request.json();
 
-    if (volume === undefined) {
+    if (volume === undefined && playbackSpeed === undefined) {
       return NextResponse.json({ error: "No supported fields to update" }, { status: 400 });
     }
 
-    if (volume !== null && (typeof volume !== "number" || volume < 0 || volume > 100)) {
+    if (volume !== undefined && volume !== null && (typeof volume !== "number" || volume < 0 || volume > 100)) {
       return NextResponse.json({ error: "Volume must be between 0 and 100" }, { status: 400 });
     }
 
-    const video = await prisma.video.update({
-      where: { id },
-      data: { volume: volume === null ? null : Math.round(volume) },
-    });
+    if (
+      playbackSpeed !== undefined &&
+      playbackSpeed !== null &&
+      (typeof playbackSpeed !== "number" || playbackSpeed < 10 || playbackSpeed > 200)
+    ) {
+      return NextResponse.json(
+        { error: "Playback speed must be between 10 and 200%" },
+        { status: 400 }
+      );
+    }
+
+    const data: { volume?: number | null; playbackSpeed?: number | null } = {};
+    if (volume !== undefined) data.volume = volume === null ? null : Math.round(volume);
+    if (playbackSpeed !== undefined) {
+      data.playbackSpeed = playbackSpeed === null ? null : Math.round(playbackSpeed);
+    }
+
+    const video = await prisma.video.update({ where: { id }, data });
 
     return NextResponse.json(video);
   } catch (error) {

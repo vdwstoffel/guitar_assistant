@@ -115,6 +115,7 @@ model BookVideo {
   completedAt      DateTime?
   notes            String?
   volume           Int?
+  playbackSpeed    Int?
   bookId           String
   chapterId        String?
   book             Book              @relation(fields: [bookId], references: [id], onDelete: Cascade)
@@ -139,6 +140,7 @@ model Video {
   completedAt      DateTime?
   notes            String?
   volume           Int?
+  playbackSpeed    Int?
   localPath        String?
   duration         Float?
   status           String            @default("pending")

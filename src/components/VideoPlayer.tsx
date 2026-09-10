@@ -6,6 +6,8 @@ import { formatDurationLong } from "@/lib/formatting";
 import { usePracticeSessionTracker } from "@/hooks/usePracticeSessionTracker";
 import { routeMediaElementToSink, subscribeToAudioSinkChanges } from "@/lib/audioSink";
 import { DEFAULT_VOLUME, storedToElementVolume, elementToStoredVolume } from "@/lib/video/volume";
+import { clampPlaybackSpeed, speedToRate } from "@/lib/playbackSpeed";
+import PlaybackSpeedControl from "./PlaybackSpeedControl";
 import VideoMarkersBar from "./VideoMarkersBar";
 
 interface VideoPlayerProps {
@@ -16,6 +18,7 @@ interface VideoPlayerProps {
   onDeleteMarker?: (markerId: string) => void;
   onClearMarkers?: () => void;
   onVolumeChange?: (volume: number) => void;
+  onPlaybackSpeedChange?: (speed: number) => void;
 }
 
 export default function VideoPlayer({
@@ -26,11 +29,14 @@ export default function VideoPlayer({
   onDeleteMarker,
   onClearMarkers,
   onVolumeChange,
+  onPlaybackSpeedChange,
 }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const { onPlay, onPause, onFinish } = usePracticeSessionTracker(video);
   const [currentTime, setCurrentTime] = useState(0);
   const saveVolumeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const saveSpeedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [playbackSpeed, setPlaybackSpeed] = useState(() => clampPlaybackSpeed(video?.playbackSpeed));
 
   useEffect(() => {
     // Reload only when switching to a different video — NOT when the video
@@ -40,6 +46,10 @@ export default function VideoPlayer({
     if (videoRef.current) {
       videoRef.current.load();
     }
+    setPlaybackSpeed(clampPlaybackSpeed(video?.playbackSpeed));
+    // Reading video.playbackSpeed here is deliberate: only the id should
+    // trigger this, and the speed is whatever the newly selected video has.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [video?.id]);
 
   useEffect(() => {
@@ -78,11 +88,33 @@ export default function VideoPlayer({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
-  // Restore this video's own saved volume once it loads
+  // Restore this video's own saved volume and speed once it loads
   const handleLoadedMetadata = () => {
     if (videoRef.current) {
       videoRef.current.volume = storedToElementVolume(video?.volume);
+      videoRef.current.playbackRate = speedToRate(video?.playbackSpeed);
     }
+  };
+
+  // Save speed against this video, debounced like the volume — holding the
+  // -/+ steppers otherwise fires a request per percent.
+  const handlePlaybackSpeed = (speed: number) => {
+    const clamped = clampPlaybackSpeed(speed);
+    setPlaybackSpeed(clamped);
+    if (videoRef.current) videoRef.current.playbackRate = speedToRate(clamped);
+    if (!video) return;
+
+    onPlaybackSpeedChange?.(clamped);
+
+    const { bookId, id: videoId } = video;
+    if (saveSpeedTimeoutRef.current) clearTimeout(saveSpeedTimeoutRef.current);
+    saveSpeedTimeoutRef.current = setTimeout(() => {
+      fetch(`/api/books/${bookId}/videos/${videoId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ playbackSpeed: clamped }),
+      }).catch((err) => console.error("Failed to save playback speed:", err));
+    }, 500);
   };
 
   const handleJumpToMarker = (timestamp: number) => {
@@ -159,13 +191,19 @@ export default function VideoPlayer({
           Your browser does not support the video tag.
         </video>
       </div>
-      <div className="bg-neutral-900 px-4 py-3 border-t border-neutral-800">
-        <h3 className="font-medium text-white truncate">{video.filename}</h3>
-        {video.duration && (
-          <p className="text-sm text-neutral-400 mt-1">
-            Duration: {formatDurationLong(video.duration)}
-          </p>
-        )}
+      <div className="bg-neutral-900 px-4 py-3 border-t border-neutral-800 flex items-center justify-between gap-4">
+        <div className="min-w-0">
+          <h3 className="font-medium text-white truncate">{video.filename}</h3>
+          {video.duration && (
+            <p className="text-sm text-neutral-400 mt-1">
+              Duration: {formatDurationLong(video.duration)}
+            </p>
+          )}
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="text-xs text-gray-400">Speed</span>
+          <PlaybackSpeedControl speed={playbackSpeed} onChange={handlePlaybackSpeed} />
+        </div>
       </div>
       {onAddMarker && onRenameMarker && onDeleteMarker && onClearMarkers && (
         <VideoMarkersBar

@@ -951,6 +951,11 @@ export default function Home() {
     updateVideoInBookDetail(videoId, v => ({ ...v, volume }));
   };
 
+  const handleVideoPlaybackSpeedChange = (videoId: string, playbackSpeed: number) => {
+    setSelectedVideo(prev => (prev?.id === videoId ? { ...prev, playbackSpeed } : prev));
+    updateVideoInBookDetail(videoId, v => ({ ...v, playbackSpeed }));
+  };
+
   const handleVideoMarkerAdd = async (
     bookId: string,
     videoId: string,
@@ -2082,6 +2087,9 @@ export default function Home() {
                       }
                       onVolumeChange={(volume) =>
                         handleVideoVolumeChange(selectedVideo.id, volume)
+                      }
+                      onPlaybackSpeedChange={(speed) =>
+                        handleVideoPlaybackSpeedChange(selectedVideo.id, speed)
                       }
                     />
                   </div>

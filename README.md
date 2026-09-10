@@ -10,6 +10,7 @@ A web application for managing and practicing guitar exercises, method books, an
 - **File upload** - Upload audio files, PDFs, and videos through the application UI
 - **Progress tracking** - Mark tracks and videos as completed; filter books by "In Progress" status
 - **Per-video volume** - Lesson videos each remember their own volume level, saved to the database rather than shared across every video
+- **Per-video playback speed** - Lesson videos have the same 10-200% speed control as tracks (presets, 1% steppers, direct entry), saved per video
 - **Reset book progress** - "Edit Book Info" → "Reset Progress" returns every track and video in a book to the default state (clears completed / in-progress). Last-played dates and favourites are preserved
 - **Book covers** - Album art extracted from audio metadata
 
@@ -46,7 +47,7 @@ Standalone play-along tracks (backing tracks, songs) that live outside the book 
 - **Local download & offline playback** - Paste a YouTube URL; yt-dlp downloads the video to the server so it plays back fully offline with no streaming dependency
 - **Markers** - Add timestamp annotations to any video for quick jump-to-section navigation; each marker supports a lead-in buffer so playback starts a few seconds before the mark
 - **A/B loop** - Set loop start/end between any two markers to repeat a section continuously for focused practice
-- **Playback speed control** - Slow down or speed up playback independently per video
+- **Playback speed control** - The same 10-200% control used for tracks, saved per video so it survives a reload
 - **Per-video volume** - Each video remembers its own volume level, saved to the database so it persists across sessions and devices
 - **Audio output routing** - Route video audio to any connected output device
 - **Custom categories** - Organize videos into collapsible category sections (Warmup, Tutorial, etc.)

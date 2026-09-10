@@ -98,6 +98,7 @@ export interface Video {
   inProgress: boolean;
   notes: string | null;
   volume: number | null;
+  playbackSpeed: number | null;
   localPath: string | null;
   duration: number | null;
   status: VideoStatus;
@@ -127,6 +128,7 @@ export interface BookVideo {
   inProgress: boolean;
   notes: string | null;
   volume: number | null;
+  playbackSpeed: number | null;
   bookId: string;
   chapterId: string | null;
   createdAt: string;

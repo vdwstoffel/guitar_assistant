@@ -512,6 +512,11 @@ export default function Videos({ initialVideoId }: VideosProps) {
                         prev.map((v) => (v.id === activeVideo.id ? { ...v, volume } : v))
                       )
                     }
+                    onPlaybackSpeedChange={(playbackSpeed) =>
+                      setVideos((prev) =>
+                        prev.map((v) => (v.id === activeVideo.id ? { ...v, playbackSpeed } : v))
+                      )
+                    }
                   />
                 </div>
                 <div className="shrink-0 mt-4 max-h-40 overflow-y-auto">

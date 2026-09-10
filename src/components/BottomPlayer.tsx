@@ -13,6 +13,8 @@ import MarkerChips from "./practice/MarkerChips";
 import MarkerSettingsPopover from "./practice/MarkerSettingsPopover";
 import { resolveBarOpacity, BAR_IDLE_DELAY_MS, markerShortcutIndex } from "@/lib/practiceLayout";
 import { usePracticeSessionTracker } from "@/hooks/usePracticeSessionTracker";
+import PlaybackSpeedControl from "./PlaybackSpeedControl";
+import { clampPlaybackSpeed } from "@/lib/playbackSpeed";
 import {
   DEFAULT_DEVICE_ID,
   applyAudioContextSink,
@@ -100,7 +102,6 @@ function BottomPlayer({
   const sessionTracker = usePracticeSessionTracker(track);
   const sessionTrackerRef = useRef(sessionTracker);
   sessionTrackerRef.current = sessionTracker;
-  const [speedInputValue, setSpeedInputValue] = useState("");
   const [volume, setVolume] = useState(50);
   const volumeRef = useRef(50);
   volumeRef.current = volume;
@@ -241,7 +242,7 @@ function BottomPlayer({
   const saveVolumeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handlePlaybackSpeed = (speed: number) => {
-    const clampedSpeed = Math.max(10, Math.min(200, speed));
+    const clampedSpeed = clampPlaybackSpeed(speed);
     setPlaybackSpeed(clampedSpeed);
     if (track) {
       // Dispatch custom event to notify InProgressIndicator components
@@ -1513,57 +1514,7 @@ function BottomPlayer({
           {/* Row 2: Secondary controls - Wrap on mobile */}
           <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-4 text-xs">
             {/* Speed */}
-            <div className="flex items-center gap-1 sm:gap-2">
-              {[60, 70, 80, 90, 100].map((preset) => (
-                <button
-                  key={preset}
-                  onClick={() => handlePlaybackSpeed(preset)}
-                  className={`px-1.5 py-0.5 rounded text-xs font-medium transition-colors ${
-                    playbackSpeed === preset
-                      ? "bg-green-600 text-white"
-                      : "bg-gray-700 text-gray-400 hover:text-white hover:bg-gray-600"
-                  }`}
-                >
-                  {preset}
-                </button>
-              ))}
-              <button
-                onClick={() => handlePlaybackSpeed(playbackSpeed - 1)}
-                className="w-6 h-6 flex items-center justify-center bg-gray-700 hover:bg-gray-600 text-gray-300 hover:text-white rounded text-sm font-bold"
-                title="Decrease speed by 1%"
-              >−</button>
-              <input
-                type="number"
-                min={10}
-                max={200}
-                value={speedInputValue || playbackSpeed}
-                onChange={(e) => setSpeedInputValue(e.target.value)}
-                onBlur={(e) => {
-                  const val = parseInt(e.target.value, 10);
-                  if (!isNaN(val)) {
-                    handlePlaybackSpeed(val);
-                  }
-                  setSpeedInputValue("");
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    const val = parseInt((e.target as HTMLInputElement).value, 10);
-                    if (!isNaN(val)) {
-                      handlePlaybackSpeed(val);
-                    }
-                    setSpeedInputValue("");
-                    (e.target as HTMLInputElement).blur();
-                  }
-                }}
-                className="w-12 sm:w-16 px-2 py-0.5 bg-gray-700 border border-gray-600 rounded text-center text-xs focus:outline-none focus:border-green-500"
-              />
-              <button
-                onClick={() => handlePlaybackSpeed(playbackSpeed + 1)}
-                className="w-6 h-6 flex items-center justify-center bg-gray-700 hover:bg-gray-600 text-gray-300 hover:text-white rounded text-sm font-bold"
-                title="Increase speed by 1%"
-              >+</button>
-              <span className="text-gray-500 text-xs">%</span>
-            </div>
+            <PlaybackSpeedControl speed={playbackSpeed} onChange={handlePlaybackSpeed} />
 
             {/* Zoom - zooms the waveform, so only worth showing when it is */}
             <div className={`items-center gap-2 ${
