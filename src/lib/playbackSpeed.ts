@@ -17,3 +17,17 @@ export function clampPlaybackSpeed(speed: number | null | undefined): number {
 export function speedToRate(speed: number | null | undefined): number {
   return clampPlaybackSpeed(speed) / 100;
 }
+
+// Write a just-saved speed back into an in-memory list of tracks or jam
+// tracks. The player persists the speed to the database on its own, but the
+// list it is handed on the next selection comes from client state — without
+// this the stale speed from the last library fetch wins.
+export function applySavedPlaybackSpeed<
+  T extends { id: string; playbackSpeed: number | null }
+>(items: T[], id: string, speed: number): T[] {
+  if (!items.some((item) => item.id === id)) return items;
+  const clamped = clampPlaybackSpeed(speed);
+  return items.map((item) =>
+    item.id === id ? { ...item, playbackSpeed: clamped } : item
+  );
+}

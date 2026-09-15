@@ -9,18 +9,38 @@ import { playCountIn } from "@/lib/clickGenerator";
 
 import KeyboardShortcutsHelp from "./KeyboardShortcutsHelp";
 import MarkerNameDialog from "./MarkerNameDialog";
-import MarkerChips from "./practice/MarkerChips";
-import MarkerSettingsPopover from "./practice/MarkerSettingsPopover";
-import { resolveBarOpacity, BAR_IDLE_DELAY_MS, markerShortcutIndex } from "@/lib/practiceLayout";
 import { usePracticeSessionTracker } from "@/hooks/usePracticeSessionTracker";
 import PlaybackSpeedControl from "./PlaybackSpeedControl";
 import { clampPlaybackSpeed } from "@/lib/playbackSpeed";
+import { clampTrackVolume, resolveTrackVolume } from "@/lib/trackVolume";
 import {
   DEFAULT_DEVICE_ID,
   applyAudioContextSink,
   getAudioSinkPreference,
   subscribeToAudioSinkChanges,
 } from "@/lib/audioSink";
+
+export interface MarkerBarState {
+  showMarkers: boolean;
+  setShowMarkers: (value: boolean) => void;
+  leadIn: number;
+  setLeadIn: (value: number) => void;
+  editingMarkerId: string | null;
+  setEditingMarkerId: (value: string | null) => void;
+  editingMarkerName: string;
+  setEditingMarkerName: (value: string) => void;
+  currentTime: number;
+  jumpToMarker: (timestamp: number) => void;
+  addMarker: (name: string, timestamp: number) => void;
+  formatTime: (seconds: number) => string;
+  // Count-in state
+  isCountingIn: boolean;
+  currentCountInBeat: number;
+  totalCountInBeats: number;
+  trackTempo: number | null;
+  trackTimeSignature: string;
+  volume: number;
+}
 
 interface BottomPlayerProps {
   track: Track | JamTrack | null;
@@ -29,11 +49,8 @@ interface BottomPlayerProps {
   onMarkerRename: (markerId: string, name: string) => void;
   onMarkerDelete: (markerId: string) => void;
   onMarkersClear: (trackId: string) => void;
-  /**
-   * 'floating' overlays the PDF, 'sidebar' is a vertical column beside it,
-   * 'docked' stacks below the content.
-   */
-  variant?: "floating" | "docked" | "sidebar";
+  externalMarkersBar?: boolean;
+  onMarkerBarStateChange?: (state: MarkerBarState) => void;
   onTimeUpdate?: (time: number, isPlaying: boolean) => void;
   onSeekReady?: (seekFn: (time: number) => void) => void;
   compact?: boolean;
@@ -41,16 +58,14 @@ interface BottomPlayerProps {
   trackTabsCount?: number;
   onLoopSave: (trackId: string, name: string, startTime: number, endTime: number) => void;
   onLoopDelete: (loopId: string) => void;
+  onVolumeChange?: (trackId: string, volume: number) => void;
+  onPlaybackSpeedChange?: (trackId: string, speed: number) => void;
   // Page-flip props
   currentPdfPage?: number;
   onPageFlipAdd?: (timestamp: number, page: number) => void;
   pageFlips?: { id: string; timestamp: number; pdfPage: number }[];
   onPageFlipEdit?: (id: string) => void;
   onPageFlipDelete?: (id: string) => void;
-  // Marker settings, surfaced through the settings popover
-  onTempoChange?: (tempo: number | null, timeSignature: string) => void;
-  pageFlipAnticipation?: boolean;
-  onPageFlipAnticipationChange?: (value: boolean) => void;
 }
 
 function BottomPlayer({
@@ -60,7 +75,8 @@ function BottomPlayer({
   onMarkerRename,
   onMarkerDelete,
   onMarkersClear,
-  variant = "docked",
+  externalMarkersBar = false,
+  onMarkerBarStateChange,
   onTimeUpdate,
   onSeekReady,
   compact = false,
@@ -68,19 +84,14 @@ function BottomPlayer({
   trackTabsCount = 0,
   onLoopSave,
   onLoopDelete,
+  onVolumeChange,
+  onPlaybackSpeedChange,
   currentPdfPage,
   onPageFlipAdd,
   pageFlips = [],
   onPageFlipEdit,
   onPageFlipDelete,
-  onTempoChange,
-  pageFlipAnticipation = false,
-  onPageFlipAnticipationChange,
 }: BottomPlayerProps) {
-  const isFloating = variant === "floating";
-  const isSidebar = variant === "sidebar";
-  // Both compact presentations hide the waveform until asked for it.
-  const isCompactChrome = isFloating || isSidebar;
   const waveformRef = useRef<HTMLDivElement>(null);
   const waveformContainerRef = useRef<HTMLDivElement>(null);
   const wsScrollContainerRef = useRef<HTMLElement | null>(null);
@@ -108,12 +119,9 @@ function BottomPlayer({
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
   const [showMarkers, setShowMarkers] = useState(() => (track?.markers?.length ?? 0) > 0);
   const [leadIn, setLeadIn] = useState(2);
+  const [editingMarkerId, setEditingMarkerId] = useState<string | null>(null);
+  const [editingMarkerName, setEditingMarkerName] = useState("");
   const [showMarkerDialog, setShowMarkerDialog] = useState(false);
-  const [editingMarker, setEditingMarker] = useState<Marker | JamTrackMarker | null>(null);
-  const [isWaveformExpanded, setIsWaveformExpanded] = useState(false);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [isBarHovered, setIsBarHovered] = useState(false);
-  const [isPointerIdle, setIsPointerIdle] = useState(false);
   const [pendingMarkerTimestamp, setPendingMarkerTimestamp] = useState(0);
   const [showLoopDialog, setShowLoopDialog] = useState(false);
   const [showLoopsPanel, setShowLoopsPanel] = useState(false);
@@ -254,6 +262,9 @@ function BottomPlayer({
       if (saveSpeedTimeoutRef.current) clearTimeout(saveSpeedTimeoutRef.current);
       const trackId = track.id;
       const isJamTrack = !('bookId' in track);
+      // Mirror it into the parent's copy of the track straight away, for the
+      // same reason as the volume above.
+      onPlaybackSpeedChange?.(trackId, clampedSpeed);
       saveSpeedTimeoutRef.current = setTimeout(() => {
         const url = isJamTrack
           ? `/api/jamtracks/${trackId}`
@@ -285,7 +296,7 @@ function BottomPlayer({
   }, [normalizeVolume, track]);
 
   const handleVolume = (newVolume: number) => {
-    const clampedVolume = Math.max(0, Math.min(100, newVolume));
+    const clampedVolume = clampTrackVolume(newVolume);
     setVolume(clampedVolume);
     if (wavesurferRef.current) {
       wavesurferRef.current.setVolume(clampedVolume / 100);
@@ -300,6 +311,11 @@ function BottomPlayer({
       if (saveVolumeTimeoutRef.current) clearTimeout(saveVolumeTimeoutRef.current);
       const trackId = track.id;
       const isJamTrack = !('bookId' in track);
+      // Mirror the new volume into the parent's copy of the track straight
+      // away. The DB write below is the source of truth on the next page load,
+      // but re-selecting this track before then reads client state — without
+      // this it would restore the volume from the last library fetch.
+      onVolumeChange?.(trackId, clampedVolume);
       saveVolumeTimeoutRef.current = setTimeout(() => {
         const url = isJamTrack
           ? `/api/jamtracks/${trackId}`
@@ -362,7 +378,7 @@ function BottomPlayer({
       }));
 
       // Apply per-track volume (default 50%)
-      const vol = track.volume ?? 50;
+      const vol = resolveTrackVolume(track.volume);
       setVolume(vol);
       ws.setVolume(vol / 100);
 
@@ -1103,26 +1119,6 @@ function BottomPlayer({
     }
   }, [duration, leadIn, track?.tempo, track?.timeSignature, volume]);
 
-  // The floating bar fades once the pointer has been still for a while. Only
-  // relevant while floating, so the listener is not attached otherwise.
-  useEffect(() => {
-    if (!isFloating) return;
-
-    let timer: ReturnType<typeof setTimeout>;
-    const markActive = () => {
-      setIsPointerIdle(false);
-      clearTimeout(timer);
-      timer = setTimeout(() => setIsPointerIdle(true), BAR_IDLE_DELAY_MS);
-    };
-
-    markActive();
-    window.addEventListener("mousemove", markActive);
-    return () => {
-      window.removeEventListener("mousemove", markActive);
-      clearTimeout(timer);
-    };
-  }, [isFloating]);
-
   const wasPlayingBeforeMarkerDialogRef = useRef(false);
 
   const handleOpenMarkerDialog = useCallback(() => {
@@ -1150,33 +1146,8 @@ function BottomPlayer({
     resumeAfterMarkerDialog();
   }, [track, onMarkerAdd, resumeAfterMarkerDialog]);
 
-  const handleOpenEditMarkerDialog = useCallback((marker: Marker | JamTrackMarker) => {
-    setEditingMarker(marker);
-    setPendingMarkerTimestamp(marker.timestamp);
-    const ws = wavesurferRef.current;
-    wasPlayingBeforeMarkerDialogRef.current = !!ws?.isPlaying();
-    if (ws?.isPlaying()) ws.pause();
-    setShowMarkerDialog(true);
-  }, []);
-
-  const handleSaveMarkerDialog = useCallback((name: string) => {
-    if (editingMarker) {
-      onMarkerRename(editingMarker.id, name.trim());
-      setEditingMarker(null);
-      setShowMarkerDialog(false);
-      resumeAfterMarkerDialog();
-      return;
-    }
-    addMarker(name, pendingMarkerTimestamp);
-  }, [editingMarker, onMarkerRename, resumeAfterMarkerDialog, pendingMarkerTimestamp, addMarker]);
-
-  const handleClearAllMarkers = useCallback(() => {
-    if (track) onMarkersClear(track.id);
-  }, [track, onMarkersClear]);
-
   const handleCancelMarkerDialog = useCallback(() => {
     setShowMarkerDialog(false);
-    setEditingMarker(null);
     resumeAfterMarkerDialog();
   }, [resumeAfterMarkerDialog]);
 
@@ -1263,28 +1234,46 @@ function BottomPlayer({
         e.preventDefault();
         setShowShortcutsHelp(prev => !prev);
       }
-
-      // 1-9 jump to markers 1-9, 0 jumps to marker 10 — only while the markers
-      // are on show, matching how this behaved before.
-      const shortcutIndex = markerShortcutIndex(e.key);
-      if (shortcutIndex !== null && showMarkers && track?.markers?.length) {
-        const sorted = [...track.markers].sort((a, b) => a.timestamp - b.timestamp);
-        if (shortcutIndex < sorted.length) {
-          e.preventDefault();
-          jumpToMarker(sorted[shortcutIndex].timestamp);
-        }
-      }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [track, handleOpenMarkerDialog, handleVolume, showMarkers, jumpToMarker]);
+  }, [track, handleOpenMarkerDialog, handleVolume]);
 
   // Handle marker label click to set/clear stop marker
   const handleMarkerLabelClick = useCallback((timestamp: number) => {
     setStopMarker((prev) => (prev === timestamp ? null : timestamp));
   }, []);
 
+
+  // Store callback in ref to avoid dependency issues
+  const onMarkerBarStateChangeRef = useRef(onMarkerBarStateChange);
+  onMarkerBarStateChangeRef.current = onMarkerBarStateChange;
+  // Expose marker bar state to parent for external rendering
+  useEffect(() => {
+    if (onMarkerBarStateChangeRef.current) {
+      onMarkerBarStateChangeRef.current({
+        showMarkers,
+        setShowMarkers,
+        leadIn,
+        setLeadIn,
+        editingMarkerId,
+        setEditingMarkerId,
+        editingMarkerName,
+        setEditingMarkerName,
+        currentTime,
+        jumpToMarker,
+        addMarker,
+        formatTime,
+        isCountingIn,
+        currentCountInBeat,
+        totalCountInBeats,
+        trackTempo: track?.tempo ?? null,
+        trackTimeSignature: track?.timeSignature || "4/4",
+        volume,
+      });
+    }
+  }, [showMarkers, leadIn, editingMarkerId, editingMarkerName, jumpToMarker, addMarker, formatTime, isCountingIn, currentCountInBeat, totalCountInBeats, track?.tempo, track?.timeSignature, volume, currentTime]);
 
   if (!track) {
     return (
@@ -1294,45 +1283,15 @@ function BottomPlayer({
     );
   }
 
-  const barOpacity = isFloating
-    ? resolveBarOpacity({
-        isPlaying,
-        isHovered: isBarHovered,
-        msSinceMouseMove: isPointerIdle ? BAR_IDLE_DELAY_MS + 1 : 0,
-        isPopoverOpen: isSettingsOpen,
-        isWaveformExpanded,
-      })
-    : 1;
-
   return (
-    <div
-      onMouseEnter={isFloating ? () => setIsBarHovered(true) : undefined}
-      onMouseLeave={isFloating ? () => setIsBarHovered(false) : undefined}
-      style={isFloating ? { opacity: barOpacity } : undefined}
-      className={
-        isFloating
-          ? "bg-gray-800/95 backdrop-blur-sm border-t border-gray-700 text-white transition-opacity duration-300 motion-reduce:transition-none"
-          : isSidebar
-          ? "h-full min-h-0 flex flex-col bg-gray-800 border-r border-gray-700 text-white"
-          : "flex flex-col bg-gray-800 border-t border-gray-700 text-white"
-      }
-    >
+    <div className="h-full flex flex-col bg-gray-800 border-t border-gray-700 text-white">
       <KeyboardShortcutsHelp isOpen={showShortcutsHelp} onClose={() => setShowShortcutsHelp(false)} />
       {/* Main Player Section */}
-      <div className={`flex flex-col ${
-        isSidebar ? "px-2 py-2 flex-1 min-h-0" : isFloating ? "px-2 sm:px-4 py-1.5" : "px-2 sm:px-4 py-2"
-      }`}>
-          {/* Controls - one line when floating, stacked rows when docked */}
-          <div className={isFloating
-            ? "flex flex-row flex-wrap items-center justify-center gap-x-4 gap-y-1"
-            : isSidebar
-            ? "flex flex-col gap-2 mb-2 shrink-0"
-            : "flex flex-col gap-2 mb-2"
-          }>
+      <div className="flex-1 flex flex-col px-2 sm:px-4 py-2">
+          {/* Controls - Multi-row responsive layout */}
+          <div className="flex flex-col gap-2 mb-2">
             {/* Row 1: Primary playback controls */}
-            <div className={`flex items-center justify-center text-xs ${
-              isSidebar ? "flex-wrap gap-2" : "gap-3 sm:gap-6"
-            }`}>
+            <div className="flex items-center justify-center gap-3 sm:gap-6 text-xs">
             {/* Restart Button */}
             <button
               onClick={restartFromBeginning}
@@ -1516,10 +1475,8 @@ function BottomPlayer({
             {/* Speed */}
             <PlaybackSpeedControl speed={playbackSpeed} onChange={handlePlaybackSpeed} />
 
-            {/* Zoom - zooms the waveform, so only worth showing when it is */}
-            <div className={`items-center gap-2 ${
-              isCompactChrome && !isWaveformExpanded ? "hidden" : "hidden md:flex"
-            }`}>
+            {/* Zoom - Hide on mobile */}
+            <div className="hidden md:flex items-center gap-2">
               <span className="text-gray-500">Zoom:</span>
               <input
                 type="range"
@@ -1620,51 +1577,13 @@ function BottomPlayer({
                     )}
                   </button>
                 )}
-
-                {/* Waveform toggle - compact presentations show it on demand */}
-                {isCompactChrome && (
-                  <button
-                    onClick={() => setIsWaveformExpanded((v) => !v)}
-                    className={`w-7 h-7 flex items-center justify-center rounded transition-colors ${
-                      isWaveformExpanded ? "bg-gray-600 text-white" : "text-gray-400 hover:text-white hover:bg-gray-700"
-                    }`}
-                    title={isWaveformExpanded ? "Hide waveform" : "Show waveform"}
-                    aria-pressed={isWaveformExpanded}
-                    aria-label="Toggle waveform"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d={isWaveformExpanded ? "M19 15l-7-7-7 7" : "M5 9l7 7 7-7"} />
-                    </svg>
-                  </button>
-                )}
-
-                <MarkerSettingsPopover
-                  isOpen={isSettingsOpen}
-                  onOpenChange={setIsSettingsOpen}
-                  leadIn={leadIn}
-                  onLeadInChange={setLeadIn}
-                  markerCount={track.markers.length}
-                  onRequestAddMarker={handleOpenMarkerDialog}
-                  onClearAll={handleClearAllMarkers}
-                  isCountingIn={isCountingIn}
-                  currentCountInBeat={currentCountInBeat}
-                  totalCountInBeats={totalCountInBeats}
-                  trackTempo={track?.tempo ?? null}
-                  trackTimeSignature={track?.timeSignature || "4/4"}
-                  onTempoChange={onTempoChange}
-                  pageFlipAnticipation={pageFlipAnticipation}
-                  onPageFlipAnticipationChange={onPageFlipAnticipationChange}
-                />
               </div>
           </div>
         </div>
 
-          {/* Waveform - Responsive height. Collapsed to h-0 rather than
-              unmounted: WaveSurfer needs its container to survive the toggle. */}
-          <div className={`relative overflow-hidden transition-all duration-200 motion-reduce:transition-none ${
-          isCompactChrome && !isWaveformExpanded
-            ? 'h-0 pt-0'
-            : compact ? 'pt-6 h-[150px]' : 'pt-6 h-[170px]'
+          {/* Waveform - Responsive height */}
+          <div className={`relative pt-6 overflow-hidden ${
+          compact ? 'h-[150px]' : 'h-[170px]'
         }`}>
             {/* Marker labels - positioned above waveform */}
             {track.markers.length > 0 && duration > 0 && !isLoading && containerWidth > 0 && (
@@ -1747,24 +1666,118 @@ function BottomPlayer({
             )}
           </div>
 
-          {/* Markers - a scrollable list in the sidebar, a chip row otherwise */}
-          {showMarkers && track.markers.length > 0 && (
-            <div className={
-              isSidebar
-                ? "border-t border-gray-700 pt-2 mt-2 flex-1 min-h-0"
-                : isFloating
-                ? "mt-1"
-                : "border-t border-gray-700 pt-2 mt-2"
-            }>
-              <MarkerChips
-                markers={track.markers}
-                currentTime={currentTime}
-                formatTime={formatTime}
-                onJumpToMarker={jumpToMarker}
-                onEditMarker={handleOpenEditMarkerDialog}
-                onDelete={onMarkerDelete}
-                orientation={isSidebar ? "vertical" : "horizontal"}
-              />
+          {/* Markers Panel (below waveform) */}
+          {showMarkers && !externalMarkersBar && (
+            <div className="border-t border-gray-700 pt-2 mt-2">
+              {/* Controls Row - Centered */}
+              <div className="flex items-center justify-center gap-4">
+                <div className="flex items-center gap-2">
+                  <label className="text-xs text-gray-400">Lead-in:</label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={30}
+                    value={leadIn}
+                    onChange={(e) => setLeadIn(Math.max(0, parseInt(e.target.value) || 0))}
+                    className="w-12 px-1 py-0.5 bg-gray-700 border border-gray-600 rounded text-xs text-center focus:outline-none focus:border-green-500"
+                  />
+                  <span className="text-xs text-gray-500">sec</span>
+                </div>
+
+                <button
+                  onClick={handleOpenMarkerDialog}
+                  className="px-3 py-1 bg-green-600 hover:bg-green-700 rounded text-xs"
+                >
+                  Add Marker
+                </button>
+
+                {track.markers.length > 0 && (
+                  <button
+                    onClick={() => onMarkersClear(track.id)}
+                    className="text-xs text-red-400 hover:text-red-300"
+                  >
+                    Clear all
+                  </button>
+                )}
+              </div>
+
+              {/* Markers List - Spread across full width and centered */}
+              {track.markers.length > 0 && (
+                <div className="flex flex-wrap justify-evenly items-center gap-2 mt-2 w-full">
+                  {[...track.markers]
+                    .sort((a, b) => a.timestamp - b.timestamp)
+                    .map((marker) => (
+                      <div
+                        key={marker.id}
+                        onClick={() => {
+                          if (editingMarkerId !== marker.id) jumpToMarker(marker.timestamp);
+                        }}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(e) => {
+                          if (editingMarkerId === marker.id) return;
+                          // Enter activates (jump); Space is reserved for play/pause.
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            jumpToMarker(marker.timestamp);
+                          }
+                        }}
+                        className="flex items-center gap-1 px-2 py-1 bg-gray-700 rounded text-xs group cursor-pointer"
+                      >
+                        <span className="text-green-400 font-mono">
+                          {formatTime(marker.timestamp)}
+                        </span>
+                        {editingMarkerId === marker.id ? (
+                          <input
+                            type="text"
+                            value={editingMarkerName}
+                            onChange={(e) => setEditingMarkerName(e.target.value)}
+                            onClick={(e) => e.stopPropagation()}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" && editingMarkerName.trim()) {
+                                onMarkerRename(marker.id, editingMarkerName.trim());
+                                setEditingMarkerId(null);
+                              } else if (e.key === "Escape") {
+                                setEditingMarkerId(null);
+                              }
+                            }}
+                            onBlur={() => setEditingMarkerId(null)}
+                            autoFocus
+                            className="w-20 px-1 bg-gray-600 rounded text-xs"
+                          />
+                        ) : (
+                          <>
+                            <span>
+                              {marker.name}
+                            </span>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditingMarkerId(marker.id);
+                                setEditingMarkerName(marker.name);
+                              }}
+                              className="p-0.5 text-gray-500 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                              title="Edit marker name"
+                            >
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                              </svg>
+                            </button>
+                          </>
+                        )}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onMarkerDelete(marker.id);
+                          }}
+                          className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-300"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -1773,8 +1786,7 @@ function BottomPlayer({
           isOpen={showMarkerDialog}
           timestamp={pendingMarkerTimestamp}
           formatTime={formatTime}
-          initialName={editingMarker?.name}
-          onSave={handleSaveMarkerDialog}
+          onSave={(name) => addMarker(name, pendingMarkerTimestamp)}
           onCancel={handleCancelMarkerDialog}
         />
         <MarkerNameDialog

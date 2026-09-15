@@ -400,6 +400,7 @@ function SinglePdfViewerInner({
             const next = !fitToPage;
             setFitToPage(next);
             localStorage.setItem("pdfViewer.fitToPage", String(next));
+            onFitToPageChange?.(next);
           }}
           className={`flex items-center gap-1 px-2 py-1 text-xs rounded transition-colors ${
             fitToPage

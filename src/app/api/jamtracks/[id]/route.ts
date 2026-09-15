@@ -95,10 +95,17 @@ export async function PATCH(
       }
     }
 
+    // Return the same shape as GET. Callers replace their in-memory jam track
+    // with this response, so anything left out here disappears from the client
+    // until the next library fetch.
     const updatedJamTrack = await prisma.jamTrack.update({
       where: { id },
       data: updateData,
-      include: { markers: { orderBy: { timestamp: "asc" } } },
+      include: {
+        markers: { orderBy: { timestamp: "asc" } },
+        loops: true,
+        pdfs: { orderBy: { sortOrder: "asc" }, include: { pageFlips: true } },
+      },
     });
     return NextResponse.json(updatedJamTrack);
   } catch (error) {

@@ -6,8 +6,8 @@ import BookGrid from "@/components/BookGrid";
 import TrackListView from "@/components/TrackListView";
 import JamTrackList from "@/components/JamTrackList";
 import JamTrackPdfPanel from "@/components/JamTrackPdfPanel";
-import BottomPlayer from "@/components/BottomPlayer";
-import TrackListRail from "@/components/practice/TrackListRail";
+import BottomPlayer, { MarkerBarState } from "@/components/BottomPlayer";
+import MarkersBar from "@/components/MarkersBar";
 import PageFlipDialog from "@/components/PageFlipDialog";
 import TopNav from "@/components/TopNav";
 import Fretboard from "@/components/Fretboard";
@@ -23,10 +23,10 @@ import HomeView from "@/components/HomeView";
 import UploadModal from "@/components/UploadModal";
 import VideoPlayer from "@/components/VideoPlayer";
 import { AuthorSummary, BookSummary, Book, Track, TrackTab, Marker, JamTrack, JamTrackMarker, BookVideo, BookVideoMarker, SearchResultTrack, SearchResultBook, SearchResultJamTrack, SavedLoop, JamTrackLoop } from "@/types";
+import { applySavedVolume, clampTrackVolume } from "@/lib/trackVolume";
+import { applySavedPlaybackSpeed, clampPlaybackSpeed } from "@/lib/playbackSpeed";
 import TrackTabsModal from "@/components/TrackTabsModal";
 import { resolvePageFlip } from "@/lib/pageFlips";
-import { shouldCollapseOnPlay, usesFloatingLayout } from "@/lib/practiceLayout";
-import { useIsWideViewport } from "@/hooks/useIsWideViewport";
 
 type Section = 'home' | 'lessons' | 'videos' | 'fretboard' | 'chords' | 'tools' | 'circle' | 'jamtracks' | 'recordings' | 'caged';
 
@@ -145,14 +145,14 @@ export default function Home() {
   const [pdfPath, setPdfPath] = useState<string | null>(null);
   const [pdfPage, setPdfPage] = useState(1);
   const [pdfVersion, setPdfVersion] = useState(0);
-  // Reported by PdfViewer. Scroll mode is width-bound, so it gets a bigger
-  // share of the split; fit-to-page is height-bound and gains nothing from it.
+  // Reported by PdfViewer. Scroll mode is width-bound, so the PDF gets a
+  // bigger share of the split; fit-to-page is height-bound and gains nothing.
   const [isFitToPage, setIsFitToPage] = useState(true);
   const listPaneWidth = isFitToPage ? "xl:w-1/2" : "xl:w-1/3";
+  const pdfPaneWidth = isFitToPage ? "xl:w-1/2" : "xl:w-2/3";
 
-  // Practice layout: the track list yields to the PDF once playback starts.
-  const [isListCollapsed, setIsListCollapsed] = useState(false);
-  const isWideViewport = useIsWideViewport();
+  // Marker bar state from BottomPlayer
+  const [markerBarState, setMarkerBarState] = useState<MarkerBarState | null>(null);
 
   // Audio time state (used for page sync)
   const [currentAudioTime, setCurrentAudioTime] = useState(0);
@@ -186,25 +186,6 @@ export default function Home() {
 
   // Get active section from URL path
   const activeSection = getSectionFromPath(params.section as string[] | undefined);
-
-  // Floating only earns its keep with a PDF filling the panel beside the list.
-  const isFloatingPractice = activeSection === 'lessons' && usesFloatingLayout({
-    isWideViewport,
-    hasPdf: !!pdfPath && !!selectedBookId,
-    isShowingVideo: !!(selectedVideo && showVideo),
-  });
-  const isJamFloating = activeSection === 'jamtracks' && usesFloatingLayout({
-    isWideViewport,
-    hasPdf: (currentJamTrack?.pdfs?.length ?? 0) > 0,
-    isShowingVideo: false,
-  });
-  const isPracticeCollapsed = isFloatingPractice && isListCollapsed;
-  const isJamCollapsed = isJamFloating && isListCollapsed;
-
-  // While practising the player becomes a column beside the PDF; the PDF then
-  // renders narrower, so more of the page fits on screen at once.
-  const isPracticeSidebar = isPracticeCollapsed && !!(currentTrack || currentJamTrack);
-  const isJamSidebar = isJamCollapsed && !!currentJamTrack;
 
   // Helper to update library URL with artist/album params
   const updateLibraryUrl = (
@@ -943,9 +924,51 @@ export default function Home() {
     updateVideoInBookDetail(videoId, v => ({ ...v, markers: updater(v.markers ?? []) }));
   };
 
-  // The player PATCHes the volume itself (debounced); this only keeps the
-  // in-memory copies in step so switching videos and back doesn't re-apply a
-  // stale value.
+  // Apply an update to the book detail's tracks, both the loose ones and those
+  // nested in chapters. `update` must return the same array reference when it
+  // changes nothing, so an unrelated track's save doesn't re-render the book.
+  const updateTracksInBookDetail = useCallback(
+    (update: (tracks: Track[]) => Track[]) => {
+      setSelectedBookDetail(prev => {
+        if (!prev) return prev;
+        const newTracks = update(prev.tracks ?? []);
+        let chaptersChanged = false;
+        const newChapters = prev.chapters?.map(ch => {
+          const chTracks = update(ch.tracks ?? []);
+          if (chTracks === ch.tracks) return ch;
+          chaptersChanged = true;
+          return { ...ch, tracks: chTracks };
+        });
+        if (newTracks === prev.tracks && !chaptersChanged) return prev;
+        return {
+          ...prev,
+          tracks: newTracks,
+          ...(chaptersChanged ? { chapters: newChapters } : {}),
+        };
+      });
+    },
+    []
+  );
+
+  // Keep the in-memory track in step with the volume BottomPlayer just saved,
+  // so re-selecting it restores the new volume instead of the one the last
+  // library fetch returned. Same for playback speed below.
+  const handleTrackVolumeChange = useCallback((trackId: string, volume: number) => {
+    const clamped = clampTrackVolume(volume);
+    setJamTracks(prev => applySavedVolume(prev, trackId, clamped));
+    setCurrentTrack(prev => (prev?.id === trackId ? { ...prev, volume: clamped } : prev));
+    updateTracksInBookDetail(tracks => applySavedVolume(tracks, trackId, clamped));
+  }, [updateTracksInBookDetail]);
+
+  const handleTrackPlaybackSpeedChange = useCallback((trackId: string, speed: number) => {
+    const clamped = clampPlaybackSpeed(speed);
+    setJamTracks(prev => applySavedPlaybackSpeed(prev, trackId, clamped));
+    setCurrentTrack(prev =>
+      prev?.id === trackId ? { ...prev, playbackSpeed: clamped } : prev
+    );
+    updateTracksInBookDetail(tracks => applySavedPlaybackSpeed(tracks, trackId, clamped));
+  }, [updateTracksInBookDetail]);
+
   const handleVideoVolumeChange = (videoId: string, volume: number) => {
     setSelectedVideo(prev => (prev?.id === videoId ? { ...prev, volume } : prev));
     updateVideoInBookDetail(videoId, v => ({ ...v, volume }));
@@ -1956,18 +1979,6 @@ export default function Home() {
     setShowVideo(false);
   }, [selectedBookId]);
 
-  // Starting playback collapses the track list. Pausing deliberately does not
-  // expand it again — only an explicit click on the rail does.
-  useEffect(() => {
-    if (!isFloatingPractice && !isJamFloating) return;
-    setIsListCollapsed((prev) => shouldCollapseOnPlay(prev, audioIsPlaying));
-  }, [isFloatingPractice, isJamFloating, audioIsPlaying]);
-
-  // Browsing to another book or section should show the list again.
-  useEffect(() => {
-    setIsListCollapsed(false);
-  }, [selectedBookId, activeSection]);
-
 
   return (
     <div className="h-screen flex flex-col bg-gray-900">
@@ -1987,150 +1998,76 @@ export default function Home() {
         <HomeView onGoToTrack={handleGoToTrackFromMetrics} authors={authors} />
       ) : activeSection === 'lessons' ? (
         <>
-          {/* Practice area. The panes sit on top; the player either docks
-              beneath them or floats over the PDF while practising. */}
-          <div className="flex-1 min-h-0 flex flex-col relative">
-            <div className="flex flex-col xl:flex-row flex-1 min-h-0">
-              {/* Left: track list, or the rail it collapses to */}
-              {isPracticeCollapsed ? (
-                <TrackListRail
-                  trackName={currentTrack?.title ?? currentJamTrack?.title ?? null}
-                  onExpand={() => setIsListCollapsed(false)}
-                />
-              ) : (
-                <div className={`w-full ${selectedBookId ? `${listPaneWidth} xl:border-r border-gray-700` : ''} flex flex-col min-w-0`}>
-                  <div className="flex-1 min-h-0">
-                  {selectedBookId && !selectedBookDetail ? (
-                    <div className="h-full flex items-center justify-center bg-gray-900">
-                      <div className="w-8 h-8 border-4 border-gray-600 border-t-gray-400 rounded-full animate-spin"></div>
-                    </div>
-                  ) : selectedBookDetail && selectedAuthor ? (
-                    <TrackListView
-                      author={selectedAuthor}
-                      book={selectedBookDetail}
-                      currentTrack={currentTrack}
-                      selectedVideo={selectedVideo}
-                      showVideo={showVideo}
-                      onTrackSelect={handleTrackSelect}
-                      onVideoSelect={handleVideoSelect}
-                      onToggleVideo={() => setShowVideo(!showVideo)}
-                      onBack={returnToBookGrid}
-                      onBookUpdate={handleBookUpdate}
-                      onCoverUpload={handleCoverUpload}
-                      onCoverUploadFromUrl={handleCoverUploadFromUrl}
-                      onCoverDelete={handleCoverDelete}
-                      onBookDelete={handleBookDelete}
-                      onBookResetProgress={handleBookResetProgress}
-                      onTrackUpdate={handleMetadataUpdate}
-                      onTrackComplete={handleTrackComplete}
-                      onTrackInProgress={handleTrackInProgress}
-                      onTrackFavorite={handleTrackFavorite}
-                      onBookInProgress={handleBookInProgress}
-                      onShowPdf={handleShowPdf}
-                      onPdfUpload={handlePdfUpload}
-                      onPdfDelete={handlePdfDelete}
-                      onPdfConvert={handlePdfConvert}
-                      currentPdfPage={pdfPage}
-                      onAssignPdfPage={handleAssignPdfPage}
-                      onVideoUpload={handleVideoUpload}
-                      onVideoDelete={handleVideoDelete}
-                      onVideoUpdate={handleVideoUpdate}
-                      onVideoComplete={handleVideoComplete}
-                      onVideoInProgress={handleVideoInProgress}
-                      onTrackNotesUpdate={handleTrackNotesUpdate}
-                      onVideoNotesUpdate={handleVideoNotesUpdate}
-                      onAudioUpload={handleAudioUploadForBook}
-                      onLibraryRefresh={fetchLibrary}
-                      onExtractAudio={handleExtractAudio}
-                      extractingVideoId={extractingVideoId}
-                    />
-                  ) : (
-                    <BookGrid
-                      books={allBooks}
-                      onBookSelect={handleBookSelect}
-                      onScan={handleScan}
-                      onUploadClick={() => setIsUploadModalOpen(true)}
-                      isScanning={isScanning}
-                      isUploading={isUploading}
-                    />
-                  )}
+          <div className="flex flex-col xl:flex-row flex-1 min-h-0">
+            {/* Left side: Content + Player - Full width when no book selected, 50% on xl+ when book open */}
+            <div className={`w-full ${selectedBookId ? `${listPaneWidth} xl:border-r border-gray-700` : ''} flex flex-col min-w-0`}>
+              {/* Main Content Area */}
+              <div className="flex-1 min-h-0">
+                {selectedBookId && !selectedBookDetail ? (
+                  <div className="h-full flex items-center justify-center bg-gray-900">
+                    <div className="w-8 h-8 border-4 border-gray-600 border-t-gray-400 rounded-full animate-spin"></div>
                   </div>
-                </div>
-              )}
-
-              {/* Reserves the practice sidebar's width. The player is absolutely
-                  positioned over this so it never changes DOM parent — moving it
-                  would remount the audio and restart playback. */}
-              {isPracticeSidebar && (
-                <div className="hidden xl:block w-[344px] shrink-0" aria-hidden="true" />
-              )}
-
-              {/* PDF/Video Panel - hidden below xl and when no book is selected */}
-              <div className={`${selectedBookId ? 'hidden xl:flex xl:flex-1' : 'hidden'} flex-col min-w-0`}>
-                {selectedVideo && showVideo ? (
-                  /* Video Player - Full Height */
-                  <div className="flex-1 overflow-hidden">
-                    <VideoPlayer
-                      video={selectedVideo}
-                      markers={selectedVideo.markers ?? []}
-                      onAddMarker={(name, timestamp) =>
-                        handleVideoMarkerAdd(selectedVideo.bookId, selectedVideo.id, name, timestamp)
-                      }
-                      onRenameMarker={(markerId, name) =>
-                        handleVideoMarkerRename(selectedVideo.bookId, selectedVideo.id, markerId, name)
-                      }
-                      onDeleteMarker={(markerId) =>
-                        handleVideoMarkerDelete(selectedVideo.bookId, selectedVideo.id, markerId)
-                      }
-                      onClearMarkers={() =>
-                        handleVideoMarkersClear(selectedVideo.bookId, selectedVideo.id)
-                      }
-                      onVolumeChange={(volume) =>
-                        handleVideoVolumeChange(selectedVideo.id, volume)
-                      }
-                      onPlaybackSpeedChange={(speed) =>
-                        handleVideoPlaybackSpeedChange(selectedVideo.id, speed)
-                      }
-                    />
-                  </div>
-              ) : pdfPath ? (
-                <div className="flex-1 min-h-0">
-                  <PdfViewer
-                    pdfPath={pdfPath}
-                    currentPage={pdfPage}
-                    onPageChange={setPdfPage}
-                    version={pdfVersion}
-                    onFitToPageChange={setIsFitToPage}
+                ) : selectedBookDetail && selectedAuthor ? (
+                  <TrackListView
+                    author={selectedAuthor}
+                    book={selectedBookDetail}
+                    currentTrack={currentTrack}
+                    selectedVideo={selectedVideo}
+                    showVideo={showVideo}
+                    onTrackSelect={handleTrackSelect}
+                    onVideoSelect={handleVideoSelect}
+                    onToggleVideo={() => setShowVideo(!showVideo)}
+                    onBack={returnToBookGrid}
+                    onBookUpdate={handleBookUpdate}
+                    onCoverUpload={handleCoverUpload}
+                    onCoverUploadFromUrl={handleCoverUploadFromUrl}
+                    onCoverDelete={handleCoverDelete}
+                    onBookDelete={handleBookDelete}
+                    onBookResetProgress={handleBookResetProgress}
+                    onTrackUpdate={handleMetadataUpdate}
+                    onTrackComplete={handleTrackComplete}
+                    onTrackInProgress={handleTrackInProgress}
+                    onTrackFavorite={handleTrackFavorite}
+                    onBookInProgress={handleBookInProgress}
+                    onShowPdf={handleShowPdf}
+                    onPdfUpload={handlePdfUpload}
+                    onPdfDelete={handlePdfDelete}
+                    onPdfConvert={handlePdfConvert}
+                    currentPdfPage={pdfPage}
+                    onAssignPdfPage={handleAssignPdfPage}
+                    onVideoUpload={handleVideoUpload}
+                    onVideoDelete={handleVideoDelete}
+                    onVideoUpdate={handleVideoUpdate}
+                    onVideoComplete={handleVideoComplete}
+                    onVideoInProgress={handleVideoInProgress}
+                    onTrackNotesUpdate={handleTrackNotesUpdate}
+                    onVideoNotesUpdate={handleVideoNotesUpdate}
+                    onAudioUpload={handleAudioUploadForBook}
+                    onLibraryRefresh={fetchLibrary}
+                    onExtractAudio={handleExtractAudio}
+                    extractingVideoId={extractingVideoId}
                   />
-                </div>
-              ) : (
-                <div className="h-full flex items-center justify-center bg-gray-900 text-gray-500">
-                  <div className="text-center">
-                    <svg className="w-16 h-16 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
-                    <p className="text-lg">Select a book with a PDF or jam track with sheets</p>
-                  </div>
-                </div>
-              )}
+                ) : (
+                  <BookGrid
+                    books={allBooks}
+                    onBookSelect={handleBookSelect}
+                    onScan={handleScan}
+                    onUploadClick={() => setIsUploadModalOpen(true)}
+                    isScanning={isScanning}
+                    isUploading={isUploading}
+                  />
+                )}
               </div>
-            </div>
 
-            {/* Player - a column beside the PDF while practising, a floating bar
-                while browsing with a track loaded, docked otherwise */}
-            <div
-              className={
-                isPracticeSidebar
-                  ? "hidden xl:block absolute top-0 bottom-0 left-10 w-[344px] z-20"
-                  : isFloatingPractice && (currentTrack || currentJamTrack)
-                  ? `absolute bottom-0 right-0 z-20 ${isFitToPage ? "left-1/2" : "left-1/3"}`
-                  : `shrink-0 overflow-hidden transition-all duration-300 ease-in-out ${
-                      currentTrack || currentJamTrack ? "max-h-[70vh]" : "max-h-0"
-                    }`
-              }
-            >
+              {/* Bottom Player - Collapses when no track selected */}
+              <div
+                className={`shrink-0 overflow-hidden transition-all duration-300 ease-in-out ${
+                  currentTrack || currentJamTrack
+                    ? "h-[30vh] min-h-55 max-h-80"
+                    : "h-0 min-h-0 max-h-0"
+                }`}
+              >
                 <BottomPlayer
-                  variant={isPracticeSidebar ? "sidebar" : isFloatingPractice ? "floating" : "docked"}
                   track={currentTrack || currentJamTrack}
                   onMarkerAdd={stableOnMarkerAdd}
                   onMarkerUpdate={stableOnMarkerUpdate}
@@ -2139,6 +2076,10 @@ export default function Home() {
                   onMarkersClear={stableOnMarkersClear}
                   onLoopSave={stableOnLoopSave}
                   onLoopDelete={stableOnLoopDelete}
+                  onVolumeChange={handleTrackVolumeChange}
+                  onPlaybackSpeedChange={handleTrackPlaybackSpeedChange}
+                  externalMarkersBar={true}
+                  onMarkerBarStateChange={setMarkerBarState}
                   onTimeUpdate={stableOnTimeUpdate}
                   onSeekReady={stableOnSeekReady}
                   onTrackTabs={currentTrack ? () => setTabsTrack(currentTrack) : undefined}
@@ -2153,12 +2094,140 @@ export default function Home() {
                     }
                   }}
                   onPageFlipDelete={handlePageFlipDelete}
-                  onTempoChange={handleTempoChange}
-                  pageFlipAnticipation={pageFlipAnticipation}
-                  onPageFlipAnticipationChange={handlePageFlipAnticipationChange}
                 />
+              </div>
+            </div>
+
+            {/* PDF/Video Panel - Hidden on mobile and when no book selected, visible on xl+ */}
+            <div className={`${selectedBookId ? `hidden xl:flex ${pdfPaneWidth}` : 'hidden'} flex-col`}>
+              {selectedVideo && showVideo ? (
+                /* Video Player - Full Height */
+                <div className="flex-1 overflow-hidden">
+                  <VideoPlayer
+                    video={selectedVideo}
+                    markers={selectedVideo.markers ?? []}
+                    onAddMarker={(name, timestamp) =>
+                      handleVideoMarkerAdd(selectedVideo.bookId, selectedVideo.id, name, timestamp)
+                    }
+                    onRenameMarker={(markerId, name) =>
+                      handleVideoMarkerRename(selectedVideo.bookId, selectedVideo.id, markerId, name)
+                    }
+                    onDeleteMarker={(markerId) =>
+                      handleVideoMarkerDelete(selectedVideo.bookId, selectedVideo.id, markerId)
+                    }
+                    onClearMarkers={() =>
+                      handleVideoMarkersClear(selectedVideo.bookId, selectedVideo.id)
+                    }
+                    onVolumeChange={(volume) =>
+                      handleVideoVolumeChange(selectedVideo.id, volume)
+                    }
+                    onPlaybackSpeedChange={(speed) =>
+                      handleVideoPlaybackSpeedChange(selectedVideo.id, speed)
+                    }
+                  />
+                </div>
+              ) : pdfPath ? (
+                <div className="flex flex-1 min-h-0">
+                  <div className="flex-1 min-w-0">
+                    <PdfViewer
+                      pdfPath={pdfPath}
+                      currentPage={pdfPage}
+                      onPageChange={setPdfPage}
+                      version={pdfVersion}
+                      onFitToPageChange={setIsFitToPage}
+                    />
+                  </div>
+                  {/* Markers Sidebar - shown next to PDF in fit-to-page mode */}
+                  {isFitToPage && (currentTrack || currentJamTrack) && markerBarState && markerBarState.showMarkers && (
+                    <div className="w-64 border-l border-gray-700 bg-gray-900 flex flex-col overflow-hidden">
+                      <MarkersBar
+                        markers={(currentTrack || currentJamTrack)!.markers}
+                        visible={true}
+                        layout="vertical"
+                        leadIn={markerBarState.leadIn}
+                        editingMarkerId={markerBarState.editingMarkerId}
+                        editingMarkerName={markerBarState.editingMarkerName}
+                        currentTime={markerBarState.currentTime}
+                        onLeadInChange={markerBarState.setLeadIn}
+                        onAddMarker={markerBarState.addMarker}
+                        onJumpToMarker={markerBarState.jumpToMarker}
+                        onStartEdit={(id, name) => {
+                          markerBarState.setEditingMarkerId(id);
+                          markerBarState.setEditingMarkerName(name);
+                        }}
+                        onEditNameChange={markerBarState.setEditingMarkerName}
+                        onSaveEdit={(markerId, name) => {
+                          handleMarkerRename(markerId, name);
+                          markerBarState.setEditingMarkerId(null);
+                        }}
+                        onCancelEdit={() => markerBarState.setEditingMarkerId(null)}
+                        onDelete={(markerId) => handleMarkerDelete(markerId)}
+                        onClearAll={() => {
+                          if (currentTrack) handleMarkersClear(currentTrack.id);
+                        }}
+                        formatTime={markerBarState.formatTime}
+                        isCountingIn={markerBarState.isCountingIn}
+                        currentCountInBeat={markerBarState.currentCountInBeat}
+                        totalCountInBeats={markerBarState.totalCountInBeats}
+                        trackTempo={markerBarState.trackTempo}
+                        trackTimeSignature={markerBarState.trackTimeSignature}
+                        onTempoChange={handleTempoChange}
+                        pageFlipAnticipation={pageFlipAnticipation}
+                        onPageFlipAnticipationChange={handlePageFlipAnticipationChange}
+                      />
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="h-full flex items-center justify-center bg-gray-900 text-gray-500">
+                  <div className="text-center">
+                    <svg className="w-16 h-16 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    <p className="text-lg">Select a book with a PDF or jam track with sheets</p>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
+
+          {/* Markers Bar - Spans full width underneath (hidden when markers shown in sidebar) */}
+          {(currentTrack || currentJamTrack) && markerBarState && !(isFitToPage && pdfPath && selectedBookId) && (
+            <MarkersBar
+              markers={(currentTrack || currentJamTrack)!.markers}
+              visible={markerBarState.showMarkers}
+              leadIn={markerBarState.leadIn}
+              editingMarkerId={markerBarState.editingMarkerId}
+              editingMarkerName={markerBarState.editingMarkerName}
+              currentTime={markerBarState.currentTime}
+              onLeadInChange={markerBarState.setLeadIn}
+              onAddMarker={markerBarState.addMarker}
+              onJumpToMarker={markerBarState.jumpToMarker}
+              onStartEdit={(id, name) => {
+                markerBarState.setEditingMarkerId(id);
+                markerBarState.setEditingMarkerName(name);
+              }}
+              onEditNameChange={markerBarState.setEditingMarkerName}
+              onSaveEdit={(markerId, name) => {
+                handleMarkerRename(markerId, name);
+                markerBarState.setEditingMarkerId(null);
+              }}
+              onCancelEdit={() => markerBarState.setEditingMarkerId(null)}
+              onDelete={(markerId) => handleMarkerDelete(markerId)}
+              onClearAll={() => {
+                if (currentTrack) handleMarkersClear(currentTrack.id);
+              }}
+              formatTime={markerBarState.formatTime}
+              isCountingIn={markerBarState.isCountingIn}
+              currentCountInBeat={markerBarState.currentCountInBeat}
+              totalCountInBeats={markerBarState.totalCountInBeats}
+              trackTempo={markerBarState.trackTempo}
+              trackTimeSignature={markerBarState.trackTimeSignature}
+              onTempoChange={handleTempoChange}
+              pageFlipAnticipation={pageFlipAnticipation}
+              onPageFlipAnticipationChange={handlePageFlipAnticipationChange}
+            />
+          )}
 
           {/* Mobile Bottom Navigation - Only visible on mobile */}
           <div className="xl:hidden fixed bottom-0 left-0 right-0 bg-gray-800 border-t border-gray-700 z-30 safe-area-inset-bottom">
@@ -2203,74 +2272,30 @@ export default function Home() {
           </div>
         </>
       ) : activeSection === 'jamtracks' ? (
-        <div className="flex flex-col h-full overflow-hidden relative">
-          <div className="flex flex-1 min-h-0">
-            {/* Left: jam track list, or the rail it collapses to */}
-            {isJamCollapsed ? (
-              <TrackListRail
-                trackName={currentJamTrack?.title ?? null}
-                onExpand={() => setIsListCollapsed(false)}
+        <div className="flex h-full overflow-hidden">
+          {/* Left half: track list (top) stacked over the waveform (bottom) */}
+          <div className={`${isFitToPage ? "w-1/2" : "w-1/3"} flex flex-col min-h-0 border-r border-gray-700`}>
+            <div className="flex-1 min-h-0 overflow-y-auto">
+              <JamTrackList
+                jamTracks={jamTracks}
+                currentJamTrackId={currentJamTrack?.id ?? null}
+                onSelect={(id) => {
+                  const jt = jamTracks.find((t) => t.id === id);
+                  if (jt) handleJamTrackSelect(jt);
+                }}
+                onUpload={handleJamTrackUpload}
+                isUploading={isUploadingJamTracks}
+                onYouTubeImport={handleYouTubeImport}
+                isImportingFromYouTube={isImportingFromYouTube}
               />
-            ) : (
-              <div className={`${isFitToPage ? "w-1/2" : "w-1/3"} flex flex-col min-h-0 border-r border-gray-700 overflow-y-auto`}>
-                <JamTrackList
-                  jamTracks={jamTracks}
-                  currentJamTrackId={currentJamTrack?.id ?? null}
-                  onSelect={(id) => {
-                    const jt = jamTracks.find((t) => t.id === id);
-                    if (jt) handleJamTrackSelect(jt);
-                  }}
-                  onUpload={handleJamTrackUpload}
-                  isUploading={isUploadingJamTracks}
-                  onYouTubeImport={handleYouTubeImport}
-                  isImportingFromYouTube={isImportingFromYouTube}
-                />
-              </div>
-            )}
-
-            {/* Reserves the practice sidebar's width - see the lessons pane */}
-            {isJamSidebar && (
-              <div className="hidden xl:block w-[344px] shrink-0" aria-hidden="true" />
-            )}
-
-            {/* Right: PDF panel, fills top to bottom */}
-            <div className="flex-1 min-w-0 min-h-0">
-              {currentJamTrack ? (
-                <JamTrackPdfPanel
-                  jamTrackId={currentJamTrack.id}
-                  pdfs={currentJamTrack.pdfs ?? []}
-                  activePdfId={activeJamPdfId}
-                  onActivePdfChange={setActiveJamPdfId}
-                  currentPage={pdfPage}
-                  onPageChange={setPdfPage}
-                  onUploaded={refreshCurrentJamTrack}
-                  onRenamed={refreshCurrentJamTrack}
-                  onDeleted={refreshCurrentJamTrack}
-                  onFitToPageChange={setIsFitToPage}
-                />
-              ) : (
-                <div className="h-full flex items-center justify-center text-gray-500">
-                  Select a jam track to get started
-                </div>
-              )}
             </div>
-          </div>
-
-          {/* Player - floats over the sheets while practising, docks otherwise */}
-          {currentJamTrack && (
-            <div
-              className={
-                isJamSidebar
-                  ? "hidden xl:block absolute top-0 bottom-0 left-10 w-[344px] z-20"
-                  : isJamFloating
-                  ? `absolute bottom-0 right-0 z-20 ${isFitToPage ? "left-1/2" : "left-1/3"}`
-                  : "shrink-0 border-t border-gray-700"
-              }
-            >
+            {currentJamTrack && (
+              <div className="shrink-0 border-t border-gray-700">
                 <BottomPlayer
-                  variant={isJamSidebar ? "sidebar" : isJamFloating ? "floating" : "docked"}
-                  compact={!isJamFloating && !isJamSidebar}
                   track={currentJamTrack}
+                  compact={true}
+                  externalMarkersBar={true}
+                  onMarkerBarStateChange={setMarkerBarState}
                   onMarkerAdd={stableOnMarkerAdd}
                   onMarkerUpdate={stableOnMarkerUpdate}
                   onMarkerRename={stableOnMarkerRename}
@@ -2278,6 +2303,8 @@ export default function Home() {
                   onMarkersClear={stableOnMarkersClear}
                   onLoopSave={stableOnLoopSave}
                   onLoopDelete={stableOnLoopDelete}
+                  onVolumeChange={handleTrackVolumeChange}
+                  onPlaybackSpeedChange={handleTrackPlaybackSpeedChange}
                   onTimeUpdate={stableOnTimeUpdate}
                   onSeekReady={stableOnSeekReady}
                   currentPdfPage={pdfPage}
@@ -2290,14 +2317,68 @@ export default function Home() {
                     }
                   }}
                   onPageFlipDelete={handlePageFlipDelete}
+                />
+              </div>
+            )}
+            {currentJamTrack && markerBarState && markerBarState.showMarkers && (
+              <div className="shrink-0 border-t border-gray-700">
+                <MarkersBar
+                  markers={currentJamTrack.markers}
+                  visible={markerBarState.showMarkers}
+                  leadIn={markerBarState.leadIn}
+                  editingMarkerId={markerBarState.editingMarkerId}
+                  editingMarkerName={markerBarState.editingMarkerName}
+                  currentTime={markerBarState.currentTime}
+                  onLeadInChange={markerBarState.setLeadIn}
+                  onAddMarker={markerBarState.addMarker}
+                  onJumpToMarker={markerBarState.jumpToMarker}
+                  onStartEdit={(id, name) => {
+                    markerBarState.setEditingMarkerId(id);
+                    markerBarState.setEditingMarkerName(name);
+                  }}
+                  onEditNameChange={markerBarState.setEditingMarkerName}
+                  onSaveEdit={(markerId, name) => {
+                    handleMarkerRename(markerId, name);
+                    markerBarState.setEditingMarkerId(null);
+                  }}
+                  onCancelEdit={() => markerBarState.setEditingMarkerId(null)}
+                  onDelete={(markerId) => handleMarkerDelete(markerId)}
+                  onClearAll={() => handleMarkersClear(currentJamTrack.id)}
+                  formatTime={markerBarState.formatTime}
+                  isCountingIn={markerBarState.isCountingIn}
+                  currentCountInBeat={markerBarState.currentCountInBeat}
+                  totalCountInBeats={markerBarState.totalCountInBeats}
+                  trackTempo={markerBarState.trackTempo}
+                  trackTimeSignature={markerBarState.trackTimeSignature}
                   onTempoChange={handleTempoChange}
                   pageFlipAnticipation={pageFlipAnticipation}
                   onPageFlipAnticipationChange={handlePageFlipAnticipationChange}
                 />
-            </div>
-          )}
+              </div>
+            )}
+          </div>
+          {/* Right half: PDF panel, fills top to bottom */}
+          <div className="w-1/2 min-w-0 min-h-0">
+            {currentJamTrack ? (
+              <JamTrackPdfPanel
+                jamTrackId={currentJamTrack.id}
+                pdfs={currentJamTrack.pdfs ?? []}
+                activePdfId={activeJamPdfId}
+                onActivePdfChange={setActiveJamPdfId}
+                currentPage={pdfPage}
+                onPageChange={setPdfPage}
+                onUploaded={refreshCurrentJamTrack}
+                onRenamed={refreshCurrentJamTrack}
+                onDeleted={refreshCurrentJamTrack}
+                onFitToPageChange={setIsFitToPage}
+              />
+            ) : (
+              <div className="h-full flex items-center justify-center text-gray-500">
+                Select a jam track to get started
+              </div>
+            )}
+          </div>
         </div>
-
       ) : activeSection === 'videos' ? (
         <div className="flex-1 min-h-0">
           <Videos initialVideoId={searchParams.get('video')} />
