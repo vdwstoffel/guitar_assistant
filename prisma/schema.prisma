@@ -293,6 +293,7 @@ model BackingTrack {
   duration     Float?
   rootNote     String
   scaleType    String
+  volume       Int?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 }

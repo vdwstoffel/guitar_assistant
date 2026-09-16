@@ -272,6 +272,7 @@ export interface BackingTrack {
   duration: number | null;
   rootNote: string;
   scaleType: string;
+  volume: number | null;
   createdAt: string;
   updatedAt: string;
 }

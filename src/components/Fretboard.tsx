@@ -218,7 +218,14 @@ export default function Fretboard() {
             <div className="flex-1 min-w-0">
               <ScaleReferenceTabs root={selectedKey} scaleType={selectedScale} />
             </div>
-            <ScaleSongsPanel root={selectedKey} scaleType={selectedScale} />
+            <ScaleSongsPanel
+              root={selectedKey}
+              scaleType={selectedScale}
+              onSelectScale={(songRoot, songScale) => {
+                setSelectedKey(songRoot);
+                setSelectedScale(songScale);
+              }}
+            />
           </div>
         )}
       </div>

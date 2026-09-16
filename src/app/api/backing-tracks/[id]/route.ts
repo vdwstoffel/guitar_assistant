@@ -3,6 +3,7 @@ import * as fs from "fs/promises";
 import { prisma } from "@/lib/prisma";
 import { NOTES, SCALE_FORMULAS } from "@/lib/musicTheory";
 import { backingTrackAudioDir } from "@/lib/backingTrackAudio";
+import { clampTrackVolume } from "@/lib/trackVolume";
 
 function isValidRootNote(note: unknown): note is string {
   return typeof note === "string" && (NOTES as readonly string[]).includes(note);
@@ -24,14 +25,14 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
 
-  let body: { title?: unknown; rootNote?: unknown; scaleType?: unknown };
+  let body: { title?: unknown; rootNote?: unknown; scaleType?: unknown; volume?: unknown };
   try {
     body = await request.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const data: { title?: string; rootNote?: string; scaleType?: string } = {};
+  const data: { title?: string; rootNote?: string; scaleType?: string; volume?: number | null } = {};
 
   if (body.title !== undefined) {
     if (typeof body.title !== "string" || !body.title.trim()) {
@@ -52,6 +53,17 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       return NextResponse.json({ error: "Invalid scaleType." }, { status: 400 });
     }
     data.scaleType = body.scaleType;
+  }
+
+  // Per-track volume (0-100). null clears it back to the default.
+  if (body.volume !== undefined) {
+    if (body.volume === null) {
+      data.volume = null;
+    } else if (typeof body.volume !== "number" || !Number.isFinite(body.volume)) {
+      return NextResponse.json({ error: "volume must be a number between 0 and 100, or null" }, { status: 400 });
+    } else {
+      data.volume = clampTrackVolume(body.volume);
+    }
   }
 
   if (Object.keys(data).length === 0) {

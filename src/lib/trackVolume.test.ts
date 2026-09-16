@@ -4,6 +4,7 @@ import {
   clampTrackVolume,
   resolveTrackVolume,
   applySavedVolume,
+  resolveBackingTrackVolume,
 } from "./trackVolume";
 
 describe("resolveTrackVolume", () => {
@@ -86,5 +87,34 @@ describe("volume survives re-selecting a jam track", () => {
     // in-memory track it is handed.
     const reselected = jamTracks.find((jt) => jt.id === "painkiller")!;
     expect(resolveTrackVolume(reselected.volume)).toBe(20);
+  });
+});
+
+describe("resolveBackingTrackVolume", () => {
+  it("uses the song's own volume once it has one", () => {
+    expect(resolveBackingTrackVolume(30, 90)).toBe(30);
+  });
+  it("falls back to the shared level for a song that never had one", () => {
+    expect(resolveBackingTrackVolume(null, 90)).toBe(90);
+    expect(resolveBackingTrackVolume(undefined, 90)).toBe(90);
+  });
+  it("keeps a deliberately silenced song silent", () => {
+    expect(resolveBackingTrackVolume(0, 90)).toBe(0);
+  });
+  it("clamps both the stored value and the fallback", () => {
+    expect(resolveBackingTrackVolume(150, 90)).toBe(100);
+    expect(resolveBackingTrackVolume(null, 150)).toBe(100);
+    expect(resolveBackingTrackVolume(null, -5)).toBe(0);
+  });
+
+  // The whole point: two YouTube-sourced songs at different loudness keep
+  // their own levels instead of sharing one.
+  it("gives each song its own level", () => {
+    const songs = [
+      { id: "loud", volume: 25 },
+      { id: "quiet", volume: 95 },
+      { id: "untouched", volume: null },
+    ];
+    expect(songs.map((s) => resolveBackingTrackVolume(s.volume, 70))).toEqual([25, 95, 70]);
   });
 });

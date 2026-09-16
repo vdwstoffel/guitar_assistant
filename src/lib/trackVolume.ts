@@ -31,3 +31,17 @@ export function applySavedVolume<T extends { id: string; volume: number | null }
   const clamped = clampTrackVolume(volume);
   return items.map((item) => (item.id === id ? { ...item, volume: clamped } : item));
 }
+
+// Backing tracks predate per-song volume, so every existing row has a NULL
+// column. Rather than snapping those to a default, fall back to the shared
+// level the fretboard panel used to keep in localStorage — nothing jumps until
+// the user sets a song's own level.
+export function resolveBackingTrackVolume(
+  volume: number | null | undefined,
+  fallback: number
+): number {
+  if (volume === null || volume === undefined || Number.isNaN(volume)) {
+    return clampTrackVolume(fallback);
+  }
+  return clampTrackVolume(volume);
+}
