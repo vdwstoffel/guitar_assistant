@@ -1,10 +1,18 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const limitRaw = request.nextUrl.searchParams.get("limit");
+    const limit = limitRaw !== null ? Number(limitRaw) : null;
+    const take =
+      limit !== null && Number.isFinite(limit) && limit > 0
+        ? Math.floor(limit)
+        : undefined;
+
     const recordings = await prisma.recording.findMany({
       orderBy: { createdAt: "desc" },
+      ...(take !== undefined ? { take } : {}),
     });
     return NextResponse.json(recordings);
   } catch (error) {

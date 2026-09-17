@@ -4,17 +4,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Recording } from "@/types";
 import { useAudioRecorder } from "@/hooks/useAudioRecorder";
 import RecordingWaveform, { RecordingWaveformHandle } from "./RecordingWaveform";
+import { formatDuration } from "@/lib/recordings/format";
 
 function formatTimeMs(ms: number): string {
   const total = Math.floor(ms / 1000);
-  const m = Math.floor(total / 60);
-  const s = total % 60;
-  return `${m}:${s.toString().padStart(2, "0")}`;
-}
-
-function formatDuration(seconds: number): string {
-  if (!seconds || !isFinite(seconds)) return "—";
-  const total = Math.floor(seconds);
   const m = Math.floor(total / 60);
   const s = total % 60;
   return `${m}:${s.toString().padStart(2, "0")}`;

@@ -6,7 +6,8 @@ import GlobalSearch from './GlobalSearch';
 import PracticeNextDropdown from './PracticeNextDropdown';
 import Tuner from './Tuner';
 import AudioOutputPicker from './AudioOutputPicker';
-import { SearchResultTrack, SearchResultBook, SearchResultJamTrack } from '@/types';
+import LastRecordingButton from './LastRecordingButton';
+import { SearchResultTrack, SearchResultBook, SearchResultJamTrack, Recording } from '@/types';
 import { useAudioRecorder } from '@/hooks/useAudioRecorder';
 import {
   routeContextToSink,
@@ -46,6 +47,8 @@ const TopNav = memo(function TopNav({ activeSection, onSectionChange, onSearchTr
     typeof window !== "undefined" ? getAudioInputPreference() : "default",
   );
   const [recorderUploading, setRecorderUploading] = useState(false);
+  const [lastRecording, setLastRecording] = useState<Recording | null>(null);
+  const [recordingStopSignal, setRecordingStopSignal] = useState(0);
   const [showTheory, setShowTheory] = useState(false);
   const [showMobileSearch, setShowMobileSearch] = useState(false);
   const recorder = useAudioRecorder();
@@ -224,6 +227,27 @@ const TopNav = memo(function TopNav({ activeSection, onSectionChange, onSearchTr
     return `${m}:${s.toString().padStart(2, '0')}`;
   };
 
+  // Load the newest take whenever the recorder panel opens, so it's offered on a
+  // fresh page load and not only right after recording. Closing the panel
+  // unmounts LastRecordingButton, which stops playback on its way out.
+  useEffect(() => {
+    if (!showRecorder) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/recordings?limit=1');
+        if (!res.ok) return;
+        const data: Recording[] = await res.json();
+        if (!cancelled) setLastRecording(data[0] ?? null);
+      } catch (err) {
+        console.error('Could not load last recording:', err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [showRecorder]);
+
   const handleRecorderToggle = useCallback(async () => {
     if (recorder.status === 'recording') {
       const result = await recorder.stop();
@@ -242,6 +266,7 @@ const TopNav = memo(function TopNav({ activeSection, onSectionChange, onSearchTr
         }
         const res = await fetch('/api/recordings/upload', { method: 'POST', body: fd });
         if (!res.ok) throw new Error('Upload failed');
+        setLastRecording(await res.json());
       } catch (err) {
         console.error('Recording upload error:', err);
         alert('Could not save recording');
@@ -249,6 +274,7 @@ const TopNav = memo(function TopNav({ activeSection, onSectionChange, onSearchTr
         setRecorderUploading(false);
       }
     } else if (recorder.status === 'idle' || recorder.status === 'error') {
+      setRecordingStopSignal((n) => n + 1);
       await recorder.start();
     }
   }, [recorder]);
@@ -700,6 +726,15 @@ const TopNav = memo(function TopNav({ activeSection, onSectionChange, onSearchTr
                 </>
               )}
             </button>
+
+            {/* Last take playback */}
+            <LastRecordingButton
+              key={lastRecording?.id ?? 'none'}
+              recording={lastRecording}
+              stopSignal={recordingStopSignal}
+            />
+
+            <div className="hidden sm:block flex-1" />
 
             {/* Link to full Recordings page */}
             <Link

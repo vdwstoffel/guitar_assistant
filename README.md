@@ -59,6 +59,7 @@ Standalone play-along tracks (backing tracks, songs) that live outside the book 
 - Live duration and input-level meter while recording
 - Recordings are saved server-side under `music/Recordings/` and stream via the existing audio pipeline
 - Rename, play back, and delete recordings from the **Recordings** tab
+- The recorder panel in the top bar plays back your most recent take in one click, so you can review a run without leaving the page
 
 ## Getting Started
 
