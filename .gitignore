@@ -50,11 +50,11 @@ next-env.d.ts
 /prisma/*.db
 /prisma/*.db-journal
 /prisma/*.db.backup
+/prisma/*.db.*backup
 /prisma/migrations/
 /prisma/prisma/
 
 /tasks
-/prisma/*db.backup
 
 # Rocksmith tools and test files
 /tools/
