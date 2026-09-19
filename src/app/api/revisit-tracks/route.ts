@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { createDailyRandom, shuffleInPlace } from "@/lib/dailyRandom";
 
 export async function GET() {
   try {
@@ -57,13 +58,8 @@ export async function GET() {
       return new Date(a.lastPracticed).getTime() - new Date(b.lastPracticed).getTime();
     });
 
-    // Seeded PRNG (LCG) — seed changes once per day so results are stable within a day.
-    const today = new Date().toISOString().slice(0, 10).replace(/-/g, "");
-    let seed = parseInt(today, 10);
-    const rand = () => {
-      seed = (seed * 1664525 + 1013904223) & 0xffffffff;
-      return (seed >>> 0) / 0xffffffff;
-    };
+    // Seed changes once per day so results are stable within a day.
+    const rand = createDailyRandom();
 
     const oldest5 = items.slice(0, 5);
     const remaining = items.slice(5);
@@ -77,11 +73,7 @@ export async function GET() {
     }
 
     // Combine and shuffle deterministically.
-    const combined = [...oldest5, ...random5];
-    for (let i = combined.length - 1; i > 0; i--) {
-      const j = Math.floor(rand() * (i + 1));
-      [combined[i], combined[j]] = [combined[j], combined[i]];
-    }
+    const combined = shuffleInPlace([...oldest5, ...random5], rand);
 
     return NextResponse.json(combined);
   } catch (error) {

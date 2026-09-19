@@ -28,6 +28,7 @@ interface InProgressItem {
   authorId: string | null;
   bookId: string | null;
   lastPracticed: string | null;
+  isRevisit: boolean;
 }
 
 interface RevisitItem {
@@ -161,6 +162,10 @@ export default function HomeView({ onGoToTrack, authors }: Props) {
                         <svg className="w-4 h-4 text-green-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                         </svg>
+                      ) : rt.isRevisit ? (
+                        <svg className="w-4 h-4 text-amber-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
                       ) : rt.videoId ? (
                         <span className="text-xs bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded shrink-0">YouTube</span>
                       ) : rt.jamTrackId ? (
@@ -179,6 +184,11 @@ export default function HomeView({ onGoToTrack, authors }: Props) {
                         )}
                       </div>
                       {doneToday && <span className="text-gray-500 text-xs shrink-0">Done today</span>}
+                      {!doneToday && rt.isRevisit && (
+                        <span className="text-amber-400 text-xs shrink-0">
+                          Revisit{rt.lastPracticed ? ` · ${formatRelativeDate(rt.lastPracticed)}` : ""}
+                        </span>
+                      )}
                       <svg className="w-4 h-4 text-gray-500 group-hover:text-white transition-colors shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
                       </svg>

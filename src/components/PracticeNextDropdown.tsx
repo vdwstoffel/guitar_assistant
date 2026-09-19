@@ -12,6 +12,7 @@ interface InProgressItem {
   authorId: string | null;
   bookId: string | null;
   lastPracticed: string | null;
+  isRevisit: boolean;
 }
 
 function isToday(iso: string): boolean {
@@ -140,7 +141,11 @@ export default function PracticeNextDropdown({ onGoToTrack }: Props) {
                   onClick={() => handleItemClick(item)}
                   className="w-full flex items-center gap-3 px-3 py-2 hover:bg-gray-700/50 transition-colors text-left group"
                 >
-                  {item.videoId ? (
+                  {item.isRevisit ? (
+                    <svg className="w-4 h-4 text-amber-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  ) : item.videoId ? (
                     <span className="text-xs bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded shrink-0">YouTube</span>
                   ) : item.jamTrackId ? (
                     <span className="text-xs bg-purple-500/20 text-purple-400 px-1.5 py-0.5 rounded shrink-0">Jam</span>
@@ -157,6 +162,9 @@ export default function PracticeNextDropdown({ onGoToTrack }: Props) {
                       <span className="text-gray-500 text-xs truncate block">{item.bookName}</span>
                     )}
                   </div>
+                  {item.isRevisit && (
+                    <span className="text-[10px] text-amber-400 shrink-0">Revisit</span>
+                  )}
                   <svg className="w-4 h-4 text-gray-500 group-hover:text-white transition-colors shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
                   </svg>
