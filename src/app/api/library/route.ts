@@ -9,7 +9,7 @@ export async function GET() {
           books: {
             orderBy: { name: "asc" },
             include: {
-              _count: { select: { tracks: true } },
+              _count: { select: { tracks: true, videos: true } },
               tracks: {
                 orderBy: { trackNumber: "asc" },
                 select: { filePath: true, completed: true, favorite: true, sourceVideoId: true },
@@ -72,6 +72,7 @@ export async function GET() {
           pdfPath: book.pdfPath,
           inProgress: book.inProgress,
           trackCount: book._count.tracks,
+          videoCount: book._count.videos,
           coverTrackPath: book.tracks[0]?.filePath ?? null,
           customCoverPath: book.coverPath ?? null,
           completedCount,

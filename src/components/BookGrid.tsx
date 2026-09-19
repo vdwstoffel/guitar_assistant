@@ -55,11 +55,15 @@ const BookCard = memo(function BookCard({ book, authorName, onClick }: { book: B
         {authorName}
       </p>
 
-      {/* Track Count */}
+      {/* Content count — video books have no audio tracks of their own */}
       <p className="text-gray-500 text-xs mt-1">
-        {book.trackCount === 0 && book.pdfPath
+        {book.trackCount > 0
+          ? `${book.trackCount} track${book.trackCount !== 1 ? "s" : ""}`
+          : book.videoCount
+          ? `${book.videoCount} video${book.videoCount !== 1 ? "s" : ""}`
+          : book.pdfPath
           ? "PDF only"
-          : `${book.trackCount} track${book.trackCount !== 1 ? "s" : ""}`}
+          : "0 tracks"}
       </p>
 
       {/* Progress Bar - Show if book has content */}

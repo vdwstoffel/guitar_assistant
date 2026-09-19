@@ -606,7 +606,9 @@ export default memo(function TrackListView({
           </div>
           <p className="text-sm sm:text-base text-gray-400">{author.name}</p>
           <p className="text-gray-500 text-xs sm:text-sm mt-1">
-            {book.trackCount} track{book.trackCount !== 1 ? "s" : ""}
+            {book.trackCount > 0
+              ? `${book.trackCount} track${book.trackCount !== 1 ? "s" : ""}`
+              : `${bookProgress.totalVideos} video${bookProgress.totalVideos !== 1 ? "s" : ""}`}
           </p>
 
           {/* Book Progress - Show if there are any tracks or videos */}

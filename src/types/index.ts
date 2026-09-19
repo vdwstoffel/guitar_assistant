@@ -202,6 +202,7 @@ export interface BookSummary {
   pdfPath: string | null;
   inProgress: boolean;
   trackCount: number;
+  videoCount?: number; // Video lessons in the book, for books with no audio
   coverTrackPath: string | null;
   customCoverPath: string | null;
   completedCount?: number; // Number of completed tracks/videos
