@@ -3,6 +3,7 @@
 import { useState, useMemo, memo } from "react";
 import { AuthorSummary, BookSummary } from "@/types";
 import { getBookCoverUrl } from "@/lib/covers";
+import { formatBookContents } from "@/lib/formatting";
 
 const BookCard = memo(function BookCard({ book, authorName, onClick }: { book: BookSummary; authorName: string; onClick: () => void }) {
   const [hasError, setHasError] = useState(false);
@@ -55,15 +56,9 @@ const BookCard = memo(function BookCard({ book, authorName, onClick }: { book: B
         {authorName}
       </p>
 
-      {/* Content count — video books have no audio tracks of their own */}
+      {/* Content count — a book can hold audio tracks, video lessons, or both */}
       <p className="text-gray-500 text-xs mt-1">
-        {book.trackCount > 0
-          ? `${book.trackCount} track${book.trackCount !== 1 ? "s" : ""}`
-          : book.videoCount
-          ? `${book.videoCount} video${book.videoCount !== 1 ? "s" : ""}`
-          : book.pdfPath
-          ? "PDF only"
-          : "0 tracks"}
+        {formatBookContents(book.trackCount, book.videoCount, book.pdfPath)}
       </p>
 
       {/* Progress Bar - Show if book has content */}
