@@ -3,6 +3,8 @@ export interface TrackTab {
   name: string;
   alphatex: string | null;
   tempo: number;
+  /** Practice playback speed as a whole percentage (10-200); null = never set. */
+  playbackSpeed: number | null;
   sortOrder: number;
   trackId: string;
 }

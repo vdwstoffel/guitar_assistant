@@ -37,6 +37,19 @@ Standalone play-along tracks (backing tracks, songs) that live outside the book 
 - Single-PDF mode for books/tracks, multi-PDF tabbed mode for jam tracks
 - **Full-height page** - The page controls and Fit Page toggle float over the PDF instead of taking their own row, and fade in on hover (pinned on touch screens), so the page gets the viewer's entire height — worth about 6% more sheet music in fit-to-page mode
 
+### Tab Editor
+- **Write tabs on a canvas** - The **Tabs** section opens a score you type notation into directly: click a beat to put the caret there, type a fret number, arrow around, and the tab redraws as you go. A tab opened from a track (Lessons → track → Tabs → Practice) gets the same editor, so the tab stays attached to the piece you are practising
+- **Side-by-side with the book** - Opened from a track, the editor docks to one side of the window rather than covering it, so the book PDF you are transcribing from stays readable and scrollable beside it. Drag the panel's inner edge to resize, flip it to the other side, or expand it to the whole window; the choice is remembered
+- **AlphaTex source pane** - The score and its AlphaTex source are two views of one document, editable from either side. The source pane shows parse diagnostics inline; an unparseable draft is still saved rather than lost
+- **Playback** - Play/pause (`Space`), stop, repeat, and the same 10-200% practice speed control used elsewhere, saved per tab
+- **Metronome, count-in and volume** - A click track and a count-in bar (on by default), each switched on separately and sharing one level, plus a volume for the tab's own playback so you can balance the two. The first beat of each bar is accented — the same click as the others, just louder. Count-in works with the click off, for counting yourself in and then playing to silence. All remembered in the browser (a listening preference, not part of the tab)
+- **Drag to pick a practice section** - Drag across the score to select bars to repeat, snapped to whole bars. The section survives clicking and editing inside it — the only way to clear it is the toolbar chip's `✕`
+- **Tempo and tuning** - Both are written into the tab itself (and are undoable). Tuning covers the usual six-string alternates: Drop D, Drop C, DADGAD, open tunings, and whole/half-step down
+- **Repeat bars** - Mark a section with real repeat barlines (`𝄆 … 𝄇 ×N`), written into the tab and played back that many times. Put the caret in the bar the section starts on and press `𝄆 Repeat start`, then in the bar it ends on and press `𝄇 Repeat end` — the bars in between need no selecting
+- **Triplets** - Press `Triplet` (or `u`) to turn the caret's beat and the next two into one group; the bar grows if it needs to, and pressing again takes the whole group apart
+- **Techniques** - Hammer-on/pull-off, slide, palm mute, vibrato, dead and ghost notes, tap, harmonic, let ring, bends (full, half, release, pre-bend), and ties
+- **Keyboard-first** - Every command has a key; press `?` for the full list
+
 ### Practice Tools
 - **Metronome** - Adjustable BPM (20-300), time signature support (4/4, 3/4, 2/4, 6/8), visual beat indicator, volume control
 - **Fretboard Visualizer** - Interactive guitar fretboard with scale/key overlays, note trainer, a Practice Exercise generator (auto-generated tabs), and a per-scale/key **Songs** panel (add a YouTube URL → downloaded audio you can play along to). Each song remembers its own volume in the database, since YouTube sources vary a lot in loudness. With no scale selected the panel lists every song, and picking one opens its key and scale on the fretboard

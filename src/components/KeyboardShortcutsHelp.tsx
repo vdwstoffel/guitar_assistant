@@ -2,12 +2,32 @@
 
 import { useEffect } from "react";
 
+export interface ShortcutGroup {
+  group: string;
+  items: {
+    keys: string[];
+    description: string;
+    /**
+     * A mouse gesture rather than a key chord. Rendered the same way, but it
+     * resolves to no keydown — see tabEditorShortcuts.test.ts, which checks
+     * every other entry against the keymap.
+     */
+    mouse?: boolean;
+  }[];
+}
+
 interface KeyboardShortcutsHelpProps {
   isOpen: boolean;
   onClose: () => void;
+  /**
+   * Which shortcuts to list. Defaults to the audio player's, so the original
+   * caller needs no change; the tab editor passes its own set.
+   */
+  groups?: ShortcutGroup[];
+  title?: string;
 }
 
-const shortcuts = [
+const shortcuts: ShortcutGroup[] = [
   {
     group: "Playback",
     items: [
@@ -43,7 +63,12 @@ const shortcuts = [
   },
 ];
 
-export default function KeyboardShortcutsHelp({ isOpen, onClose }: KeyboardShortcutsHelpProps) {
+export default function KeyboardShortcutsHelp({
+  isOpen,
+  onClose,
+  groups = shortcuts,
+  title = "Keyboard Shortcuts",
+}: KeyboardShortcutsHelpProps) {
   useEffect(() => {
     if (!isOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -67,7 +92,7 @@ export default function KeyboardShortcutsHelp({ isOpen, onClose }: KeyboardShort
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between p-5 border-b border-gray-700">
-          <h2 className="text-lg font-semibold text-white">Keyboard Shortcuts</h2>
+          <h2 className="text-lg font-semibold text-white">{title}</h2>
           <button
             onClick={onClose}
             className="text-gray-400 hover:text-white transition-colors"
@@ -79,7 +104,7 @@ export default function KeyboardShortcutsHelp({ isOpen, onClose }: KeyboardShort
         </div>
 
         <div className="p-5 space-y-5 max-h-[60vh] overflow-y-auto">
-          {shortcuts.map((group) => (
+          {groups.map((group) => (
             <div key={group.group}>
               <h3 className="text-sm font-medium text-gray-400 uppercase tracking-wide mb-2">
                 {group.group}

@@ -19,6 +19,7 @@ import Videos from "@/components/Videos";
 import RecordingsView from "@/components/RecordingsView";
 import Tools from "@/components/Tools";
 import CAGEDSystem from "@/components/CAGEDSystem";
+import TabsSection from "@/components/tabs/TabsSection";
 import HomeView from "@/components/HomeView";
 import UploadModal from "@/components/UploadModal";
 import VideoPlayer from "@/components/VideoPlayer";
@@ -28,12 +29,12 @@ import { applySavedPlaybackSpeed, clampPlaybackSpeed } from "@/lib/playbackSpeed
 import TrackTabsModal from "@/components/TrackTabsModal";
 import { resolvePageFlip } from "@/lib/pageFlips";
 
-type Section = 'home' | 'lessons' | 'videos' | 'fretboard' | 'chords' | 'tools' | 'circle' | 'jamtracks' | 'recordings' | 'caged';
+type Section = 'home' | 'lessons' | 'videos' | 'fretboard' | 'chords' | 'tools' | 'circle' | 'jamtracks' | 'recordings' | 'caged' | 'tabs';
 
 const getSectionFromPath = (section: string[] | undefined): Section => {
   if (!section || section.length === 0) return 'home';
   const first = section[0];
-  if (first === 'home' || first === 'lessons' || first === 'videos' || first === 'fretboard' || first === 'chords' || first === 'tools' || first === 'circle' || first === 'jamtracks' || first === 'recordings' || first === 'caged') {
+  if (first === 'home' || first === 'lessons' || first === 'videos' || first === 'fretboard' || first === 'chords' || first === 'tools' || first === 'circle' || first === 'jamtracks' || first === 'recordings' || first === 'caged' || first === 'tabs') {
     return first;
   }
   return 'home';
@@ -1076,7 +1077,7 @@ export default function Home() {
     return tab;
   };
 
-  const handleTabUpdate = async (tabId: string, updates: { name?: string; alphatex?: string | null; tempo?: number }) => {
+  const handleTabUpdate = async (tabId: string, updates: { name?: string; alphatex?: string | null; tempo?: number; playbackSpeed?: number | null }) => {
     await fetch(`/api/tracks/${currentTrack?.id}/tabs/${tabId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -2379,6 +2380,8 @@ export default function Home() {
             )}
           </div>
         </div>
+      ) : activeSection === 'tabs' ? (
+        <TabsSection />
       ) : activeSection === 'videos' ? (
         <div className="flex-1 min-h-0">
           <Videos initialVideoId={searchParams.get('video')} />

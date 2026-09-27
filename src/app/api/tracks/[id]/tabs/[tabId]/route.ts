@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { clampPlaybackSpeed } from "@/lib/playbackSpeed";
 
 export async function PATCH(
   request: NextRequest,
@@ -8,7 +9,7 @@ export async function PATCH(
   try {
     const { tabId } = await params;
     const body = await request.json();
-    const { name, alphatex, tempo } = body;
+    const { name, alphatex, tempo, playbackSpeed } = body;
 
     const tab = await prisma.trackTab.update({
       where: { id: tabId },
@@ -16,6 +17,11 @@ export async function PATCH(
         ...(name !== undefined && { name }),
         ...(alphatex !== undefined && { alphatex }),
         ...(tempo !== undefined && { tempo }),
+        // Clamp server-side too: the client control clamps, but the route is
+        // the actual boundary and a bad value would persist silently.
+        ...(playbackSpeed !== undefined && {
+          playbackSpeed: playbackSpeed === null ? null : clampPlaybackSpeed(playbackSpeed),
+        }),
       },
     });
 

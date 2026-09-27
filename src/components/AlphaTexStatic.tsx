@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { parseTex } from "@/lib/tabscore/parse";
 
 interface AlphaTexStaticProps {
   alphatex: string;
@@ -14,8 +15,13 @@ export default function AlphaTexStatic({ alphatex, hideTempo = false }: AlphaTex
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Unparseable AlphaTex is storable by design (see the canvas tab editor) —
+  // this reader must survive it instead of crashing or rendering blank.
+  const check = useMemo(() => parseTex(alphatex), [alphatex]);
+
   useEffect(() => {
     if (!containerRef.current || typeof window === "undefined") return;
+    if (!check.ok) return;
 
     let destroyed = false;
 
@@ -77,7 +83,21 @@ export default function AlphaTexStatic({ alphatex, hideTempo = false }: AlphaTex
         apiRef.current = null;
       }
     };
-  }, [alphatex, hideTempo]);
+  }, [alphatex, hideTempo, check.ok]);
+
+  if (!check.ok) {
+    // diagnostics[] is bag order (lexer, then parser, then semantic), not
+    // severity order — ok=false doesn't mean diagnostics[0] is the error.
+    // Prefer the first actual error; only fall back to [0] (a hint/warning)
+    // in the defensive case where ok is false but nothing is marked error.
+    const problem = check.diagnostics.find((d) => d.severity === "error") ?? check.diagnostics[0];
+    return (
+      <div className="border border-amber-700/50 bg-amber-950/30 rounded p-3 text-xs text-amber-200">
+        This tab has a syntax error: {problem?.message ?? "unknown"}
+        {problem ? ` (line ${problem.line})` : ""}
+      </div>
+    );
+  }
 
   return (
     <div className="relative my-4">

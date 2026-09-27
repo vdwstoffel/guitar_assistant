@@ -2,20 +2,13 @@
 
 import { useEffect, useRef, useState, useMemo } from "react";
 import type { Track, TrackTab } from "@/types";
-import type { TabData } from "@/lib/tabData";
-import {
-  isTabDataJson,
-  parseTabData,
-  tabDataToAlphaTex,
-  createDefaultTabData,
-} from "@/lib/tabData";
 import { usePracticeSessionTracker } from "@/hooks/usePracticeSessionTracker";
 import {
   applyAlphaTabSink,
   getAudioSinkPreference,
   subscribeToAudioSinkChanges,
 } from "@/lib/audioSink";
-import VisualTabEditor from "./VisualTabEditor";
+import { parseTex } from "@/lib/tabscore/parse";
 
 interface AlphaTexPlayerProps {
   track: Track;
@@ -42,12 +35,6 @@ export default function AlphaTexPlayer({ track, tab, onClose, onSave }: AlphaTex
   const [practiseBpm, setPractiseBpm] = useState(tab.tempo);
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState(tab.name);
-  const [editTabData, setEditTabData] = useState<TabData>(() => {
-    if (tab.alphatex && isTabDataJson(tab.alphatex)) {
-      return parseTabData(tab.alphatex) ?? createDefaultTabData(tab.tempo);
-    }
-    return createDefaultTabData(tab.tempo);
-  });
   const [isSaving, setIsSaving] = useState(false);
   const [currentTab, setCurrentTab] = useState(tab);
   const pendingAutoPlay = useRef(false);
@@ -55,20 +42,32 @@ export default function AlphaTexPlayer({ track, tab, onClose, onSave }: AlphaTex
   const sessionTrackerRef = useRef(sessionTracker);
   sessionTrackerRef.current = sessionTracker;
 
-  // Resolve the alphatex to render: JSON → AlphaTex, raw AlphaTex → pass through
-  const resolvedAlphaTex = useMemo(() => {
-    if (!currentTab.alphatex) return null;
-    if (isTabDataJson(currentTab.alphatex)) {
-      const data = parseTabData(currentTab.alphatex);
-      return data ? tabDataToAlphaTex(data) : null;
-    }
-    return currentTab.alphatex;
-  }, [currentTab.alphatex]);
+  // currentTab.alphatex is always AlphaTex source now — the legacy TabData
+  // JSON format was migrated in place (see scripts/migrate-tabdata-to-alphatex.ts)
+  // and the dual-format branch here was removed along with it.
+  const resolvedAlphaTex = useMemo(() => currentTab.alphatex || null, [currentTab.alphatex]);
+
+  // Unparseable AlphaTex is storable by design (see the canvas tab editor) —
+  // this reader must survive it instead of crashing or rendering blank.
+  const check = useMemo(
+    () => (resolvedAlphaTex ? parseTex(resolvedAlphaTex) : null),
+    [resolvedAlphaTex]
+  );
+  const isValidTab = !!resolvedAlphaTex && !!check?.ok;
+  // diagnostics[] is bag order (lexer, then parser, then semantic), not
+  // severity order — ok=false doesn't mean diagnostics[0] is the error.
+  // Prefer the first actual error; only fall back to [0] (a hint/warning)
+  // in the defensive case where ok is false but nothing is marked error.
+  const problem =
+    check && !check.ok
+      ? check.diagnostics.find((d) => d.severity === "error") ?? check.diagnostics[0]
+      : null;
 
   // Initialise alphaTab with PlayerMode.EnabledSynthesizer whenever resolvedAlphaTex changes
   useEffect(() => {
     if (!containerRef.current || typeof window === "undefined") return;
     if (!resolvedAlphaTex) return;
+    if (!check?.ok) return;
 
     let destroyed = false;
 
@@ -180,17 +179,12 @@ export default function AlphaTexPlayer({ track, tab, onClose, onSave }: AlphaTex
         apiRef.current = null;
       }
     };
-  }, [resolvedAlphaTex]);
+  }, [resolvedAlphaTex, check]);
 
-  // Generate AlphaTex with a specific BPM (overrides the stored tempo)
+  // Generate AlphaTex with a specific BPM (overrides the stored tempo) by
+  // replacing the \tempo line in the stored AlphaTex source.
   const buildAlphaTex = (bpm: number): string | null => {
     if (!currentTab.alphatex) return null;
-    if (isTabDataJson(currentTab.alphatex)) {
-      const data = parseTabData(currentTab.alphatex);
-      if (!data) return null;
-      return tabDataToAlphaTex({ ...data, tempo: bpm });
-    }
-    // Raw AlphaTex: replace the \tempo line with the new BPM
     return currentTab.alphatex.replace(/\\tempo\s+\d+/, `\\tempo ${bpm}`);
   };
 
@@ -273,13 +267,9 @@ export default function AlphaTexPlayer({ track, tab, onClose, onSave }: AlphaTex
     setIsSaving(true);
     try {
       // Also update the tempo inside the stored alphatex so it reloads correctly next time
-      let updatedAlphatex = currentTab.alphatex;
-      if (currentTab.alphatex && isTabDataJson(currentTab.alphatex)) {
-        const data = parseTabData(currentTab.alphatex);
-        if (data) updatedAlphatex = JSON.stringify({ ...data, tempo: practiseBpm });
-      } else if (currentTab.alphatex) {
-        updatedAlphatex = currentTab.alphatex.replace(/\\tempo\s+\d+/, `\\tempo ${practiseBpm}`);
-      }
+      const updatedAlphatex = currentTab.alphatex
+        ? currentTab.alphatex.replace(/\\tempo\s+\d+/, `\\tempo ${practiseBpm}`)
+        : currentTab.alphatex;
       await onSave(currentTab.id, { tempo: practiseBpm, alphatex: updatedAlphatex ?? undefined });
       setCurrentTab((prev) => ({
         ...prev,
@@ -291,22 +281,15 @@ export default function AlphaTexPlayer({ track, tab, onClose, onSave }: AlphaTex
     }
   };
 
+  // Renames the tab. Note content (alphatex) is no longer editable from this
+  // dialog — that used to go through VisualTabEditor/TabData, which is gone;
+  // notation is now edited via the canvas tab editor (the /tabs section).
   const handleSave = async () => {
     if (!editName.trim()) return;
     setIsSaving(true);
     try {
-      const serialized = JSON.stringify(editTabData);
-      await onSave(currentTab.id, {
-        name: editName.trim(),
-        alphatex: serialized,
-        tempo: editTabData.tempo,
-      });
-      setCurrentTab((prev) => ({
-        ...prev,
-        name: editName.trim(),
-        alphatex: serialized,
-        tempo: editTabData.tempo,
-      }));
+      await onSave(currentTab.id, { name: editName.trim() });
+      setCurrentTab((prev) => ({ ...prev, name: editName.trim() }));
       setIsEditing(false);
     } finally {
       setIsSaving(false);
@@ -315,11 +298,6 @@ export default function AlphaTexPlayer({ track, tab, onClose, onSave }: AlphaTex
 
   const handleCancelEdit = () => {
     setEditName(currentTab.name);
-    if (currentTab.alphatex && isTabDataJson(currentTab.alphatex)) {
-      setEditTabData(parseTabData(currentTab.alphatex) ?? createDefaultTabData(currentTab.tempo));
-    } else {
-      setEditTabData(createDefaultTabData(currentTab.tempo));
-    }
     setIsEditing(false);
   };
 
@@ -335,7 +313,7 @@ export default function AlphaTexPlayer({ track, tab, onClose, onSave }: AlphaTex
                 onClick={() => setIsEditing(true)}
                 className="px-3 py-1 text-xs rounded bg-gray-700 hover:bg-gray-600 text-gray-300"
               >
-                Edit Tab
+                Rename Tab
               </button>
             )}
             <button
@@ -361,11 +339,6 @@ export default function AlphaTexPlayer({ track, tab, onClose, onSave }: AlphaTex
                 />
               </div>
 
-              <div>
-                <label className="block text-xs text-gray-400 mb-2">Tab</label>
-                <VisualTabEditor data={editTabData} onChange={setEditTabData} />
-              </div>
-
               <div className="flex gap-2 pt-1">
                 <button
                   onClick={handleSave}
@@ -386,13 +359,12 @@ export default function AlphaTexPlayer({ track, tab, onClose, onSave }: AlphaTex
             <div className="p-4">
               {!resolvedAlphaTex ? (
                 <div className="text-gray-500 text-sm py-8 text-center">
-                  No tab notation yet.{" "}
-                  <button
-                    onClick={() => setIsEditing(true)}
-                    className="text-blue-400 hover:underline"
-                  >
-                    Click Edit Tab to add some.
-                  </button>
+                  No tab notation yet. Add some from the Tabs section.
+                </div>
+              ) : !check?.ok ? (
+                <div className="border border-amber-700/50 bg-amber-950/30 rounded p-3 text-xs text-amber-200">
+                  This tab has a syntax error: {problem?.message ?? "unknown"}
+                  {problem ? ` (line ${problem.line})` : ""}
                 </div>
               ) : (
                 <>
@@ -447,7 +419,7 @@ export default function AlphaTexPlayer({ track, tab, onClose, onSave }: AlphaTex
         </div>
 
         {/* Playback controls */}
-        {!isEditing && resolvedAlphaTex && (
+        {!isEditing && isValidTab && (
           <div className="border-t border-gray-700 px-4 py-3 space-y-2">
             {/* Speed presets */}
             <div className="flex items-center gap-2">
