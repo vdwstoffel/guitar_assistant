@@ -22,6 +22,7 @@ import { normalizeNewlines } from "@/lib/tabscore/offsets";
 import { clampCaret, type Caret } from "@/lib/tabscore/locate";
 import { type CommandResult } from "@/lib/tabscore/apply";
 import { matchChord } from "@/lib/tabscore/keymap";
+import { claimGlobalShortcuts } from "@/lib/globalShortcuts";
 import { setFret, clearNote } from "@/lib/tabscore/commands/setFret";
 import { scaleDuration, toggleDotted } from "@/lib/tabscore/commands/duration";
 import { insertBeat, deleteBeat, addBar, deleteBar } from "@/lib/tabscore/commands/structure";
@@ -332,12 +333,46 @@ export default function TabEditor({
   // Transport. The handle methods have existed since Task 12; until now
   // nothing called stop() at all and playPause() was reachable only via
   // Space, which no on-screen control advertised.
+  // While this editor is on screen it owns the keyboard shortcuts that
+  // BottomPlayer binds to `window` — Space above all. The container handler
+  // below only fires when the canvas has focus, so without this, pressing
+  // Space straight after opening the editor, or after any toolbar click,
+  // started the TRACK playing instead of the tab.
+  useEffect(() => claimGlobalShortcuts(), []);
+
   const handlePlayPause = useCallback(() => {
     scoreCanvasRef.current?.playPause();
     // Keep focus on the canvas so Space stays meaningful after a click;
     // otherwise focus sits on the button and Space just re-presses it.
     containerRef.current?.focus();
   }, []);
+
+  // The other half of that: with the player stood down, something still has
+  // to act on Space when focus is elsewhere in the editor. Bound in the
+  // bubble phase, so the container handler below — which stops propagation —
+  // keeps its claim whenever the canvas does have focus.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const el = event.target as HTMLElement | null;
+      // Space types a space in the source pane and the tempo box.
+      if (el?.closest("input, textarea, [contenteditable]")) return;
+      // Only transport. Everything else the keymap resolves is about the
+      // caret, which has no meaning when the canvas is not focused.
+      if (matchChord({
+        key: event.key,
+        ctrlKey: event.ctrlKey,
+        metaKey: event.metaKey,
+        shiftKey: event.shiftKey,
+        altKey: event.altKey,
+      })?.kind !== "playPause") {
+        return;
+      }
+      event.preventDefault();
+      handlePlayPause();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  });
 
   const handleStop = useCallback(() => {
     scoreCanvasRef.current?.stop();

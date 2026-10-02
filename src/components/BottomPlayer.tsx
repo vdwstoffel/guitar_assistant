@@ -6,6 +6,7 @@ import { Track, Marker, JamTrack, JamTrackMarker } from "@/types";
 import WaveSurfer from "wavesurfer.js";
 import RegionsPlugin from "wavesurfer.js/dist/plugins/regions.js";
 import { playCountIn } from "@/lib/clickGenerator";
+import { globalShortcutsClaimed } from "@/lib/globalShortcuts";
 
 import KeyboardShortcutsHelp from "./KeyboardShortcutsHelp";
 import MarkerNameDialog from "./MarkerNameDialog";
@@ -1171,6 +1172,13 @@ function BottomPlayer({
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+      // Something on top of the page is itself about playback — the tab
+      // editor — so Space and the rest belong to it, not to this player.
+      // Read live rather than subscribed: it is one boolean per keystroke,
+      // and re-registering the handler on every change buys nothing.
+      if (globalShortcutsClaimed()) {
         return;
       }
 
