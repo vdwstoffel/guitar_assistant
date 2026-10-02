@@ -177,6 +177,43 @@ export interface JamTrackLoop {
   jamTrackId: string;
 }
 
+export interface GpSongSection {
+  id: string;
+  name: string;
+  /** Zero-based, inclusive. */
+  startBar: number;
+  endBar: number;
+  sortOrder: number;
+  gpSongId: string;
+}
+
+/**
+ * A Guitar Pro file imported for practice. Not a JamTrack: it has no audio
+ * recording, synthesising every instrument itself, so none of JamTrack's
+ * audio fields (duration, lufs, volume) mean anything here.
+ */
+export interface GpSong {
+  id: string;
+  title: string;
+  artist: string | null;
+  filePath: string;
+  tempo: number | null;
+  /** Parsed from the row's JSON column by the API, never raw JSON here. */
+  trackNames: string[];
+  barCount: number;
+  favorite: boolean;
+  completed: boolean;
+  inProgress: boolean;
+  lastPlayedAt: string | null;
+  completedAt: string | null;
+  playbackSpeed: number | null;
+  lastTrackIndex: number;
+  /** The jam track this tab belongs to; null means it stands on its own. */
+  jamTrackId: string | null;
+  sections: GpSongSection[];
+  createdAt: string;
+}
+
 export interface JamTrack {
   id: string;
   title: string;

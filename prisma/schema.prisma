@@ -191,6 +191,7 @@ model JamTrack {
   markers           JamTrackMarker[]
   loops             JamTrackLoop[]
   pdfs              JamTrackPdf[]
+  gpSongs           GpSong[]
   createdAt         DateTime         @default(now())
 }
 
@@ -300,4 +301,48 @@ model BackingTrack {
   volume       Int?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+}
+
+model GpSong {
+  id             String    @id @default(uuid())
+  title          String
+  artist         String?
+  /// Path relative to MUSIC_DIR, e.g. "GpSongs/fear-of-the-dark.gp5".
+  filePath       String    @unique
+  tempo          Int?
+  /// JSON-encoded string[] of track names in score order.
+  trackNames     String
+  barCount       Int
+  favorite       Boolean   @default(false)
+  completed      Boolean   @default(false)
+  inProgress     Boolean   @default(false)
+  lastPlayedAt   DateTime?
+  completedAt    DateTime?
+  /// Whole percentage, 10-200; null = never set.
+  playbackSpeed  Int?
+  /// Index into trackNames; which part was last on screen.
+  lastTrackIndex Int       @default(0)
+
+  /// When set, this tab belongs to that jam track and the two are one entry
+  /// in the list. Null means a tab-only song, which stands on its own.
+  jamTrackId String?
+  jamTrack   JamTrack? @relation(fields: [jamTrackId], references: [id], onDelete: SetNull)
+
+  sections  GpSongSection[]
+  createdAt DateTime @default(now())
+
+  @@index([jamTrackId])
+}
+
+model GpSongSection {
+  id        String @id @default(uuid())
+  name      String
+  /// Zero-based, inclusive.
+  startBar  Int
+  endBar    Int
+  sortOrder Int    @default(0)
+  gpSongId  String
+  gpSong    GpSong @relation(fields: [gpSongId], references: [id], onDelete: Cascade)
+
+  @@index([gpSongId])
 }

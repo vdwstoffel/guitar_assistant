@@ -15,13 +15,7 @@ import {
 } from "react";
 import { parseTex } from "@/lib/tabscore/parse";
 import { clampCaret, type Caret } from "@/lib/tabscore/locate";
-import { speedToRate } from "@/lib/playbackSpeed";
-import {
-  applyAlphaTabSink,
-  getAudioSinkPreference,
-  routeContextToSink,
-  subscribeToAudioSinkChanges,
-} from "@/lib/audioSink";
+import { useAlphaTabPlayback, SCORE_SURFACE_CSS } from "@/components/gp/useAlphaTabPlayback";
 
 export interface ScoreCanvasProps {
   tex: string;
@@ -74,16 +68,6 @@ interface OverlayRect {
 }
 
 const STRINGS = 6;
-
-/** One tone for every beat: see `playClick`. */
-const CLICK_HZ = 800;
-/** How much quieter the beats after the first are — roughly 7dB down. */
-const OFFBEAT_GAIN = 0.45;
-/**
- * A count-in volume for alphaTab that makes the phase run without being
- * heard: zero would make it skip the count-in entirely.
- */
-const INAUDIBLE = 0.0001;
 
 /**
  * alphaTab's internal `Note.string` is 1 = lowest/bottom string (verified
@@ -213,14 +197,29 @@ const ScoreCanvas = forwardRef<ScoreCanvasHandle, ScoreCanvasProps>(function Sco
     }
   }, []);
 
+  const onFinishedRef = useRef(onFinished);
+  onFinishedRef.current = onFinished;
+
+  // Everything about PLAYING the score — click, count-in, output device,
+  // speed, volumes, drag-across-bars to loop — belongs to the shared hook,
+  // which the Guitar Pro player uses too. This component keeps only what is
+  // about EDITING one.
+  const playback = useAlphaTabPlayback({
+    speed,
+    looping,
+    volume,
+    metronomeVolume,
+    countInVolume,
+    onLoopChange,
+  });
+
   // --- One-time alphaTab setup, following AlphaTexPlayer.tsx:68-165. ---
   useEffect(() => {
     if (!containerRef.current || typeof window === "undefined") return;
     let destroyed = false;
     // Unsubscribed in this effect's cleanup; the sink preference is a
     // module-level subscription that outlives the api otherwise.
-    let unsubscribeSink: (() => void) | null = null;
-    let onWindowMouseUp: (() => void) | null = null;
+    let detachPlayback: (() => void) | null = null;
 
     const init = async () => {
       try {
@@ -248,77 +247,18 @@ const ScoreCanvas = forwardRef<ScoreCanvasHandle, ScoreCanvasProps>(function Sco
 
         const api = new AlphaTabApi(containerRef.current, settings);
         apiRef.current = api;
-        try {
-          api.playbackSpeed = speedToRate(speedRef.current);
-        } catch {
-          /* ignore */
-        }
-
-        try {
-          api.isLooping = !!loopingRef.current;
-        } catch {
-          /* ignore */
-        }
-
-        // Applied at init as well as in the effects below: the effects run
-        // before this async setup finishes, so a volume chosen before the
-        // api existed would otherwise be silently dropped.
-        try {
-          if (volumeRef.current !== undefined) api.masterVolume = volumeRef.current;
-          applyClickVolumes(api);
-        } catch {
-          /* ignore */
-        }
+        // Playback — the click, the count-in, the output device, the speed
+        // and volumes, and drag-across-bars to loop — is the shared hook's.
+        // What is left here is the editor: the caret and the AlphaTex model.
+        detachPlayback = playback.attach(api, alphaTab);
 
         api.playerStateChanged.on((e: any) => {
-          if (destroyed) return;
-          const playing = e.state === 1; // synth.PlayerState.Playing
-          setIsPlaying(playing);
-          // alphaTab runs the count-in first when countInVolume is above
-          // zero, and emits the same metronome events for it. There is no
-          // public flag for the phase, so track it here: it ends as soon as
-          // the position starts moving.
-          if (playing) countingInRef.current = (countInVolumeRef.current ?? 0) > 0;
-        });
-
-        api.playerPositionChanged.on((e: any) => {
-          if (!destroyed && e?.currentTime > 0) countingInRef.current = false;
-        });
-
-        // Every tick is ours. alphaTab plays all of them at one fixed
-        // velocity and its synthesiser ignores the beat number the event
-        // carries, so there is no way to accent a downbeat through it — and
-        // a second, different tone layered on top just sounds like two
-        // instruments. Its own click is silenced (see applyClickVolumes) and
-        // each tick is played here instead: one sound throughout, the
-        // downbeat simply louder.
-        api.midiEventsPlayedFilter = [alphaTab.midi.MidiEventType.AlphaTabMetronome];
-        api.midiEventsPlayed.on((e: any) => {
-          if (destroyed) return;
-          for (const midi of e?.events ?? []) {
-            if (!midi?.isMetronome) continue;
-            // Which volume applies depends on the phase, exactly as it does
-            // for alphaTab's own click: zero means the user has this kind of
-            // click switched off.
-            const level = countingInRef.current
-              ? (countInVolumeRef.current ?? 0)
-              : (metronomeVolumeRef.current ?? 0);
-            if (level > 0) playClick(level, midi.metronomeNumerator === 0);
-          }
+          if (!destroyed) setIsPlaying(e.state === 1); // synth.PlayerState.Playing
         });
 
         api.playerFinished.on(() => {
           if (!destroyed) onFinishedRef.current?.();
         });
-
-        // Respect the app-wide output device, the same way AlphaTexPlayer
-        // does. Applied on playerReady (the output does not exist before
-        // then) and again whenever the preference changes elsewhere.
-        const applySink = () => {
-          void applyAlphaTabSink(api.player?.output, getAudioSinkPreference());
-        };
-        api.playerReady.on(applySink);
-        unsubscribeSink = subscribeToAudioSinkChanges(applySink);
 
         // Both events call positionCaretOverlay. renderFinished fires once
         // the sheet is "layouted and arranged" and, per alphaTab's own docs,
@@ -337,9 +277,7 @@ const ScoreCanvas = forwardRef<ScoreCanvasHandle, ScoreCanvasProps>(function Sco
           if (!destroyed) positionCaretOverlay();
         });
         api.postRenderFinished.on(() => {
-          if (destroyed) return;
-          positionCaretOverlay();
-          reapplyLoop();
+          if (!destroyed) positionCaretOverlay();
         });
 
         api.error.on((e: any) => {
@@ -372,133 +310,10 @@ const ScoreCanvas = forwardRef<ScoreCanvasHandle, ScoreCanvasProps>(function Sco
           emitCaret(bar, note.beat, noteStringToCaretString(note.string, stringCount));
         });
 
-        // Practice-range selection. Dragging across the score selects whole
-        // bars to loop; a plain click is untouched and still just moves the
-        // caret, so editing inside a looped section does not destroy it.
-        const barsOf = () =>
-          apiRef.current?.score?.tracks?.[0]?.staves?.[0]?.bars ?? [];
-
-        const highlightBars = (aIndex: number, bIndex: number) => {
-          const bars = barsOf();
-          const start = Math.min(aIndex, bIndex);
-          const end = Math.max(aIndex, bIndex);
-          const firstBeat = bars[start]?.voices?.[0]?.beats?.[0];
-          const endBeats = bars[end]?.voices?.[0]?.beats;
-          const lastBeat = endBeats?.[endBeats.length - 1];
-          if (!firstBeat || !lastBeat) return null;
-          try {
-            apiRef.current?.highlightPlaybackRange(firstBeat, lastBeat);
-          } catch {
-            return null;
-          }
-          return { startBar: start, endBar: end };
-        };
-
-        // Every edit re-parses the document and calls renderScore with a
-        // brand new Score, whose Beats are different objects from the ones the
-        // range was built from. The loop deliberately survives editing (you
-        // fix a note inside the section you are drilling), so it is re-applied
-        // from bar indices after each render rather than left to alphaTab.
-        const reapplyLoop = () => {
-          const wanted = loopBarsRef.current;
-          if (!wanted) return;
-          const bars = barsOf();
-          if (wanted.startBar >= bars.length) {
-            // The bars it covered are gone; drop it rather than guess.
-            loopBarsRef.current = null;
-            try {
-              apiRef.current?.clearPlaybackRangeHighlight();
-              if (apiRef.current) apiRef.current.playbackRange = null;
-            } catch {
-              /* ignore */
-            }
-            onLoopChangeRef.current?.(null);
-            return;
-          }
-          const end = Math.min(wanted.endBar, bars.length - 1);
-          if (!highlightBars(wanted.startBar, end)) return;
-          try {
-            apiRef.current?.applyPlaybackRangeFromHighlight();
-          } catch {
-            return;
-          }
-          if (end !== wanted.endBar) {
-            loopBarsRef.current = { startBar: wanted.startBar, endBar: end };
-            onLoopChangeRef.current?.(loopBarsRef.current);
-          }
-        };
-
-        // Ends a drag with whatever bars it last covered. Called from
-        // beatMouseUp for a release over the score, and from the window
-        // listener below for one that lands anywhere else — alphaTab binds
-        // mouseup to its own canvas element, so a release past the right edge
-        // of the last bar (the natural way to select "to the end") never
-        // reaches it, and without this the drag would hang: its own
-        // _isBeatMouseDown stays set, and plain hovering would then keep
-        // extending the selection.
-        const commitDrag = () => {
-          const range = dragPreviewRef.current;
-          dragStartBeatRef.current = null;
-          dragPreviewRef.current = null;
-          if (!draggedRef.current) return false;
-          draggedRef.current = false;
-          if (!range || !highlightBars(range.startBar, range.endBar)) return false;
-          try {
-            apiRef.current?.applyPlaybackRangeFromHighlight();
-          } catch {
-            return false;
-          }
-          loopBarsRef.current = range;
-          onLoopChangeRef.current?.(range);
-          return true;
-        };
-
-        api.beatMouseMove.on((beat: any) => {
-          if (destroyed) return;
-          const startBar = dragStartBeatRef.current?.voice?.bar;
-          const overBar = beat?.voice?.bar;
-          if (!startBar || !overBar) return;
-          // Only a genuine drag — moving within the beat it started on is
-          // still a click as far as the caret is concerned.
-          if (overBar.index === startBar.index && beat === dragStartBeatRef.current) return;
-          draggedRef.current = true;
-          dragPreviewRef.current = highlightBars(startBar.index, overBar.index);
-        });
-
-        api.beatMouseUp.on((beat: any) => {
-          if (destroyed) return;
-          const startBar = dragStartBeatRef.current?.voice?.bar;
-          const overBar = beat?.voice?.bar;
-          // Prefer the bar actually released over; fall back to the last one
-          // the drag passed through when the release was off a beat.
-          if (draggedRef.current && startBar && overBar) {
-            dragPreviewRef.current = { startBar: startBar.index, endBar: overBar.index };
-            if (overBar.index < startBar.index) {
-              dragPreviewRef.current = { startBar: overBar.index, endBar: startBar.index };
-            }
-          }
-          if (commitDrag()) return;
-          // A plain click. alphaTab's own handler has already run by now, and
-          // for a click (its _selectionEnd is unset, or equals
-          // _selectionStart) it sets playbackRange to null. Editing a note
-          // inside the section you are drilling is exactly what you do while
-          // practising, so put the section back — the toolbar's ✕ is the only
-          // way to lose it.
-          reapplyLoop();
-        });
-
-        // Bubble phase, so alphaTab's capture-phase handler on its own canvas
-        // has already committed the drag by the time this runs for a release
-        // over the score; commitDrag then no-ops.
-        onWindowMouseUp = () => {
-          if (!destroyed) commitDrag();
-        };
-        window.addEventListener("mouseup", onWindowMouseUp);
-
+        // The hook has its own beatMouseDown for the drag; this one is the
+        // caret's. alphaTab allows both.
         api.beatMouseDown.on((beat: any) => {
           if (destroyed) return;
-          dragStartBeatRef.current = beat;
-          draggedRef.current = false;
           if (suppressBeatHandlerRef.current) {
             suppressBeatHandlerRef.current = false;
             return;
@@ -540,14 +355,8 @@ const ScoreCanvas = forwardRef<ScoreCanvasHandle, ScoreCanvasProps>(function Sco
 
     return () => {
       destroyed = true;
-      unsubscribeSink?.();
-      unsubscribeSink = null;
-      if (onWindowMouseUp) window.removeEventListener("mouseup", onWindowMouseUp);
-      onWindowMouseUp = null;
-      // The click's own context is separate from alphaTab's output and
-      // would otherwise outlive the editor.
-      void clickContextRef.current?.close().catch(() => {});
-      clickContextRef.current = null;
+      detachPlayback?.();
+      detachPlayback = null;
       const api = apiRef.current;
       if (api) {
         try {
@@ -560,7 +369,7 @@ const ScoreCanvas = forwardRef<ScoreCanvasHandle, ScoreCanvasProps>(function Sco
         apiRef.current = null;
       }
     };
-  }, [applyTex, positionCaretOverlay]);
+  }, [applyTex, positionCaretOverlay, playback]);
 
   // Re-render whenever the tex prop changes. (The very first render happens
   // above, right after setup, via texRef — this effect's own mount-time call
@@ -577,123 +386,7 @@ const ScoreCanvas = forwardRef<ScoreCanvasHandle, ScoreCanvasProps>(function Sco
     onPlayingChange?.(isPlaying);
   }, [isPlaying, onPlayingChange]);
 
-  // alphaTab is torn down and rebuilt whenever `tex` changes, so the speed has
-  // to be (re)applied both at init and whenever it changes on its own.
-  const speedRef = useRef(speed);
-  speedRef.current = speed;
-  const volumeRef = useRef(volume);
-  volumeRef.current = volume;
-  const metronomeVolumeRef = useRef(metronomeVolume);
-  metronomeVolumeRef.current = metronomeVolume;
-  const countInVolumeRef = useRef(countInVolume);
-  countInVolumeRef.current = countInVolume;
-  // Which phase alphaTab is in, since the two volumes above mean different
-  // things during the count-in and during playback, and alphaTab exposes no
-  // flag for it.
-  const countingInRef = useRef(false);
-  const clickContextRef = useRef<AudioContext | null>(null);
-  const loopingRef = useRef(looping);
-  loopingRef.current = looping;
-  const onFinishedRef = useRef(onFinished);
-  onFinishedRef.current = onFinished;
-  const onLoopChangeRef = useRef(onLoopChange);
-  onLoopChangeRef.current = onLoopChange;
-  // Drag state for practice-range selection. Refs, not state: these change
-  // many times per drag and must not re-render the score underneath it.
-  const dragStartBeatRef = useRef<any>(null);
-  const draggedRef = useRef(false);
-  const dragPreviewRef = useRef<{ startBar: number; endBar: number } | null>(null);
-  const loopBarsRef = useRef<{ startBar: number; endBar: number } | null>(null);
-
-  useEffect(() => {
-    const api = apiRef.current;
-    if (!api) return;
-    try {
-      api.playbackSpeed = speedToRate(speed);
-    } catch {
-      /* ignore — the api may be mid-teardown */
-    }
-  }, [speed]);
-
-  useEffect(() => {
-    const api = apiRef.current;
-    if (!api) return;
-    try {
-      api.isLooping = !!looping;
-    } catch {
-      /* ignore */
-    }
-  }, [looping]);
-
-  useEffect(() => {
-    const api = apiRef.current;
-    if (!api || volume === undefined) return;
-    try {
-      api.masterVolume = volume;
-    } catch {
-      /* ignore — the api may be mid-teardown */
-    }
-  }, [volume]);
-
-  // Deliberately plain functions on the component, not useCallbacks: they are
-  // only ever called from the alphaTab subscriptions set up at mount, which
-  // read them through the closure once.
-
-  /**
-   * One click, every beat, with the downbeat louder — same tone, same decay,
-   * only the gain differs, because two different tones are distracting to
-   * play along to.
-   */
-  const playClick = (level: number, accent: boolean) => {
-    try {
-      let ctx = clickContextRef.current;
-      if (!ctx) {
-        ctx = new AudioContext();
-        clickContextRef.current = ctx;
-        void routeContextToSink(ctx);
-      }
-      if (ctx.state === "suspended") void ctx.resume();
-
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.frequency.value = CLICK_HZ;
-      const at = ctx.currentTime;
-      gain.gain.setValueAtTime(level * (accent ? 1 : OFFBEAT_GAIN), at);
-      gain.gain.exponentialRampToValueAtTime(0.001, at + 0.05);
-      osc.start(at);
-      osc.stop(at + 0.05);
-    } catch {
-      /* no audio output available — the tab itself still plays */
-    }
-  };
-
-  /**
-   * What alphaTab itself gets, which is not what the user chose.
-   *
-   * Its metronome is silenced outright: every tick is played above instead.
-   * The count-in cannot be silenced the same way, because a count-in volume
-   * of zero makes alphaTab skip the count-in phase altogether rather than
-   * run it quietly — so it gets a whisper, far below anything audible, which
-   * is enough to make the phase happen and emit its ticks.
-   */
-  const applyClickVolumes = (api: any) => {
-    api.metronomeVolume = 0;
-    api.countInVolume = (countInVolumeRef.current ?? 0) > 0 ? INAUDIBLE : 0;
-  };
-
-  useEffect(() => {
-    const api = apiRef.current;
-    if (!api) return;
-    try {
-      applyClickVolumes(api);
-    } catch {
-      /* ignore */
-    }
-    // applyClickVolumes reads the current values through refs, so the two
-    // volumes are the honest dependencies even though it is not one itself.
-  }, [metronomeVolume, countInVolume]);
+  // The hook applies speed, looping and the volumes itself.
 
   // --- Behaviour 5 ---
   useImperativeHandle(
@@ -709,16 +402,7 @@ const ScoreCanvas = forwardRef<ScoreCanvasHandle, ScoreCanvasProps>(function Sco
           /* ignore */
         }
       },
-      clearLoop: () => {
-        loopBarsRef.current = null;
-        try {
-          apiRef.current?.clearPlaybackRangeHighlight();
-          if (apiRef.current) apiRef.current.playbackRange = null;
-        } catch {
-          /* ignore */
-        }
-        onLoopChangeRef.current?.(null);
-      },
+      clearLoop: () => playback.clearLoop(),
       stop: () => {
         try {
           apiRef.current?.stop();
@@ -727,39 +411,14 @@ const ScoreCanvas = forwardRef<ScoreCanvasHandle, ScoreCanvasProps>(function Sco
         }
       },
     }),
-    [],
+    [playback],
   );
 
   return (
     <div className="relative w-full h-full overflow-auto bg-gray-600 rounded border border-gray-500">
       <style jsx global>{`
-        .score-canvas-host .at-surface {
-          width: 100% !important;
-          margin: 0 !important;
-          background: white !important;
-          overflow: hidden;
-        }
-        .score-canvas-host .at-surface svg {
-          display: block;
-          width: 100% !important;
-          height: auto;
-        }
-        .score-canvas-host .at-cursor-bar {
-          background: rgba(255, 242, 0, 0.25);
-        }
-        .score-canvas-host .at-beat-cursor {
-          background: rgba(64, 64, 255, 0.75);
-          width: 3px;
-        }
-        /*
-          The drag-selected practice range. alphaTab positions this overlay
-          but gives it no background of its own, so without this rule a
-          selected section looked identical to an unselected one — the only
-          sign it had worked was the toolbar chip. Blue, to stay distinct
-          from the yellow current-bar cursor above, which sits under it.
-        */
-        .score-canvas-host .at-selection div {
-          background: rgba(59, 130, 246, 0.22);
+        .score-canvas-host {
+          ${SCORE_SURFACE_CSS}
         }
       `}</style>
       <div className="score-canvas-host relative">

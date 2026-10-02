@@ -5,6 +5,8 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import BookGrid from "@/components/BookGrid";
 import TrackListView from "@/components/TrackListView";
 import JamTrackList from "@/components/JamTrackList";
+import GpSongPlayer from "@/components/gp/GpSongPlayer";
+import TrackSourceSwitch from "@/components/gp/TrackSourceSwitch";
 import JamTrackPdfPanel from "@/components/JamTrackPdfPanel";
 import BottomPlayer, { MarkerBarState } from "@/components/BottomPlayer";
 import MarkersBar from "@/components/MarkersBar";
@@ -23,7 +25,7 @@ import TabsSection from "@/components/tabs/TabsSection";
 import HomeView from "@/components/HomeView";
 import UploadModal from "@/components/UploadModal";
 import VideoPlayer from "@/components/VideoPlayer";
-import { AuthorSummary, BookSummary, Book, Track, TrackTab, Marker, JamTrack, JamTrackMarker, BookVideo, BookVideoMarker, SearchResultTrack, SearchResultBook, SearchResultJamTrack, SavedLoop, JamTrackLoop } from "@/types";
+import { AuthorSummary, BookSummary, Book, Track, TrackTab, Marker, JamTrack, JamTrackMarker, BookVideo, BookVideoMarker, SearchResultTrack, SearchResultBook, SearchResultJamTrack, SavedLoop, JamTrackLoop, GpSong } from "@/types";
 import { applySavedVolume, clampTrackVolume } from "@/lib/trackVolume";
 import { applySavedPlaybackSpeed, clampPlaybackSpeed } from "@/lib/playbackSpeed";
 import TrackTabsModal from "@/components/TrackTabsModal";
@@ -57,6 +59,89 @@ export default function Home() {
   const [currentAuthorId, setCurrentAuthorId] = useState<string | null>(null);
   const [currentBookId, setCurrentBookId] = useState<string | null>(null);
   const [currentJamTrackId, setCurrentJamTrackId] = useState<string | null>(null);
+  // Guitar Pro songs live in the Jam Tracks section but are their own thing:
+  // they synthesise every instrument rather than playing a recording, so the
+  // waveform player does not apply to them. Exactly one of the two kinds is
+  // selected at a time.
+  const [gpSongs, setGpSongs] = useState<GpSong[]>([]);
+  const [currentGpSongId, setCurrentGpSongId] = useState<string | null>(null);
+  const [isUploadingGp, setIsUploadingGp] = useState(false);
+  const currentGpSong = useMemo(
+    () => gpSongs.find((g) => g.id === currentGpSongId) ?? null,
+    [gpSongs, currentGpSongId],
+  );
+
+  const refreshGpSongs = useCallback(async () => {
+    try {
+      const res = await fetch("/api/gpsongs");
+      if (res.ok) setGpSongs(await res.json());
+    } catch {
+      /* the list just stays as it is */
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshGpSongs();
+  }, [refreshGpSongs]);
+
+  const handleGpUpload = useCallback(
+    async (files: FileList) => {
+      setIsUploadingGp(true);
+      try {
+        const body = new FormData();
+        for (const file of Array.from(files)) body.append("files", file);
+        const res = await fetch("/api/gpsongs/upload", { method: "POST", body });
+        const data = await res.json();
+        const failed = (data.results ?? []).filter((r: { success: boolean }) => !r.success);
+        if (failed.length > 0) {
+          alert(failed.map((r: { name: string; error?: string }) => `${r.name}: ${r.error}`).join("\n"));
+        }
+        await refreshGpSongs();
+      } finally {
+        setIsUploadingGp(false);
+      }
+    },
+    [refreshGpSongs],
+  );
+
+  // A song is one entry; these decide which of its two sources is showing.
+  const [trackSource, setTrackSource] = useState<"audio" | "tab">("audio");
+  const [isLinking, setIsLinking] = useState(false);
+  const addTabInputRef = useRef<HTMLInputElement>(null);
+  const addAudioInputRef = useRef<HTMLInputElement>(null);
+
+  /** The tab belonging to the selected jam track, if it has one. */
+  const linkedGpSong = useMemo(
+    () => (currentJamTrackId ? gpSongs.find((g) => g.jamTrackId === currentJamTrackId) ?? null : null),
+    [gpSongs, currentJamTrackId],
+  );
+
+  const handleGpSongDelete = useCallback(
+    async (id: string) => {
+      setGpSongs((prev) => prev.filter((g) => g.id !== id));
+      setCurrentGpSongId((prev) => (prev === id ? null : prev));
+      try {
+        await fetch(`/api/gpsongs/${id}`, { method: "DELETE" });
+      } catch {
+        // Put it back rather than leave the list lying about what exists.
+        await refreshGpSongs();
+      }
+    },
+    [refreshGpSongs],
+  );
+
+  const handleGpSongPatch = useCallback(async (id: string, patch: Partial<GpSong>) => {
+    setGpSongs((prev) => prev.map((g) => (g.id === id ? { ...g, ...patch } : g)));
+    try {
+      await fetch(`/api/gpsongs/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+      });
+    } catch {
+      /* the optimistic update stands; it is a preference, not data */
+    }
+  }, []);
 
   // Ref so fetchLibrary callback can access current selectedBookId
   const selectedBookIdRef = useRef<string | null>(null);
@@ -343,6 +428,68 @@ export default function Home() {
       console.error("Error fetching library:", error);
     }
   }, [searchParams, fetchBookDetail]);
+
+  // Attach a Guitar Pro file to the jam track that is open.
+  const handleAddTab = useCallback(
+    async (files: FileList) => {
+      if (!currentJamTrackId) return;
+      setIsLinking(true);
+      try {
+        const body = new FormData();
+        for (const file of Array.from(files)) body.append("files", file);
+        body.append("jamTrackId", currentJamTrackId);
+        const res = await fetch("/api/gpsongs/upload", { method: "POST", body });
+        const data = await res.json().catch(() => ({}));
+        const failed = (data.results ?? []).filter((r: { success: boolean }) => !r.success);
+        if (!res.ok || failed.length > 0) {
+          alert(failed.map((r: { name: string; error?: string }) => `${r.name}: ${r.error}`).join("\n")
+            || "Could not add that tab.");
+        } else {
+          setTrackSource("tab");
+        }
+        await refreshGpSongs();
+      } finally {
+        setIsLinking(false);
+      }
+    },
+    [currentJamTrackId, refreshGpSongs],
+  );
+
+  // Attach an audio recording to the tab-only song that is open: upload it,
+  // then point the tab at the jam track the upload created.
+  const handleAddAudio = useCallback(
+    async (files: FileList) => {
+      if (!currentGpSongId) return;
+      setIsLinking(true);
+      try {
+        const body = new FormData();
+        for (const file of Array.from(files)) body.append("files", file);
+        const res = await fetch("/api/jamtracks/upload", { method: "POST", body });
+        const data = await res.json().catch(() => ({}));
+        const made = (data.results ?? []).find(
+          (r: { success: boolean; jamTrackId?: string }) => r.success && r.jamTrackId,
+        );
+        if (!res.ok || !made) {
+          alert("Could not add that audio file.");
+          return;
+        }
+        await fetch(`/api/gpsongs/${currentGpSongId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ jamTrackId: made.jamTrackId }),
+        });
+        await Promise.all([refreshGpSongs(), fetchLibrary()]);
+        // The pair now lives under the jam track, so follow it there.
+        setCurrentGpSongId(null);
+        setCurrentJamTrackId(made.jamTrackId);
+        setTrackSource("audio");
+      } finally {
+        setIsLinking(false);
+      }
+    },
+    [currentGpSongId, refreshGpSongs, fetchLibrary],
+  );
+
 
   useEffect(() => {
     fetchLibrary(true); // Restore from URL on initial load
@@ -2282,12 +2429,31 @@ export default function Home() {
                 currentJamTrackId={currentJamTrack?.id ?? null}
                 onSelect={(id) => {
                   const jt = jamTracks.find((t) => t.id === id);
-                  if (jt) handleJamTrackSelect(jt);
+                  if (jt) {
+                    setCurrentGpSongId(null);
+                    handleJamTrackSelect(jt);
+                  }
                 }}
                 onUpload={handleJamTrackUpload}
                 isUploading={isUploadingJamTracks}
                 onYouTubeImport={handleYouTubeImport}
                 isImportingFromYouTube={isImportingFromYouTube}
+                // Only tabs that stand alone; one attached to a jam track is
+                // shown as part of that entry, not as a second row.
+                gpSongs={gpSongs.filter((g) => !g.jamTrackId)}
+                jamTrackIdsWithTab={gpSongs.map((g) => g.jamTrackId).filter((id): id is string => !!id)}
+                currentGpSongId={currentGpSongId}
+                onSelectGpSong={(id) => {
+                  setCurrentGpSongId(id);
+                  setCurrentJamTrackId(null);
+                }}
+                onGpUpload={handleGpUpload}
+                isUploadingGp={isUploadingGp}
+                onDeleteGpSong={handleGpSongDelete}
+                onToggleGpFavorite={(id) => {
+                  const song = gpSongs.find((g) => g.id === id);
+                  if (song) handleGpSongPatch(id, { favorite: !song.favorite });
+                }}
               />
             </div>
             {currentJamTrack && (
@@ -2359,8 +2525,61 @@ export default function Home() {
             )}
           </div>
           {/* Right half: PDF panel, fills top to bottom */}
-          <div className="w-1/2 min-w-0 min-h-0">
-            {currentJamTrack ? (
+          <div className="w-1/2 min-w-0 min-h-0 flex flex-col">
+            {(currentGpSong || currentJamTrack) && (
+              <div className="shrink-0 flex items-center gap-2 px-3 pt-3">
+                <TrackSourceSwitch
+                  source={currentGpSong ? "tab" : trackSource}
+                  onChange={setTrackSource}
+                  hasAudio={!!currentJamTrack}
+                  hasTab={!!currentGpSong || !!linkedGpSong}
+                  busy={isLinking}
+                  onAddTab={() => addTabInputRef.current?.click()}
+                  onAddAudio={() => addAudioInputRef.current?.click()}
+                />
+                <span className="text-xs text-gray-500 truncate">
+                  {currentGpSong?.title ?? currentJamTrack?.title}
+                </span>
+              </div>
+            )}
+            <input
+              ref={addTabInputRef}
+              type="file"
+              accept=".gp,.gp3,.gp4,.gp5,.gpx"
+              className="hidden"
+              onChange={(e) => {
+                if (e.target.files?.length) handleAddTab(e.target.files);
+                e.target.value = "";
+              }}
+            />
+            <input
+              ref={addAudioInputRef}
+              type="file"
+              accept=".mp3,.flac,.wav,.ogg,.m4a,.aac"
+              className="hidden"
+              onChange={(e) => {
+                if (e.target.files?.length) handleAddAudio(e.target.files);
+                e.target.value = "";
+              }}
+            />
+            <div className="flex-1 min-h-0">
+            {currentGpSong ? (
+              <div className="h-full min-h-0 p-3">
+                <GpSongPlayer
+                  key={currentGpSong.id}
+                  song={currentGpSong}
+                  onUpdate={(patch) => handleGpSongPatch(currentGpSong.id, patch)}
+                />
+              </div>
+            ) : currentJamTrack && linkedGpSong && trackSource === "tab" ? (
+              <div className="h-full min-h-0 p-3">
+                <GpSongPlayer
+                  key={linkedGpSong.id}
+                  song={linkedGpSong}
+                  onUpdate={(patch) => handleGpSongPatch(linkedGpSong.id, patch)}
+                />
+              </div>
+            ) : currentJamTrack ? (
               <JamTrackPdfPanel
                 jamTrackId={currentJamTrack.id}
                 pdfs={currentJamTrack.pdfs ?? []}
@@ -2378,6 +2597,7 @@ export default function Home() {
                 Select a jam track to get started
               </div>
             )}
+            </div>
           </div>
         </div>
       ) : activeSection === 'tabs' ? (

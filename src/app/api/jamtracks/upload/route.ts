@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
     // Ensure JamTracks folder exists
     await fs.mkdir(jamTracksPath, { recursive: true });
 
-    const results: { name: string; success: boolean; error?: string }[] = [];
+    const results: { name: string; success: boolean; error?: string; jamTrackId?: string }[] = [];
 
     for (const file of files) {
       const ext = path.extname(file.name).toLowerCase();
@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
         }
 
         // Create jam track in database
-        await prisma.jamTrack.upsert({
+        const record = await prisma.jamTrack.upsert({
           where: { filePath: relativePath },
           update: {
             title,
@@ -88,7 +88,7 @@ export async function POST(request: NextRequest) {
           },
         });
 
-        results.push({ name: file.name, success: true });
+        results.push({ name: file.name, success: true, jamTrackId: record.id });
       } catch (err) {
         console.error(`Error processing ${file.name}:`, err);
         results.push({

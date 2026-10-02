@@ -37,6 +37,15 @@ Standalone play-along tracks (backing tracks, songs) that live outside the book 
 - Single-PDF mode for books/tracks, multi-PDF tabbed mode for jam tracks
 - **Full-height page** - The page controls and Fit Page toggle float over the PDF instead of taking their own row, and fade in on hover (pinned on touch screens), so the page gets the viewer's entire height — worth about 6% more sheet music in fit-to-page mode
 
+### Guitar Pro Import
+- **One entry per song, two sources** - A song is a single entry in Jam Tracks that may have an audio recording, a Guitar Pro tab, or both. With both, an Audio / Tab switch picks which you hear; only one plays at a time, so there is nothing to keep in sync. **+ Add track** offers all three ways in (audio upload, YouTube, Guitar Pro), and a track that has only one source offers to add the other — including ones imported separately beforehand
+- **Import a Guitar Pro file and practise against it** - Import a `.gp`, `.gp3`, `.gp4`, `.gp5` or `.gpx` file from the Jam Tracks section. The file plays itself — every instrument synthesised — so there is no audio recording and nothing to keep in sync, and slowing down is exact rather than time-stretched
+- **Mute your own part** - A per-track mixer with volume, mute and solo, so you can turn your own part down and play it while the rest of the band keeps going. This is the point of importing a tab rather than a recording
+- **One instrument at a time** - Read whichever part you are learning and switch between them; every part stays audible whichever is on screen
+- **Named practice sections** - Drag across the score to pick whole bars, name it ("Solo", "the fast bit"), and it is there next time; clicking one jumps to it and loops it
+- **The same transport as the tab editor** - Play/pause with `Space`, stop, repeat, 10-200% speed saved per song, and the click and count-in with the accented downbeat
+- Read-only: writing and editing tabs is the Tabs section's job
+
 ### Tab Editor
 - **Write tabs on a canvas** - The **Tabs** section opens a score you type notation into directly: click a beat to put the caret there, type a fret number, arrow around, and the tab redraws as you go. A tab opened from a track (Lessons → track → Tabs → Practice) gets the same editor, so the tab stays attached to the piece you are practising
 - **Side-by-side with the book** - Opened from a track, the editor docks to one side of the window rather than covering it, so the book PDF you are transcribing from stays readable and scrollable beside it. Drag the panel's inner edge to resize, flip it to the other side, or expand it to the whole window; the choice is remembered
