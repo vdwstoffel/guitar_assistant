@@ -210,6 +210,8 @@ export interface GpSong {
   lastTrackIndex: number;
   /** The jam track this tab belongs to; null means it stands on its own. */
   jamTrackId: string | null;
+  /** The lesson track this tab belongs to; null means it is not on one. */
+  trackId: string | null;
   sections: GpSongSection[];
   createdAt: string;
 }

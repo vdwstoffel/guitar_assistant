@@ -1,8 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import type { Track, TrackTab } from "@/types";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import type { Track, TrackTab, GpSong } from "@/types";
+import { trackTabRows, type TrackTabRow } from "@/lib/gp/trackTabRows";
 import TabEditor from "./tabs/TabEditor";
+import GpSongPlayer from "./gp/GpSongPlayer";
+import { usePracticeSessionTracker } from "@/hooks/usePracticeSessionTracker";
 import { emptyTabTex } from "@/lib/tabscore/emptyTab";
 
 // A minimal but valid AlphaTex document for a freshly-created tab: a tempo
@@ -14,6 +17,8 @@ import { emptyTabTex } from "@/lib/tabscore/emptyTab";
 
 interface TrackTabsModalProps {
   track: Track;
+  /** The Guitar Pro files imported onto this track. */
+  gpSongs: GpSong[];
   onClose: () => void;
   onTabCreate: (
     trackId: string,
@@ -23,6 +28,10 @@ interface TrackTabsModalProps {
   ) => Promise<TrackTab>;
   onTabUpdate: (tabId: string, updates: Partial<TrackTab>) => Promise<void>;
   onTabDelete: (tabId: string) => Promise<void>;
+  /** Import files onto this track; resolves to a failure message, or null. */
+  onGpImport: (files: FileList) => Promise<string | null>;
+  onGpDelete: (id: string) => void;
+  onGpPatch: (id: string, patch: Partial<GpSong>) => void;
 }
 
 // Where the editor sits relative to the page behind it. Tabs are written
@@ -70,13 +79,29 @@ function loadWidth(): number {
 
 export default function TrackTabsModal({
   track,
+  gpSongs,
   onClose,
   onTabCreate,
   onTabUpdate,
   onTabDelete,
+  onGpImport,
+  onGpDelete,
+  onGpPatch,
 }: TrackTabsModalProps) {
   const [tabs, setTabs] = useState<TrackTab[]>(track.tabs ?? []);
-  const [practiceTab, setPracticeTab] = useState<TrackTab | null>(null);
+  // Imports are not copied into local state the way scored tabs are: they
+  // live in page.tsx, which owns every GpSong in the app, so an import or a
+  // delete refreshes them there and arrives back as a prop.
+  const rows = useMemo(() => trackTabRows(tabs, gpSongs), [tabs, gpSongs]);
+  // The id, not the row: a row is a snapshot built from props, and the
+  // player writes back through onGpPatch, so holding the object would pin
+  // the dock to the state it opened in — the part and speed it reverted to
+  // on every re-dock before this.
+  const [practiceId, setPracticeId] = useState<string | null>(null);
+  const practiceRow = useMemo<TrackTabRow | null>(
+    () => rows.find((r) => r.id === practiceId) ?? null,
+    [rows, practiceId],
+  );
   // Read on mount rather than in the initialiser: this component renders on
   // the server too, where localStorage does not exist.
   const [dock, setDock] = useState<Dock>("left");
@@ -85,6 +110,15 @@ export default function TrackTabsModal({
     setDock(loadDock());
     setDockWidth(loadWidth());
   }, []);
+
+  // alphaTab lays a score out on window resize, not on container resize, so
+  // a docked panel that changes width leaves the staff at its old layout and
+  // the SVG simply stretches. The drag handle below already does this on
+  // pointer-up; this covers the ⇤ / ⤢ / ⇥ buttons. In an effect, so it runs
+  // after the commit that applied the new width.
+  useEffect(() => {
+    window.dispatchEvent(new Event("resize"));
+  }, [dock]);
 
   const chooseDock = (next: Dock) => {
     setDock(next);
@@ -134,6 +168,36 @@ export default function TrackTabsModal({
   const [isAdding, setIsAdding] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
 
+  // An imported tab is still this exercise being practised, so it feeds
+  // lastPlayedAt and everything built on it — What to Practice Next,
+  // in-progress state, revisit-tracks. TabEditor does this internally; the
+  // GP player is shared with the jam track side, where the song itself is
+  // the thing practised, so there the caller decides instead.
+  const sessionTracker = usePracticeSessionTracker(track);
+  const sessionTrackerRef = useRef(sessionTracker);
+  useEffect(() => {
+    sessionTrackerRef.current = sessionTracker;
+  });
+
+  const handleGpPlayingChange = useCallback((playing: boolean) => {
+    if (playing) sessionTrackerRef.current.onPlay();
+    else sessionTrackerRef.current.onPause();
+  }, []);
+
+  const gpInputRef = useRef<HTMLInputElement>(null);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+
+  const handleImport = async (files: FileList) => {
+    setIsImporting(true);
+    setImportError(null);
+    try {
+      setImportError(await onGpImport(files));
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
   const handleAdd = async () => {
     if (!newName.trim()) return;
     setIsAdding(true);
@@ -155,10 +219,8 @@ export default function TrackTabsModal({
 
   const handleSaveFromPlayer = async (tabId: string, updates: Partial<TrackTab>) => {
     await onTabUpdate(tabId, updates);
+    // No need to touch the open row: it is derived from `tabs`.
     setTabs((prev) => prev.map((t) => (t.id === tabId ? { ...t, ...updates } : t)));
-    if (practiceTab?.id === tabId) {
-      setPracticeTab((prev) => (prev ? { ...prev, ...updates } : prev));
-    }
   };
 
   return (
@@ -167,7 +229,7 @@ export default function TrackTabsModal({
           own state survives closing the editor. */}
       <div
         className={`fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 ${
-          practiceTab ? "hidden" : ""
+          practiceRow ? "hidden" : ""
         }`}
         onClick={onClose}
       >
@@ -190,30 +252,50 @@ export default function TrackTabsModal({
 
           {/* Tab list */}
           <div className="flex-1 overflow-y-auto p-4 space-y-2">
-            {tabs.length === 0 && !showAddForm && (
+            {rows.length === 0 && !showAddForm && (
               <div className="text-gray-500 text-sm text-center py-6">
-                No tabs yet. Add one below.
+                No tabs yet. Score one, or import a Guitar Pro file.
               </div>
             )}
-            {tabs.map((tab) => (
+            {rows.map((row) => (
               <div
-                key={tab.id}
+                key={row.id}
                 className="flex items-center gap-2 bg-gray-700 rounded-lg px-3 py-2"
               >
                 <div className="flex-1 min-w-0">
-                  <div className="text-white text-sm font-medium truncate">{tab.name}</div>
-                  <div className="text-gray-400 text-xs">{tab.tempo} BPM</div>
+                  <div className="flex items-center gap-2 min-w-0">
+                    {row.kind === "gp" && (
+                      <span
+                        title="An imported Guitar Pro file — read-only, plays every instrument"
+                        className="shrink-0 px-1.5 py-0.5 text-[10px] rounded bg-purple-900 text-purple-200 border border-purple-700"
+                      >
+                        GP
+                      </span>
+                    )}
+                    <div className="text-white text-sm font-medium truncate">{row.name}</div>
+                  </div>
+                  <div className="text-gray-400 text-xs">{row.subtitle}</div>
                 </div>
                 <button
-                  onClick={() => setPracticeTab(tab)}
+                  onClick={() => setPracticeId(row.id)}
                   className="px-3 py-1 text-xs rounded bg-green-700 hover:bg-green-600 text-white shrink-0"
                 >
                   Practice
                 </button>
                 <button
-                  onClick={() => handleDelete(tab.id)}
+                  onClick={() => {
+                    // An import's ✕ reaches the disk, so it asks first —
+                    // the same sentence the Jam Tracks list uses for the
+                    // same action. A scored tab lives only in the database.
+                    if (row.kind !== "gp") {
+                      handleDelete(row.id);
+                    } else if (confirm(`Delete "${row.name}"? This removes the file too.`)) {
+                      if (practiceId === row.id) setPracticeId(null);
+                      onGpDelete(row.id);
+                    }
+                  }}
                   className="px-2 py-1 text-xs rounded bg-gray-600 hover:bg-red-700 text-gray-300 hover:text-white shrink-0"
-                  title="Delete tab"
+                  title={row.kind === "gp" ? "Delete this import" : "Delete tab"}
                 >
                   ✕
                 </button>
@@ -261,15 +343,39 @@ export default function TrackTabsModal({
             )}
           </div>
 
-          {/* Footer */}
+          {/* Footer: the two ways a tab gets here — write one, or import one. */}
           {!showAddForm && (
             <div className="px-4 py-3 border-t border-gray-700 shrink-0">
-              <button
-                onClick={() => setShowAddForm(true)}
-                className="w-full py-2 text-sm rounded bg-gray-700 hover:bg-gray-600 text-gray-300 border border-dashed border-gray-600"
-              >
-                + Add Tab
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setShowAddForm(true)}
+                  className="flex-1 py-2 text-sm rounded bg-gray-700 hover:bg-gray-600 text-gray-300 border border-dashed border-gray-600"
+                >
+                  ✎ Score one
+                </button>
+                <button
+                  onClick={() => gpInputRef.current?.click()}
+                  disabled={isImporting}
+                  title="Read-only, and every instrument in the file plays"
+                  className="flex-1 py-2 text-sm rounded bg-gray-700 hover:bg-gray-600 text-gray-300 border border-dashed border-gray-600 disabled:opacity-50"
+                >
+                  {isImporting ? "Importing…" : "🎼 Import Guitar Pro"}
+                </button>
+              </div>
+              {importError && (
+                <p className="mt-2 text-xs text-red-400 whitespace-pre-line">{importError}</p>
+              )}
+              <input
+                ref={gpInputRef}
+                type="file"
+                multiple
+                accept=".gp,.gp3,.gp4,.gp5,.gpx"
+                className="hidden"
+                onChange={(e) => {
+                  if (e.target.files?.length) void handleImport(e.target.files);
+                  e.target.value = "";
+                }}
+              />
             </div>
           )}
         </div>
@@ -282,7 +388,7 @@ export default function TrackTabsModal({
         there is no click-outside-to-close, so the PDF beside it stays
         readable AND scrollable while typing.
       */}
-      {practiceTab && (
+      {practiceRow && (
         <div
           className={`fixed inset-y-0 z-60 flex flex-col bg-gray-800 shadow-2xl ${
             dock === "full"
@@ -306,7 +412,7 @@ export default function TrackTabsModal({
           )}
             <div className="flex items-center justify-between gap-2 px-4 py-2 border-b border-gray-700 shrink-0">
               <h2 className="text-white font-semibold truncate min-w-0">
-                {practiceTab.name}
+                {practiceRow.name}
                 <span className="ml-2 text-xs font-normal text-gray-400">{track.title}</span>
               </h2>
               <div className="flex items-center gap-1 shrink-0">
@@ -333,7 +439,7 @@ export default function TrackTabsModal({
                   </button>
                 ))}
                 <button
-                  onClick={() => setPracticeTab(null)}
+                  onClick={() => setPracticeId(null)}
                   className="ml-1 px-3 py-1 text-xs rounded bg-gray-700 hover:bg-gray-600 text-gray-300"
                 >
                   Close
@@ -341,23 +447,36 @@ export default function TrackTabsModal({
               </div>
             </div>
             <div className="flex-1 min-h-0 p-3">
-              <TabEditor
-                // Remounts when the panel is re-docked, so alphaTab measures
-                // the new width instead of keeping the old one's layout.
-                key={`${practiceTab.id}:${dock}`}
-                initialTex={
-                  practiceTab.alphatex && practiceTab.alphatex.trim() !== ""
-                    ? practiceTab.alphatex
-                    : emptyTabTex(track.tempo ?? 120)
-                }
-                initialSpeed={practiceTab.playbackSpeed}
-                // Opened from a song, so playing here counts toward the
-                // track's practice metrics.
-                track={track}
-                // Practice first: the source pane is one click away.
-                initialShowSource={false}
-                onSave={(patch) => handleSaveFromPlayer(practiceTab.id, patch)}
-              />
+              {practiceRow.kind === "alphatex" ? (
+                <TabEditor
+                  // Remounts when the panel is re-docked, so alphaTab measures
+                  // the new width instead of keeping the old one's layout.
+                  key={`${practiceRow.id}:${dock}`}
+                  initialTex={
+                    practiceRow.tab.alphatex && practiceRow.tab.alphatex.trim() !== ""
+                      ? practiceRow.tab.alphatex
+                      : emptyTabTex(track.tempo ?? 120)
+                  }
+                  initialSpeed={practiceRow.tab.playbackSpeed}
+                  // Opened from a song, so playing here counts toward the
+                  // track's practice metrics.
+                  track={track}
+                  // Practice first: the source pane is one click away.
+                  initialShowSource={false}
+                  onSave={(patch) => handleSaveFromPlayer(practiceRow.id, patch)}
+                />
+              ) : (
+                <GpSongPlayer
+                  // Keyed on the song ALONE, unlike the editor above. The
+                  // player owns its saved sections, and a remount would drop
+                  // the ones added since it opened — re-saving one then makes
+                  // a duplicate. The effect on `dock` re-measures instead.
+                  key={practiceRow.id}
+                  song={practiceRow.song}
+                  onUpdate={(patch) => onGpPatch(practiceRow.id, patch)}
+                  onPlayingChange={handleGpPlayingChange}
+                />
+              )}
             </div>
         </div>
       )}

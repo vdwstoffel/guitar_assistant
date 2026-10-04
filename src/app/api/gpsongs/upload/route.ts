@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import * as fs from "fs/promises";
 import * as path from "path";
 import { parseGpMetadata, isGpFile, GP_EXTENSIONS } from "@/lib/gp/gpMetadata";
+import { validateGpParent } from "@/lib/gp/parentLink";
 
 const MUSIC_DIR = process.env.MUSIC_DIR || "./music";
 const GP_FOLDER = "GpSongs";
@@ -15,9 +16,15 @@ export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
     const files = formData.getAll("files") as File[];
-    // Set when the import is "Add tab" on an existing track, so the pair is
+    // Set when the import is "Add tab" on an existing jam track, or an
+    // import onto a lesson track from that track's tabs list, so the link is
     // made at creation rather than by a second round trip.
     const jamTrackId = (formData.get("jamTrackId") as string | null) || null;
+    const trackId = (formData.get("trackId") as string | null) || null;
+    const parentError = validateGpParent({ jamTrackId, trackId });
+    if (parentError) {
+      return NextResponse.json({ error: parentError }, { status: 400 });
+    }
     if (files.length === 0) {
       return NextResponse.json({ error: "No files provided" }, { status: 400 });
     }
@@ -68,6 +75,7 @@ export async function POST(request: NextRequest) {
             trackNames: JSON.stringify(meta.trackNames),
             barCount: meta.barCount,
             jamTrackId,
+            trackId,
           },
         });
 

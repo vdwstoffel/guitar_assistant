@@ -6,6 +6,8 @@ import BookGrid from "@/components/BookGrid";
 import TrackListView from "@/components/TrackListView";
 import JamTrackList from "@/components/JamTrackList";
 import GpSongPlayer from "@/components/gp/GpSongPlayer";
+import { describeUploadFailures } from "@/lib/gp/uploadErrors";
+import { isStandaloneGpSong } from "@/lib/gp/parentLink";
 import TrackSourceSwitch from "@/components/gp/TrackSourceSwitch";
 import JamTrackPdfPanel from "@/components/JamTrackPdfPanel";
 import BottomPlayer, { MarkerBarState } from "@/components/BottomPlayer";
@@ -91,11 +93,9 @@ export default function Home() {
         const body = new FormData();
         for (const file of Array.from(files)) body.append("files", file);
         const res = await fetch("/api/gpsongs/upload", { method: "POST", body });
-        const data = await res.json();
-        const failed = (data.results ?? []).filter((r: { success: boolean }) => !r.success);
-        if (failed.length > 0) {
-          alert(failed.map((r: { name: string; error?: string }) => `${r.name}: ${r.error}`).join("\n"));
-        }
+        const data = await res.json().catch(() => ({}));
+        const failure = describeUploadFailures(data.results);
+        if (failure) alert(failure);
         await refreshGpSongs();
       } finally {
         setIsUploadingGp(false);
@@ -125,6 +125,32 @@ export default function Home() {
       } catch {
         // Put it back rather than leave the list lying about what exists.
         await refreshGpSongs();
+      }
+    },
+    [refreshGpSongs],
+  );
+
+  /**
+   * Import Guitar Pro files as tabs on one lesson exercise.
+   *
+   * Resolves to a message to show in the modal rather than alerting here:
+   * the modal is a focused panel, and an alert over it reads as the page
+   * complaining rather than the form.
+   */
+  const handleGpImportOntoTrack = useCallback(
+    async (trackId: string, files: FileList): Promise<string | null> => {
+      const body = new FormData();
+      for (const file of Array.from(files)) body.append("files", file);
+      body.append("trackId", trackId);
+      try {
+        const res = await fetch("/api/gpsongs/upload", { method: "POST", body });
+        const data = await res.json().catch(() => ({}));
+        await refreshGpSongs();
+        const failure = describeUploadFailures(data.results);
+        if (!res.ok || failure) return failure || data.error || "Could not import that file.";
+        return null;
+      } catch {
+        return "Could not reach the server.";
       }
     },
     [refreshGpSongs],
@@ -440,10 +466,9 @@ export default function Home() {
         body.append("jamTrackId", currentJamTrackId);
         const res = await fetch("/api/gpsongs/upload", { method: "POST", body });
         const data = await res.json().catch(() => ({}));
-        const failed = (data.results ?? []).filter((r: { success: boolean }) => !r.success);
-        if (!res.ok || failed.length > 0) {
-          alert(failed.map((r: { name: string; error?: string }) => `${r.name}: ${r.error}`).join("\n")
-            || "Could not add that tab.");
+        const failure = describeUploadFailures(data.results);
+        if (!res.ok || failure) {
+          alert(failure || data.error || "Could not add that tab.");
         } else {
           setTrackSource("tab");
         }
@@ -2231,7 +2256,13 @@ export default function Home() {
                   onTimeUpdate={stableOnTimeUpdate}
                   onSeekReady={stableOnSeekReady}
                   onTrackTabs={currentTrack ? () => setTabsTrack(currentTrack) : undefined}
-                  trackTabsCount={currentTrack?.tabs?.length ?? 0}
+                  // Both kinds, because this badge is the only thing on
+                  // screen saying an exercise has tabs at all — an import
+                  // alone used to leave it reading "0".
+                  trackTabsCount={
+                    (currentTrack?.tabs?.length ?? 0) +
+                    (currentTrack ? gpSongs.filter((g) => g.trackId === currentTrack.id).length : 0)
+                  }
                   currentPdfPage={pdfPage}
                   onPageFlipAdd={(t, p) => setPageFlipDialog({ open: true, timestamp: t, defaultPage: p })}
                   pageFlips={currentTrack?.pageFlips ?? []}
@@ -2440,7 +2471,7 @@ export default function Home() {
                 isImportingFromYouTube={isImportingFromYouTube}
                 // Only tabs that stand alone; one attached to a jam track is
                 // shown as part of that entry, not as a second row.
-                gpSongs={gpSongs.filter((g) => !g.jamTrackId)}
+                gpSongs={gpSongs.filter(isStandaloneGpSong)}
                 jamTrackIdsWithTab={gpSongs.map((g) => g.jamTrackId).filter((id): id is string => !!id)}
                 currentGpSongId={currentGpSongId}
                 onSelectGpSong={(id) => {
@@ -2633,10 +2664,14 @@ export default function Home() {
       {tabsTrack && (
         <TrackTabsModal
           track={tabsTrack}
+          gpSongs={gpSongs.filter((g) => g.trackId === tabsTrack.id)}
           onClose={() => setTabsTrack(null)}
           onTabCreate={handleTabCreate}
           onTabUpdate={handleTabUpdate}
           onTabDelete={handleTabDelete}
+          onGpImport={(files) => handleGpImportOntoTrack(tabsTrack.id, files)}
+          onGpDelete={handleGpSongDelete}
+          onGpPatch={handleGpSongPatch}
         />
       )}
 

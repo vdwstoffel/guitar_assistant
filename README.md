@@ -44,10 +44,11 @@ Standalone play-along tracks (backing tracks, songs) that live outside the book 
 - **One instrument at a time** - Read whichever part you are learning and switch between them; every part stays audible whichever is on screen
 - **Named practice sections** - Drag across the score to pick whole bars, name it ("Solo", "the fast bit"), and it is there next time; clicking one jumps to it and loops it
 - **The same transport as the tab editor** - Play/pause with `Space`, stop, repeat, 10-200% speed saved per song, and the click and count-in with the accented downbeat
+- **On lesson exercises too** - A book exercise's tabs list (Lessons → track → **Tabs**) holds both kinds: tabs you score yourself and Guitar Pro files you import. **🎼 Import Guitar Pro** adds one, and **Practice** opens it in the same side dock the editor uses, so the score reads beside the book's PDF while the band plays underneath. Imports keep their own named sections and instrument choice, and practising one counts toward the exercise
 - Read-only: writing and editing tabs is the Tabs section's job
 
 ### Tab Editor
-- **Write tabs on a canvas** - The **Tabs** section opens a score you type notation into directly: click a beat to put the caret there, type a fret number, arrow around, and the tab redraws as you go. A tab opened from a track (Lessons → track → Tabs → Practice) gets the same editor, so the tab stays attached to the piece you are practising
+- **Write tabs on a canvas** - The **Tabs** section opens a score you type notation into directly: click a beat to put the caret there, type a fret number, arrow around, and the tab redraws as you go. A tab opened from a track (Lessons → track → Tabs → Practice) gets the same editor, so the tab stays attached to the piece you are practising. That same list also holds imported Guitar Pro files — see **Guitar Pro Import**
 - **Side-by-side with the book** - Opened from a track, the editor docks to one side of the window rather than covering it, so the book PDF you are transcribing from stays readable and scrollable beside it. Drag the panel's inner edge to resize, flip it to the other side, or expand it to the whole window; the choice is remembered
 - **AlphaTex source pane** - The score and its AlphaTex source are two views of one document, editable from either side. The source pane shows parse diagnostics inline; an unparseable draft is still saved rather than lost
 - **Playback** - Play/pause (`Space`), stop, repeat, and the same 10-200% practice speed control used elsewhere, saved per tab

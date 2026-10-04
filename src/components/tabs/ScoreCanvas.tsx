@@ -98,6 +98,11 @@ const ScoreCanvas = forwardRef<ScoreCanvasHandle, ScoreCanvasProps>(function Sco
   ref,
 ) {
   const containerRef = useRef<HTMLDivElement>(null);
+  // The element that actually scrolls. alphaTab needs it by reference: left
+  // to itself it scrolls `html,body`, and this score sits inside an
+  // overflow-auto panel, so the page never moves and the cursor simply
+  // walks off the bottom of a tab longer than the panel.
+  const scrollRef = useRef<HTMLDivElement>(null);
   const apiRef = useRef<any>(null);
 
   // Latest-value refs so long-lived alphaTab event handlers (registered once,
@@ -244,6 +249,11 @@ const ScoreCanvas = forwardRef<ScoreCanvasHandle, ScoreCanvasProps>(function Sco
         settings.player.playerMode = alphaTab.PlayerMode.EnabledSynthesizer;
         settings.player.soundFont = "/soundfont/sonivox.sf2";
         settings.player.enableCursor = true;
+        settings.player.scrollMode = alphaTab.ScrollMode.Continuous;
+        settings.player.scrollElement = scrollRef.current!;
+        // Keep a little music above the active bar rather than pinning it to
+        // the very top edge, so you can see what you have just played.
+        settings.player.scrollOffsetY = -40;
 
         const api = new AlphaTabApi(containerRef.current, settings);
         apiRef.current = api;
@@ -415,7 +425,10 @@ const ScoreCanvas = forwardRef<ScoreCanvasHandle, ScoreCanvasProps>(function Sco
   );
 
   return (
-    <div className="relative w-full h-full overflow-auto bg-gray-600 rounded border border-gray-500">
+    <div
+      ref={scrollRef}
+      className="relative w-full h-full overflow-auto bg-gray-600 rounded border border-gray-500"
+    >
       <style jsx global>{`
         .score-canvas-host {
           ${SCORE_SURFACE_CSS}

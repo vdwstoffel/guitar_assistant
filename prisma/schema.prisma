@@ -69,6 +69,7 @@ model Track {
   markers           Marker[]
   loops             Loop[]
   tabs              TrackTab[]
+  gpTabs            GpSong[]
   pageFlips         TrackPageFlip[]
   book              Book     @relation(fields: [bookId], references: [id], onDelete: Cascade)
   chapter           Chapter? @relation(fields: [chapterId], references: [id], onDelete: SetNull)
@@ -328,10 +329,22 @@ model GpSong {
   jamTrackId String?
   jamTrack   JamTrack? @relation(fields: [jamTrackId], references: [id], onDelete: SetNull)
 
+  /// When set, this tab is one of a lesson track's tabs, alongside any
+  /// AlphaTex ones. Mutually exclusive with jamTrackId — a file belongs to
+  /// one jam track or one exercise, never both. SQLite cannot express that,
+  /// so the upload and PATCH routes enforce it (see lib/gp/parentLink.ts).
+  ///
+  /// Cascade, unlike jamTrackId's SetNull: an import on a lesson track is
+  /// one of that track's tabs and dies with it, the way TrackTab does,
+  /// whereas a jam track's tab is a second source that can stand alone.
+  trackId String?
+  track   Track?  @relation(fields: [trackId], references: [id], onDelete: Cascade)
+
   sections  GpSongSection[]
   createdAt DateTime @default(now())
 
   @@index([jamTrackId])
+  @@index([trackId])
 }
 
 model GpSongSection {

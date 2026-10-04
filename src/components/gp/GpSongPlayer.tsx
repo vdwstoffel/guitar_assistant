@@ -27,6 +27,13 @@ export interface GpSongPlayerProps {
   song: GpSong;
   /** Persist a change to the song row (track choice, speed, practice state). */
   onUpdate: (patch: Partial<GpSong>) => void;
+  /**
+   * Playback started or stopped. Used where the thing being practised is
+   * something OTHER than this song — on a lesson track, playing one of its
+   * imported tabs counts toward the exercise, exactly as playing a scored
+   * tab does.
+   */
+  onPlayingChange?: (playing: boolean) => void;
 }
 
 /**
@@ -40,8 +47,13 @@ export interface GpSongPlayerProps {
  * Read-only by design. Editing is the tab editor's job, and the two share
  * their playback through `useAlphaTabPlayback` rather than a second copy.
  */
-export default function GpSongPlayer({ song, onUpdate }: GpSongPlayerProps) {
+export default function GpSongPlayer({ song, onUpdate, onPlayingChange }: GpSongPlayerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  // The element that actually scrolls. alphaTab needs it by reference: left
+  // to itself it scrolls `html,body`, and this score sits inside an
+  // overflow-auto panel, so the page never moves and the cursor simply
+  // walks off the bottom.
+  const scrollRef = useRef<HTMLDivElement>(null);
   const apiRef = useRef<any>(null);
 
   const [error, setError] = useState<string | null>(null);
@@ -51,6 +63,16 @@ export default function GpSongPlayer({ song, onUpdate }: GpSongPlayerProps) {
   );
 
   const [isPlaying, setIsPlaying] = useState(false);
+  // A latest-value ref: the alphaTab subscription below is registered once,
+  // inside an async setup, and would otherwise close over the first callback
+  // it ever saw.
+  const onPlayingChangeRef = useRef(onPlayingChange);
+  useEffect(() => {
+    onPlayingChangeRef.current = onPlayingChange;
+  });
+  // Read by the teardown below, which must know whether a play was still in
+  // flight after `destroyed` has muted the state handler.
+  const isPlayingRef = useRef(false);
   const [looping, setLooping] = useState(false);
   const [speed, setSpeed] = useState(() => clampPlaybackSpeed(song.playbackSpeed));
 
@@ -325,13 +347,22 @@ export default function GpSongPlayer({ song, onUpdate }: GpSongPlayerProps) {
         settings.player.playerMode = alphaTab.PlayerMode.EnabledSynthesizer;
         settings.player.soundFont = "/soundfont/sonivox.sf2";
         settings.player.enableCursor = true;
+        settings.player.scrollMode = alphaTab.ScrollMode.Continuous;
+        settings.player.scrollElement = scrollRef.current!;
+        // Keep a little music above the active bar rather than pinning it to
+        // the very top edge, so you can see what you have just played.
+        settings.player.scrollOffsetY = -40;
 
         const api = new AlphaTabApi(containerRef.current, settings);
         apiRef.current = api;
         detachPlayback = playback.attach(api, alphaTab);
 
         api.playerStateChanged.on((e: any) => {
-          if (!destroyed) setIsPlaying(e.state === 1); // synth.PlayerState.Playing
+          if (destroyed) return;
+          const playing = e.state === 1; // synth.PlayerState.Playing
+          isPlayingRef.current = playing;
+          setIsPlaying(playing);
+          onPlayingChangeRef.current?.(playing);
         });
 
         // alphaTab reports far more than "cannot read this file" here — a
@@ -397,6 +428,15 @@ export default function GpSongPlayer({ song, onUpdate }: GpSongPlayerProps) {
     init();
 
     return () => {
+      // Before `destroyed`, which mutes the state handler: closing the dock
+      // mid-playback would otherwise never report the stop, leaving the
+      // caller's practice tracker counting from the moment play began — so
+      // a second of playback plus a minute of idling reads as a minute of
+      // practice.
+      if (isPlayingRef.current) {
+        isPlayingRef.current = false;
+        onPlayingChangeRef.current?.(false);
+      }
       destroyed = true;
       detachPlayback?.();
       detachPlayback = null;
@@ -497,7 +537,10 @@ export default function GpSongPlayer({ song, onUpdate }: GpSongPlayerProps) {
       </div>
 
       <div className="flex-1 min-h-0 flex gap-2">
-        <div className="relative flex-1 min-w-0 overflow-auto bg-gray-600 rounded border border-gray-500">
+        <div
+          ref={scrollRef}
+          className="relative flex-1 min-w-0 overflow-auto bg-gray-600 rounded border border-gray-500"
+        >
           {/*
             The host always stays mounted AND always laid out. Unmounting it
             on an error would take alphaTab's canvas with it, so an error

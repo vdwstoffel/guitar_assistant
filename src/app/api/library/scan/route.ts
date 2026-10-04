@@ -5,6 +5,8 @@ import * as path from "path";
 import * as mm from "music-metadata";
 import NodeID3 from "node-id3";
 import { File as TagFile } from "node-taglib-sharp";
+import { deleteGpSongsForTracks } from "@/lib/gp/deleteGpSongs";
+import { prismaGpSongRemovalDeps } from "@/lib/gp/gpSongRemovalDeps";
 import ffmpeg from "fluent-ffmpeg";
 
 // ffmpeg is installed in the system PATH via Docker
@@ -560,9 +562,12 @@ export async function POST() {
     const tracksToDelete = allDbTracks.filter((t: { id: string; filePath: string }) => !validPaths.has(t.filePath));
 
     if (tracksToDelete.length > 0) {
-      await prisma.track.deleteMany({
-        where: { id: { in: tracksToDelete.map((t: { id: string }) => t.id) } },
-      });
+      const doomed = tracksToDelete.map((t: { id: string }) => t.id);
+      // Before the tracks, not after: GpSong.trackId cascades, so deleting
+      // the tracks first would take the rows and strand their .gp files in
+      // music/GpSongs/, unreachable from the UI and never cleaned up.
+      await deleteGpSongsForTracks(doomed, prismaGpSongRemovalDeps(musicPath));
+      await prisma.track.deleteMany({ where: { id: { in: doomed } } });
     }
 
     // Clean up: remove videos that no longer exist on disk

@@ -5,6 +5,8 @@ import * as fs from "fs";
 import * as fsp from "fs/promises";
 import NodeID3 from "node-id3";
 import { WaveFile } from "wavefile";
+import { deleteGpSongsForTracks } from "@/lib/gp/deleteGpSongs";
+import { prismaGpSongRemovalDeps } from "@/lib/gp/gpSongRemovalDeps";
 import { File as TagFile } from "node-taglib-sharp";
 
 const MUSIC_DIR = process.env.MUSIC_DIR || "./music";
@@ -141,6 +143,14 @@ export async function DELETE(
         console.warn(`Could not delete cover: ${book.coverPath}`);
       }
     }
+
+    // Before the cascade, for the same reason the library scan does it: the
+    // cascade Book -> Track -> GpSong takes the rows but cannot unlink the
+    // .gp files, and nothing in the UI could ever reach them afterwards.
+    await deleteGpSongsForTracks(
+      book.tracks.map((t: { id: string }) => t.id),
+      prismaGpSongRemovalDeps(musicPath),
+    );
 
     // Delete book from database (cascades to tracks, markers, videos, chapters)
     await prisma.book.delete({ where: { id } });
