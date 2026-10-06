@@ -8,7 +8,7 @@ import JamTrackList from "@/components/JamTrackList";
 import GpSongPlayer from "@/components/gp/GpSongPlayer";
 import { describeUploadFailures } from "@/lib/gp/uploadErrors";
 import { isStandaloneGpSong } from "@/lib/gp/parentLink";
-import AddMissingSource from "@/components/gp/AddMissingSource";
+import AddRecordingButton from "@/components/gp/AddRecordingButton";
 import BottomPlayer, { MarkerBarState } from "@/components/BottomPlayer";
 import MarkersBar from "@/components/MarkersBar";
 import PageFlipDialog from "@/components/PageFlipDialog";
@@ -2574,16 +2574,20 @@ export default function Home() {
           <div className="w-1/2 min-w-0 min-h-0 flex flex-col">
             {(currentGpSong || currentJamTrack) && (
               <div className="shrink-0 flex items-center gap-2 px-3 pt-3">
-                <AddMissingSource
-                  hasAudio={!!currentJamTrack}
-                  hasTab={!!currentGpSong || !!linkedGpSong}
-                  busy={isLinking}
-                  onAddTab={() => addTabInputRef.current?.click()}
-                  onAddAudio={() => {
-                    setAddAudioError(null);
-                    setShowAddAudio(true);
-                  }}
-                />
+                {/*
+                  Only the recording is offered here. A song missing its tab
+                  is offered the import in the empty panel below, where the
+                  score will appear — one invitation each, not two.
+                */}
+                {!currentJamTrack && (
+                  <AddRecordingButton
+                    busy={isLinking}
+                    onClick={() => {
+                      setAddAudioError(null);
+                      setShowAddAudio(true);
+                    }}
+                  />
+                )}
                 <span className="text-xs text-gray-500 truncate">
                   {currentGpSong?.title ?? currentJamTrack?.title}
                 </span>
