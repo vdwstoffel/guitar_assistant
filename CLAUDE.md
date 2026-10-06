@@ -49,7 +49,7 @@ The codebase recently migrated naming conventions:
 - `src/app/api/` - API routes for library, books, tracks, markers, videos, streaming
 - `src/components/` - React components (BottomPlayer.tsx is the main audio player at ~715 lines)
 - `src/lib/prisma.ts` - Prisma client singleton
-- `src/types/index.ts` - TypeScript interfaces for Author, Book, Track, Marker, Video, JamTrack, JamTrackPdf, PageSyncPoint
+- `src/types/index.ts` - TypeScript interfaces for Author, Book, Track, Marker, Video, JamTrack, GpSong, TrackTab
 - `music/` - Local music files organized by author/book
 - `prisma/` - Schema, migrations, and SQLite database
 
@@ -61,10 +61,9 @@ The codebase recently migrated naming conventions:
 ### Jam Tracks
 Standalone play-along tracks (backing tracks, songs) that exist outside the Author → Book hierarchy:
 - Stored in `music/JamTracks/` folder, one subfolder per track
-- Each jam track supports **multiple named PDFs** (e.g., "Rhythm Guitar", "Lead Guitar") via `JamTrackPdf` model
-- PDFs are displayed in a tabbed viewer with automatic page-flipping synced to audio playback via `PageSyncPoint` records
-- Library scan auto-discovers all PDF files in each jam track folder
-- API endpoints: `/api/jamtracks/`, `/api/jamtracks/[id]/`, `/api/jamtracks/[id]/markers/`, `/api/jamtracks/[id]/pdf/`, `/api/jamtracks/[id]/pdf/[pdfId]/syncpoints/`
+- A jam track's notation is a **Guitar Pro file** (`GpSong` with `jamTrackId` set), shown beside the recording. Jam tracks have no PDFs — that was removed in Oct 2026 along with the `JamTrackPdf`/`JamTrackPageFlip` models; page-flip automations are a Lessons feature only (`TrackPageFlip`)
+- The recording and the score are both on screen and both bind `Space`; `src/lib/playerFocus.ts` gives the keyboard to whichever was last clicked into, and the other pauses
+- API endpoints: `/api/jamtracks/`, `/api/jamtracks/[id]/`, `/api/jamtracks/[id]/markers/`, `/api/jamtracks/[id]/loops/`, `/api/jamtracks/youtube`
 
 ### Important: File Uploads
 **All content must be uploaded through the application UI.** Do not suggest manually copying files into the music folders. The correct workflow is:
@@ -87,10 +86,9 @@ URL query params persist library selection state (author/book).
 - **Track** → has audio file, duration, PDF page reference, completion status, has many Markers
 - **Marker** → timestamp annotation on a Track
 - **Video** → YouTube video with sort order
-- **JamTrack** → standalone play-along track with audio, has JamTrackMarkers and multiple JamTrackPdfs
+- **JamTrack** → standalone play-along track with audio, has JamTrackMarkers and JamTrackLoops, and may have a GpSong
 - **JamTrackMarker** → timestamp annotation on a JamTrack
-- **JamTrackPdf** → named PDF file attached to a JamTrack (e.g., "Rhythm Guitar"), has PageSyncPoints
-- **PageSyncPoint** → maps audio time (seconds) to a PDF page number for automatic page-flipping
+- **TrackPageFlip** → maps audio time (seconds) to a PDF page number for automatic page-flipping on a lesson Track
 
 All models use UUID primary keys. Cascade deletes are configured on foreign keys.
 

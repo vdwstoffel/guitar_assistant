@@ -8,7 +8,6 @@ export async function GET() {
       include: {
         markers: { orderBy: { timestamp: "asc" } },
         loops: true,
-        pdfs: { orderBy: { sortOrder: "asc" }, include: { pageFlips: true } },
       },
     });
     return NextResponse.json(jamTracks);

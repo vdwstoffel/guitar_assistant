@@ -18,6 +18,8 @@ import PlaybackSpeedControl from "@/components/PlaybackSpeedControl";
 import PlaybackMixControl from "@/components/tabs/PlaybackMixControl";
 import { clampPlaybackSpeed } from "@/lib/playbackSpeed";
 import { claimGlobalShortcuts } from "@/lib/globalShortcuts";
+import { focusPlayer, focusedPlayer } from "@/lib/playerFocus";
+import { useFocusedPlayer, useRegisterPlayer } from "@/lib/usePlayerFocus";
 import {
   subscribeMix, getMix, getServerMix, setMix,
   metronomeVolumeOf, countInVolumeOf, type MixPrefs,
@@ -34,6 +36,18 @@ export interface GpSongPlayerProps {
    * tab does.
    */
   onPlayingChange?: (playing: boolean) => void;
+  /**
+   * How this player gets the window-level keyboard shortcuts.
+   *
+   * `"exclusive"` (the default) is for opening OVER the page — the lessons
+   * tab modal — where Space belongs to the thing in front and the audio
+   * player behind stands down for as long as it is open.
+   *
+   * `"shared"` is for sitting BESIDE an audio player, as a jam track's tab
+   * does in place of the PDF. Neither is in front, so the keys follow
+   * whichever was last clicked into; see `@/lib/playerFocus`.
+   */
+  keyboard?: "exclusive" | "shared";
 }
 
 /**
@@ -47,7 +61,12 @@ export interface GpSongPlayerProps {
  * Read-only by design. Editing is the tab editor's job, and the two share
  * their playback through `useAlphaTabPlayback` rather than a second copy.
  */
-export default function GpSongPlayer({ song, onUpdate, onPlayingChange }: GpSongPlayerProps) {
+export default function GpSongPlayer({
+  song,
+  onUpdate,
+  onPlayingChange,
+  keyboard = "exclusive",
+}: GpSongPlayerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   // The element that actually scrolls. alphaTab needs it by reference: left
   // to itself it scrolls `html,body`, and this score sits inside an
@@ -276,14 +295,35 @@ export default function GpSongPlayer({ song, onUpdate, onPlayingChange }: GpSong
     return () => clearTimeout(timer);
   }, [isPlaying, onUpdate]);
 
-  // While this player is open it owns the window-level shortcuts that
+  // Opened over the page, this player owns the window-level shortcuts that
   // BottomPlayer binds — Space above all, which would otherwise start an
-  // audio jam track playing behind it.
-  useEffect(() => claimGlobalShortcuts(), []);
+  // audio jam track playing behind it. Beside one, it takes its turn
+  // instead: it says it is here, and the two share by last click.
+  const shared = keyboard === "shared";
+  useEffect(() => {
+    if (shared) return;
+    return claimGlobalShortcuts();
+  }, [shared]);
+  useRegisterPlayer("tab", shared);
+
+  // The mirror of BottomPlayer's: clicking into the recording beside this
+  // score pauses the score, keeping its position.
+  const focusedSidePlayer = useFocusedPlayer();
+  useEffect(() => {
+    if (!shared || focusedSidePlayer !== "audio") return;
+    try {
+      apiRef.current?.pause();
+    } catch {
+      /* the api may be mid-teardown */
+    }
+  }, [shared, focusedSidePlayer]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.code !== "Space") return;
+      // Beside an audio player, Space is only ours while this is the panel
+      // being worked in. Read live, as BottomPlayer reads it.
+      if (shared && focusedPlayer() !== "tab") return;
       const el = event.target as HTMLElement | null;
       if (el?.closest("input, textarea, [contenteditable]")) return;
       event.preventDefault();
@@ -454,7 +494,13 @@ export default function GpSongPlayer({ song, onUpdate, onPlayingChange }: GpSong
   }, [song.filePath, playback]);
 
   return (
-    <div className="flex flex-col h-full min-h-0 gap-2">
+    <div
+      className="flex flex-col h-full min-h-0 gap-2"
+      // Clicking anywhere in here — the score, the transport, the mixer — is
+      // how this panel takes the keyboard from the audio player beside it.
+      // Capture, so it still counts when a child stops the event.
+      onPointerDownCapture={shared ? () => focusPlayer("tab") : undefined}
+    >
       <style jsx global>{`
         .gp-song-host {
           ${SCORE_SURFACE_CSS}

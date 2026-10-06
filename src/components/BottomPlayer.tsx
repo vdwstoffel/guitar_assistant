@@ -7,6 +7,8 @@ import WaveSurfer from "wavesurfer.js";
 import RegionsPlugin from "wavesurfer.js/dist/plugins/regions.js";
 import { playCountIn } from "@/lib/clickGenerator";
 import { globalShortcutsClaimed } from "@/lib/globalShortcuts";
+import { focusedPlayer, isPlayerRegistered, keyboardOwner } from "@/lib/playerFocus";
+import { useFocusedPlayer, useTabPlayerPresent } from "@/lib/usePlayerFocus";
 
 import KeyboardShortcutsHelp from "./KeyboardShortcutsHelp";
 import MarkerNameDialog from "./MarkerNameDialog";
@@ -927,6 +929,18 @@ function BottomPlayer({
     });
   }, [pageFlips, track, isLoading]);
 
+  // Clicking into the score beside this player means attention has moved, so
+  // stop making noise here. Paused rather than stopped: the playhead stays
+  // put, and coming back resumes from the same bar. Only when a tab is
+  // actually on screen — a focus left over from a song that had one must not
+  // silence a song that does not.
+  const focusedSidePlayer = useFocusedPlayer();
+  const tabPlayerPresent = useTabPlayerPresent();
+  useEffect(() => {
+    if (focusedSidePlayer !== "tab" || !tabPlayerPresent) return;
+    if (wavesurferRef.current?.isPlaying()) wavesurferRef.current.pause();
+  }, [focusedSidePlayer, tabPlayerPresent]);
+
   const togglePlay = async () => {
     if (!wavesurferRef.current || !duration) return;
 
@@ -1174,11 +1188,19 @@ function BottomPlayer({
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
         return;
       }
-      // Something on top of the page is itself about playback — the tab
-      // editor — so Space and the rest belong to it, not to this player.
-      // Read live rather than subscribed: it is one boolean per keystroke,
-      // and re-registering the handler on every change buys nothing.
-      if (globalShortcutsClaimed()) {
+      // Space and the rest are not unconditionally this player's. Something
+      // opened OVER the page — the tab editor — takes them outright, and a
+      // Guitar Pro tab shown BESIDE this player takes them while it is the
+      // one being worked in. Read live rather than subscribed: it is a
+      // handful of reads per keystroke, and re-registering the handler on
+      // every change buys nothing.
+      if (
+        keyboardOwner({
+          exclusiveClaim: globalShortcutsClaimed(),
+          focused: focusedPlayer(),
+          tabRegistered: isPlayerRegistered("tab"),
+        }) !== "audio"
+      ) {
         return;
       }
 

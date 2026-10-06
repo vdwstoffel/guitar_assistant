@@ -191,7 +191,6 @@ model JamTrack {
   lufs          Float?
   markers           JamTrackMarker[]
   loops             JamTrackLoop[]
-  pdfs              JamTrackPdf[]
   gpSongs           GpSong[]
   createdAt         DateTime         @default(now())
 }
@@ -226,29 +225,6 @@ model JamTrackLoop {
   jamTrack   JamTrack @relation(fields: [jamTrackId], references: [id], onDelete: Cascade)
 
   @@index([jamTrackId])
-}
-
-model JamTrackPdf {
-  id         String             @id @default(uuid())
-  name       String
-  filePath   String
-  sortOrder  Int                @default(0)
-  jamTrackId String
-  jamTrack   JamTrack           @relation(fields: [jamTrackId], references: [id], onDelete: Cascade)
-  pageFlips  JamTrackPageFlip[]
-  createdAt  DateTime           @default(now())
-
-  @@index([jamTrackId])
-}
-
-model JamTrackPageFlip {
-  id            String      @id @default(uuid())
-  timestamp     Float
-  pdfPage       Int
-  jamTrackPdfId String
-  jamTrackPdf   JamTrackPdf @relation(fields: [jamTrackPdfId], references: [id], onDelete: Cascade)
-
-  @@index([jamTrackPdfId])
 }
 
 model TrackPageFlip {

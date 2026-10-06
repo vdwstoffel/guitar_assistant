@@ -152,23 +152,6 @@ export interface JamTrackMarker {
   jamTrackId: string;
 }
 
-export interface JamTrackPageFlip {
-  id: string;
-  timestamp: number;
-  pdfPage: number;
-  jamTrackPdfId: string;
-}
-
-export interface JamTrackPdf {
-  id: string;
-  name: string;
-  filePath: string;
-  sortOrder: number;
-  jamTrackId: string;
-  pageFlips: JamTrackPageFlip[];
-  createdAt: string;
-}
-
 export interface JamTrackLoop {
   id: string;
   name: string;
@@ -231,7 +214,6 @@ export interface JamTrack {
   lufs: number | null;
   markers: JamTrackMarker[];
   loops: JamTrackLoop[];
-  pdfs: JamTrackPdf[];
   createdAt: string;
 }
 

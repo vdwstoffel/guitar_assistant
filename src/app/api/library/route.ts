@@ -37,7 +37,6 @@ export async function GET() {
         include: {
           markers: { orderBy: { timestamp: "asc" } },
           loops: { orderBy: { startTime: "asc" } },
-          pdfs: { orderBy: { sortOrder: "asc" }, include: { pageFlips: true } },
         },
       }),
     ]);

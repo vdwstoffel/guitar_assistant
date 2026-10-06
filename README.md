@@ -16,10 +16,8 @@ A web application for managing and practicing guitar exercises, method books, an
 
 ### Jam Tracks
 Standalone play-along tracks (backing tracks, songs) that live outside the book hierarchy:
-- **Master-detail layout** - Persistent track list on the left, tabbed PDF viewer on the right, and a full-width waveform player at the bottom
+- **Master-detail layout** - Persistent track list on the left, the song's Guitar Pro score on the right, and a full-width waveform player at the bottom
 - **YouTube import** - Paste a YouTube URL to download and import audio directly as a jam track
-- **Multiple named PDFs per track** - Attach as many PDFs as you like (e.g., "Rhythm Guitar", "Lead Guitar"), each with a custom name; switch between them via tabs; upload or rename at any time
-- **Page-flip automations** - Press `P` during playback to record a page-flip event at the current position (defaults to the currently visible PDF page); automations advance the PDF automatically during playback. Shared with Lessons, with an optional anticipation offset so the page turns slightly before the beat
 - **Markers** - Timestamp annotations shown directly on the waveform for quick navigation
 
 ### Audio Player
@@ -33,17 +31,17 @@ Standalone play-along tracks (backing tracks, songs) that live outside the book 
 
 ### PDF Viewer
 - Sheet music / tablature displayed alongside audio playback
-- **Page-flip automations** - Press `P` during playback to record an automation point; the viewer advances to the next page automatically as the audio reaches each point. Works in both Lessons (books/tracks) and Jam Tracks. An optional anticipation offset can flip the page slightly early so it's ready before the beat
-- Single-PDF mode for books/tracks, multi-PDF tabbed mode for jam tracks
+- **Page-flip automations** - Press `P` during playback to record an automation point; the viewer advances to the next page automatically as the audio reaches each point. Lessons only — a jam track shows its Guitar Pro score instead of a PDF. An optional anticipation offset can flip the page slightly early so it's ready before the beat
 - **Full-height page** - The page controls and Fit Page toggle float over the PDF instead of taking their own row, and fade in on hover (pinned on touch screens), so the page gets the viewer's entire height — worth about 6% more sheet music in fit-to-page mode
 
 ### Guitar Pro Import
-- **One entry per song, two sources** - A song is a single entry in Jam Tracks that may have an audio recording, a Guitar Pro tab, or both. With both, an Audio / Tab switch picks which you hear; only one plays at a time, so there is nothing to keep in sync. **+ Add track** offers all three ways in (audio upload, YouTube, Guitar Pro), and a track that has only one source offers to add the other — including ones imported separately beforehand
+- **One entry per song, two sources** - A song is a single entry in Jam Tracks that may have an audio recording, a Guitar Pro tab, or both. With both, an Audio / Tab switch picks which you hear; only one plays at a time, so there is nothing to keep in sync. **+ Add track** offers all three ways in (audio upload, YouTube, Guitar Pro), and a track that has only one source offers to add the other — including ones imported separately beforehand. **Add audio** on a tab-only song takes either a file or a YouTube link, and the recording keeps the song's existing name rather than the video's
 - **Import a Guitar Pro file and practise against it** - Import a `.gp`, `.gp3`, `.gp4`, `.gp5` or `.gpx` file from the Jam Tracks section. The file plays itself — every instrument synthesised — so there is no audio recording and nothing to keep in sync, and slowing down is exact rather than time-stretched
 - **Mute your own part** - A per-track mixer with volume, mute and solo, so you can turn your own part down and play it while the rest of the band keeps going. This is the point of importing a tab rather than a recording
 - **One instrument at a time** - Read whichever part you are learning and switch between them; every part stays audible whichever is on screen
 - **Named practice sections** - Drag across the score to pick whole bars, name it ("Solo", "the fast bit"), and it is there next time; clicking one jumps to it and loops it
 - **The same transport as the tab editor** - Play/pause with `Space`, stop, repeat, 10-200% speed saved per song, and the click and count-in with the accented downbeat
+- **Two players, one keyboard** - With a song's tab showing in place of the PDF, the recording and the score are both on screen and both want `Space`. It goes to whichever you last clicked into — the waveform, a marker or the track list for the recording, anywhere in the score for the tab — and the panel that owns it is outlined so there is no guessing. A song without a tab is unchanged, and the tab editor opened over the page still takes the keyboard outright
 - **On lesson exercises too** - A book exercise's tabs list (Lessons → track → **Tabs**) holds both kinds: tabs you score yourself and Guitar Pro files you import. **🎼 Import Guitar Pro** adds one, and **Practice** opens it in the same side dock the editor uses, so the score reads beside the book's PDF while the band plays underneath. Imports keep their own named sections and instrument choice, and practising one counts toward the exercise
 - Read-only: writing and editing tabs is the Tabs section's job
 
@@ -122,8 +120,7 @@ Note: Some features (PDF conversion, YouTube import) require system dependencies
 #### Jam Tracks
 1. Navigate to "Jam Tracks" in the sidebar
 2. Click "Upload Files" to add local audio, or "YouTube" to import from a URL
-3. Select a track in the list; use the PDF panel to upload one or more named PDFs (e.g., "Rhythm Guitar", "Lead Guitar") and switch between them via tabs
-4. Press `P` during playback to record page-flip automations — the viewer will flip pages automatically on future plays
+3. Select a track in the list; its Guitar Pro score reads on the right while the recording plays. **🎼 Add tab** imports one for a song that has none
 
 ## Docker Deployment
 

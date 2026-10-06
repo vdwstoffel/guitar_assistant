@@ -41,8 +41,8 @@ export default function GpSectionsPanel({
   const [renameText, setRenameText] = useState("");
 
   return (
-    <div className="flex flex-col gap-2 w-56 shrink-0">
-      <h3 className="text-xs uppercase tracking-wide text-gray-400">Sections</h3>
+    <div className="flex flex-col gap-2 w-40 shrink-0">
+      <h3 className="text-[11px] uppercase tracking-wide text-gray-400">Sections</h3>
 
       {draggedRange && (
         <form
@@ -71,7 +71,7 @@ export default function GpSectionsPanel({
       )}
 
       {sections.length === 0 && !draggedRange && (
-        <p className="text-xs text-gray-500">
+        <p className="text-[11px] leading-snug text-gray-500">
           Drag across the score to pick a section, then name it.
         </p>
       )}

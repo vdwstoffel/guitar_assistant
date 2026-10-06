@@ -8,8 +8,7 @@ import JamTrackList from "@/components/JamTrackList";
 import GpSongPlayer from "@/components/gp/GpSongPlayer";
 import { describeUploadFailures } from "@/lib/gp/uploadErrors";
 import { isStandaloneGpSong } from "@/lib/gp/parentLink";
-import TrackSourceSwitch from "@/components/gp/TrackSourceSwitch";
-import JamTrackPdfPanel from "@/components/JamTrackPdfPanel";
+import AddMissingSource from "@/components/gp/AddMissingSource";
 import BottomPlayer, { MarkerBarState } from "@/components/BottomPlayer";
 import MarkersBar from "@/components/MarkersBar";
 import PageFlipDialog from "@/components/PageFlipDialog";
@@ -31,6 +30,9 @@ import { AuthorSummary, BookSummary, Book, Track, TrackTab, Marker, JamTrack, Ja
 import { applySavedVolume, clampTrackVolume } from "@/lib/trackVolume";
 import { applySavedPlaybackSpeed, clampPlaybackSpeed } from "@/lib/playbackSpeed";
 import TrackTabsModal from "@/components/TrackTabsModal";
+import AddAudioDialog from "@/components/AddAudioDialog";
+import { focusPlayer } from "@/lib/playerFocus";
+import { useFocusedPlayer } from "@/lib/usePlayerFocus";
 import { resolvePageFlip } from "@/lib/pageFlips";
 
 type Section = 'home' | 'lessons' | 'videos' | 'fretboard' | 'chords' | 'tools' | 'circle' | 'jamtracks' | 'recordings' | 'caged' | 'tabs';
@@ -105,10 +107,10 @@ export default function Home() {
   );
 
   // A song is one entry; these decide which of its two sources is showing.
-  const [trackSource, setTrackSource] = useState<"audio" | "tab">("audio");
   const [isLinking, setIsLinking] = useState(false);
   const addTabInputRef = useRef<HTMLInputElement>(null);
-  const addAudioInputRef = useRef<HTMLInputElement>(null);
+  const [showAddAudio, setShowAddAudio] = useState(false);
+  const [addAudioError, setAddAudioError] = useState<string | null>(null);
 
   /** The tab belonging to the selected jam track, if it has one. */
   const linkedGpSong = useMemo(
@@ -179,10 +181,24 @@ export default function Home() {
     [authors, selectedAuthorId]
   );
 
+  const focusedPlayerId = useFocusedPlayer();
+
   const currentJamTrack = useMemo(() =>
     jamTracks.find(jt => jt.id === currentJamTrackId) || null,
     [jamTracks, currentJamTrackId]
   );
+
+  /**
+   * A jam track showing its tab in place of the PDF is the one place a
+   * recording and a score are on screen together, so it is the only place
+   * the two have to agree on who gets Space. Everywhere else the audio
+   * player keeps the keyboard it has always had, and nothing is marked.
+   */
+  const sharingKeyboard = !!currentJamTrack && !!linkedGpSong;
+  // Null means nothing has been clicked into yet, which the audio owns —
+  // the same default `keyboardOwner` applies.
+  const tabHasKeyboard = sharingKeyboard && focusedPlayerId === "tab";
+  const audioHasKeyboard = sharingKeyboard && !tabHasKeyboard;
 
   const nowPlaying = useMemo<{ id: string; name: string } | null>(() => {
     if (currentTrack) return { id: currentTrack.id, name: currentTrack.title };
@@ -277,18 +293,6 @@ export default function Home() {
 
   // Mobile responsive state
   const [mobileView, setMobileView] = useState<'library' | 'player' | 'pdf'>('library');
-
-  // Active PDF tab state for the JamTrackPdfPanel
-  const [activeJamPdfId, setActiveJamPdfId] = useState<string | null>(null);
-  // Keep the active PDF valid: preserve the selection when it still exists
-  // (uploads/renames), else fall back to the first PDF (track change or the
-  // active PDF being deleted).
-  useEffect(() => {
-    const pdfs = currentJamTrack?.pdfs ?? [];
-    setActiveJamPdfId((prev) =>
-      prev && pdfs.some((p) => p.id === prev) ? prev : (pdfs[0]?.id ?? null)
-    );
-  }, [currentJamTrack?.id, currentJamTrack?.pdfs]);
 
   // Refs for stable BottomPlayer callbacks (avoids new function references every render)
   const currentJamTrackRef = useRef(currentJamTrack);
@@ -469,8 +473,6 @@ export default function Home() {
         const failure = describeUploadFailures(data.results);
         if (!res.ok || failure) {
           alert(failure || data.error || "Could not add that tab.");
-        } else {
-          setTrackSource("tab");
         }
         await refreshGpSongs();
       } finally {
@@ -482,10 +484,29 @@ export default function Home() {
 
   // Attach an audio recording to the tab-only song that is open: upload it,
   // then point the tab at the jam track the upload created.
+  // Both ways of adding audio end the same way: the new jam track becomes
+  // this song's recording, and the pair then lives under the jam track.
+  const linkAudioToSong = useCallback(
+    async (jamTrackId: string) => {
+      if (!currentGpSongId) return;
+      await fetch(`/api/gpsongs/${currentGpSongId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jamTrackId }),
+      });
+      await Promise.all([refreshGpSongs(), fetchLibrary()]);
+      setCurrentGpSongId(null);
+      setCurrentJamTrackId(jamTrackId);
+      setShowAddAudio(false);
+    },
+    [currentGpSongId, refreshGpSongs, fetchLibrary],
+  );
+
   const handleAddAudio = useCallback(
     async (files: FileList) => {
       if (!currentGpSongId) return;
       setIsLinking(true);
+      setAddAudioError(null);
       try {
         const body = new FormData();
         for (const file of Array.from(files)) body.append("files", file);
@@ -495,24 +516,46 @@ export default function Home() {
           (r: { success: boolean; jamTrackId?: string }) => r.success && r.jamTrackId,
         );
         if (!res.ok || !made) {
-          alert("Could not add that audio file.");
+          setAddAudioError(data.results?.[0]?.error || "Could not add that audio file.");
           return;
         }
-        await fetch(`/api/gpsongs/${currentGpSongId}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ jamTrackId: made.jamTrackId }),
-        });
-        await Promise.all([refreshGpSongs(), fetchLibrary()]);
-        // The pair now lives under the jam track, so follow it there.
-        setCurrentGpSongId(null);
-        setCurrentJamTrackId(made.jamTrackId);
-        setTrackSource("audio");
+        await linkAudioToSong(made.jamTrackId);
       } finally {
         setIsLinking(false);
       }
     },
-    [currentGpSongId, refreshGpSongs, fetchLibrary],
+    [currentGpSongId, linkAudioToSong],
+  );
+
+  const handleAddAudioUrl = useCallback(
+    async (url: string) => {
+      if (!currentGpSongId) return;
+      setIsLinking(true);
+      setAddAudioError(null);
+      try {
+        // The same import "+ Add track" uses, which already takes a title:
+        // the pair ends up listed under the jam track, so hand it this song's
+        // name rather than letting the video's title rename it. Passing one
+        // also skips the route's metadata lookup, so its `needsTitle` fallback
+        // cannot arise here.
+        const res = await fetch("/api/jamtracks/youtube", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url, title: currentGpSong?.title }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.jamTrack?.id) {
+          setAddAudioError(data.error || "Could not fetch the audio for that link.");
+          return;
+        }
+        await linkAudioToSong(data.jamTrack.id);
+      } catch {
+        setAddAudioError("Could not reach the server while fetching that link.");
+      } finally {
+        setIsLinking(false);
+      }
+    },
+    [currentGpSongId, currentGpSong?.title, linkAudioToSong],
   );
 
 
@@ -2018,9 +2061,9 @@ export default function Home() {
     handleLoopDeleteRef.current(loopId);
   }, []);
 
-  // Page-flip save/delete handlers (stable via refs)
-  const activeJamPdfIdRef = useRef(activeJamPdfId);
-  activeJamPdfIdRef.current = activeJamPdfId;
+  // Page-flip save/delete handlers (stable via refs). Lesson tracks only:
+  // jam tracks show a Guitar Pro score rather than a PDF, so there are no
+  // pages to turn.
   const refreshCurrentJamTrackRef = useRef(refreshCurrentJamTrack);
   refreshCurrentJamTrackRef.current = refreshCurrentJamTrack;
   const refreshCurrentTrackRef = useRef(refreshCurrentTrack);
@@ -2028,23 +2071,7 @@ export default function Home() {
 
   const savePageFlip = useCallback(async (page: number, timestamp: number, editFlipId?: string) => {
     try {
-      if (activeSection === "jamtracks" && activeJamPdfIdRef.current && currentJamTrackRef.current) {
-        const base = `/api/jamtracks/${currentJamTrackRef.current.id}/pdf/${activeJamPdfIdRef.current}/pageflips`;
-        if (editFlipId) {
-          await fetch(`${base}/${editFlipId}`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ pdfPage: page }),
-          });
-        } else {
-          await fetch(base, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ timestamp, pdfPage: page }),
-          });
-        }
-        await refreshCurrentJamTrackRef.current();
-      } else if (currentTrackRef.current) {
+      if (currentTrackRef.current) {
         const base = `/api/tracks/${currentTrackRef.current.id}/pageflips`;
         if (editFlipId) {
           await fetch(`${base}/${editFlipId}`, {
@@ -2064,18 +2091,11 @@ export default function Home() {
     } catch (err) {
       console.error("Failed to save page flip:", err);
     }
-  }, [activeSection]);
+  }, []);
 
   const handlePageFlipDelete = useCallback(async (id: string) => {
     try {
-      // Determine if we're in jamtracks or lessons
-      if (activeSection === "jamtracks" && currentJamTrackRef.current && activeJamPdfIdRef.current) {
-        await fetch(
-          `/api/jamtracks/${currentJamTrackRef.current.id}/pdf/${activeJamPdfIdRef.current}/pageflips/${id}`,
-          { method: "DELETE" }
-        );
-        await refreshCurrentJamTrackRef.current();
-      } else if (currentTrackRef.current) {
+      if (currentTrackRef.current) {
         await fetch(`/api/tracks/${currentTrackRef.current.id}/pageflips/${id}`, {
           method: "DELETE",
         });
@@ -2084,7 +2104,7 @@ export default function Home() {
     } catch (err) {
       console.error("Failed to delete page flip:", err);
     }
-  }, [activeSection]);
+  }, []);
 
   const stableOnTimeUpdate = useCallback((time: number, playing: boolean) => {
     setCurrentAudioTime(time);
@@ -2109,35 +2129,22 @@ export default function Home() {
     }
   }, [currentTrack?.id, currentTrack?.pdfPage]);
 
-  // Reset page-flip tracking when the jam track or active PDF changes, and
-  // start a freshly-selected jam track / PDF at page 1 so auto page-flips have
-  // a clean baseline to advance from (otherwise a stale pdfPage can make a
-  // flip to the same page a no-op).
+  // Auto-flip the PDF page using resolvePageFlip. Lesson tracks only — a jam
+  // track shows a Guitar Pro score, which scrolls itself.
   useEffect(() => {
-    lastAutoFlipPage.current = null;
-    if (currentJamTrackId) {
-      setPdfPage(1);
-    }
-  }, [currentJamTrackId, activeJamPdfId]);
-
-  // Auto-flip PDF page using resolvePageFlip — works for both Lessons and Jam Tracks
-  useEffect(() => {
-    const flips =
-      activeSection === "jamtracks"
-        ? (currentJamTrack?.pdfs?.find((p) => p.id === activeJamPdfId)?.pageFlips ?? [])
-        : (currentTrack?.pageFlips ?? []);
+    const flips = currentTrack?.pageFlips ?? [];
     if (flips.length === 0) return;
-    // Baseline page before the first flip: jam-track PDFs start at page 1
-    // (so restarting the song snaps back to page 1 instead of the last page);
-    // lesson tracks fall back to their designated starting pdfPage.
-    const fallback =
-      activeSection === "jamtracks" ? 1 : (currentTrack?.pdfPage ?? null);
-    const target = resolvePageFlip(flips, currentAudioTime, pageFlipAnticipation ? 1 : 0, fallback);
+    const target = resolvePageFlip(
+      flips,
+      currentAudioTime,
+      pageFlipAnticipation ? 1 : 0,
+      currentTrack?.pdfPage ?? null,
+    );
     if (target != null && target !== lastAutoFlipPage.current) {
       lastAutoFlipPage.current = target;
       setPdfPage(target);
     }
-  }, [activeSection, currentTrack?.id, currentJamTrack?.id, activeJamPdfId, currentAudioTime, pageFlipAnticipation, currentTrack?.pageFlips, currentJamTrack?.pdfs]);
+  }, [currentTrack?.id, currentTrack?.pdfPage, currentAudioTime, pageFlipAnticipation, currentTrack?.pageFlips]);
 
   // Auto-navigate to video's PDF page when video changes
   useEffect(() => {
@@ -2453,7 +2460,14 @@ export default function Home() {
       ) : activeSection === 'jamtracks' ? (
         <div className="flex h-full overflow-hidden">
           {/* Left half: track list (top) stacked over the waveform (bottom) */}
-          <div className={`${isFitToPage ? "w-1/2" : "w-1/3"} flex flex-col min-h-0 border-r border-gray-700`}>
+          <div
+            className="w-1/2 flex flex-col min-h-0 border-r border-gray-700"
+            // Anything on this side — picking a track, scrubbing the waveform,
+            // jumping to a marker — is working with the recording, so it takes
+            // the keyboard back from a tab beside it. Capture, so it still
+            // counts when a child stops the event.
+            onPointerDownCapture={() => focusPlayer("audio")}
+          >
             <div className="flex-1 min-h-0 overflow-y-auto">
               <JamTrackList
                 jamTracks={jamTracks}
@@ -2488,7 +2502,18 @@ export default function Home() {
               />
             </div>
             {currentJamTrack && (
-              <div className="shrink-0 border-t border-gray-700">
+              <div
+                // The focus marker, which only appears when a tab is on
+                // screen beside this player and there is something to tell
+                // apart. Bordered on all sides rather than just the top, so
+                // it reads as "this panel is selected" rather than as a
+                // stray rule above the transport.
+                className={`shrink-0 ${
+                  audioHasKeyboard
+                    ? "border-2 border-purple-500 bg-purple-500/[0.04]"
+                    : "border-t border-gray-700"
+                }`}
+              >
                 <BottomPlayer
                   track={currentJamTrack}
                   compact={true}
@@ -2505,16 +2530,6 @@ export default function Home() {
                   onPlaybackSpeedChange={handleTrackPlaybackSpeedChange}
                   onTimeUpdate={stableOnTimeUpdate}
                   onSeekReady={stableOnSeekReady}
-                  currentPdfPage={pdfPage}
-                  onPageFlipAdd={(t, p) => setPageFlipDialog({ open: true, timestamp: t, defaultPage: p })}
-                  pageFlips={currentJamTrack.pdfs?.find((p) => p.id === activeJamPdfId)?.pageFlips ?? []}
-                  onPageFlipEdit={(id) => {
-                    const flip = currentJamTrack.pdfs?.find((p) => p.id === activeJamPdfId)?.pageFlips?.find((f) => f.id === id);
-                    if (flip) {
-                      setPageFlipDialog({ open: true, timestamp: flip.timestamp, defaultPage: flip.pdfPage, editFlipId: id });
-                    }
-                  }}
-                  onPageFlipDelete={handlePageFlipDelete}
                 />
               </div>
             )}
@@ -2555,18 +2570,19 @@ export default function Home() {
               </div>
             )}
           </div>
-          {/* Right half: PDF panel, fills top to bottom */}
+          {/* Right half: the song's score, filling top to bottom */}
           <div className="w-1/2 min-w-0 min-h-0 flex flex-col">
             {(currentGpSong || currentJamTrack) && (
               <div className="shrink-0 flex items-center gap-2 px-3 pt-3">
-                <TrackSourceSwitch
-                  source={currentGpSong ? "tab" : trackSource}
-                  onChange={setTrackSource}
+                <AddMissingSource
                   hasAudio={!!currentJamTrack}
                   hasTab={!!currentGpSong || !!linkedGpSong}
                   busy={isLinking}
                   onAddTab={() => addTabInputRef.current?.click()}
-                  onAddAudio={() => addAudioInputRef.current?.click()}
+                  onAddAudio={() => {
+                    setAddAudioError(null);
+                    setShowAddAudio(true);
+                  }}
                 />
                 <span className="text-xs text-gray-500 truncate">
                   {currentGpSong?.title ?? currentJamTrack?.title}
@@ -2583,16 +2599,6 @@ export default function Home() {
                 e.target.value = "";
               }}
             />
-            <input
-              ref={addAudioInputRef}
-              type="file"
-              accept=".mp3,.flac,.wav,.ogg,.m4a,.aac"
-              className="hidden"
-              onChange={(e) => {
-                if (e.target.files?.length) handleAddAudio(e.target.files);
-                e.target.value = "";
-              }}
-            />
             <div className="flex-1 min-h-0">
             {currentGpSong ? (
               <div className="h-full min-h-0 p-3">
@@ -2602,27 +2608,33 @@ export default function Home() {
                   onUpdate={(patch) => handleGpSongPatch(currentGpSong.id, patch)}
                 />
               </div>
-            ) : currentJamTrack && linkedGpSong && trackSource === "tab" ? (
-              <div className="h-full min-h-0 p-3">
+            ) : sharingKeyboard && linkedGpSong ? (
+              <div
+                className={`h-full min-h-0 p-3 ${
+                  tabHasKeyboard ? "border-2 border-purple-500 bg-purple-500/[0.04]" : ""
+                }`}
+              >
                 <GpSongPlayer
                   key={linkedGpSong.id}
                   song={linkedGpSong}
                   onUpdate={(patch) => handleGpSongPatch(linkedGpSong.id, patch)}
+                  // Beside the recording, not over it: Space follows whichever
+                  // of the two was last clicked into.
+                  keyboard="shared"
                 />
               </div>
             ) : currentJamTrack ? (
-              <JamTrackPdfPanel
-                jamTrackId={currentJamTrack.id}
-                pdfs={currentJamTrack.pdfs ?? []}
-                activePdfId={activeJamPdfId}
-                onActivePdfChange={setActiveJamPdfId}
-                currentPage={pdfPage}
-                onPageChange={setPdfPage}
-                onUploaded={refreshCurrentJamTrack}
-                onRenamed={refreshCurrentJamTrack}
-                onDeleted={refreshCurrentJamTrack}
-                onFitToPageChange={setIsFitToPage}
-              />
+              <div className="h-full flex flex-col items-center justify-center gap-3 text-gray-500 px-6 text-center">
+                <p>No tab for this song yet.</p>
+                <button
+                  type="button"
+                  onClick={() => addTabInputRef.current?.click()}
+                  disabled={isLinking}
+                  className="px-3 py-1.5 text-xs rounded bg-gray-700 hover:bg-gray-600 text-gray-200 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {isLinking ? "Adding…" : "🎼 Import a Guitar Pro file"}
+                </button>
+              </div>
             ) : (
               <div className="h-full flex items-center justify-center text-gray-500">
                 Select a jam track to get started
@@ -2672,6 +2684,16 @@ export default function Home() {
           onGpImport={(files) => handleGpImportOntoTrack(tabsTrack.id, files)}
           onGpDelete={handleGpSongDelete}
           onGpPatch={handleGpSongPatch}
+        />
+      )}
+
+      {showAddAudio && (
+        <AddAudioDialog
+          busy={isLinking}
+          error={addAudioError}
+          onCancel={() => setShowAddAudio(false)}
+          onFiles={handleAddAudio}
+          onUrl={handleAddAudioUrl}
         />
       )}
 

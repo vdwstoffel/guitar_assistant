@@ -29,7 +29,6 @@ export async function GET(
       include: {
         markers: { orderBy: { timestamp: "asc" } },
         loops: true,
-        pdfs: { orderBy: { sortOrder: "asc" }, include: { pageFlips: true } },
       },
     });
     if (!jamTrack) {
@@ -104,7 +103,6 @@ export async function PATCH(
       include: {
         markers: { orderBy: { timestamp: "asc" } },
         loops: true,
-        pdfs: { orderBy: { sortOrder: "asc" }, include: { pageFlips: true } },
       },
     });
     return NextResponse.json(updatedJamTrack);
@@ -123,7 +121,7 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
-    const jamTrack = await prisma.jamTrack.findUnique({ where: { id }, include: { pdfs: true } });
+    const jamTrack = await prisma.jamTrack.findUnique({ where: { id } });
     if (!jamTrack) {
       return NextResponse.json({ error: "Jam track not found" }, { status: 404 });
     }
@@ -134,14 +132,6 @@ export async function DELETE(
       await fs.unlink(audioPath);
     } catch {
       console.warn(`Could not delete audio file: ${audioPath}`);
-    }
-
-    for (const pdf of jamTrack.pdfs) {
-      try {
-        await fs.unlink(path.join(musicPath, pdf.filePath));
-      } catch {
-        console.warn(`Could not delete PDF file: ${pdf.filePath}`);
-      }
     }
 
     const trackFolder = path.dirname(audioPath);

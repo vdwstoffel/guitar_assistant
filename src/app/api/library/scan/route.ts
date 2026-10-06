@@ -791,36 +791,6 @@ export async function POST() {
       }
     });
 
-    // Discover PDF files sitting in each jam-track folder and upsert JamTrackPdf rows
-    for (const scannedJt of jamTracks) {
-      const dbJamTrack = await prisma.jamTrack.findUnique({
-        where: { filePath: scannedJt.filePath },
-        select: { id: true },
-      });
-      if (!dbJamTrack) continue;
-
-      const folderAbs = path.dirname(path.join(musicPath, scannedJt.filePath));
-      const entries = await fs.readdir(folderAbs).catch(() => [] as string[]);
-      const pdfFiles = entries.filter((f) => f.toLowerCase().endsWith(".pdf"));
-
-      for (let i = 0; i < pdfFiles.length; i++) {
-        const relPath = path.relative(musicPath, path.join(folderAbs, pdfFiles[i]));
-        const existing = await prisma.jamTrackPdf.findFirst({
-          where: { jamTrackId: dbJamTrack.id, filePath: relPath },
-        });
-        if (!existing) {
-          await prisma.jamTrackPdf.create({
-            data: {
-              jamTrackId: dbJamTrack.id,
-              name: pdfFiles[i].replace(/\.pdf$/i, ""),
-              filePath: relPath,
-              sortOrder: await prisma.jamTrackPdf.count({ where: { jamTrackId: dbJamTrack.id } }),
-            },
-          });
-        }
-      }
-    }
-
     // Clean up orphaned jam tracks
     const validJamPaths = new Set(jamTracks.map((t) => t.filePath));
     const allDbJamTracks = await prisma.jamTrack.findMany({ select: { id: true, filePath: true } });

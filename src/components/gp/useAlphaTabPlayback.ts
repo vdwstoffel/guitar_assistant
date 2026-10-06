@@ -11,6 +11,14 @@ import {
   subscribeToAudioSinkChanges,
 } from "@/lib/audioSink";
 import { speedToRate } from "@/lib/playbackSpeed";
+import {
+  advanceClicks,
+  buildClickTrack,
+  countInClicks,
+  seekClicks,
+  type Click,
+  type ClickBar,
+} from "@/lib/tabscore/clickTrack";
 
 /** One tone for every beat: see `playClick`. */
 const CLICK_HZ = 800;
@@ -111,6 +119,16 @@ export function useAlphaTabPlayback(options: PlaybackOptions): PlaybackHandle {
   const countingInRef = useRef(false);
   const clickContextRef = useRef<AudioContext | null>(null);
 
+  // The click grid, and how far through it playback has got. Rebuilt whenever
+  // the score is re-rendered, because an edit moves every tick after it.
+  const clickBarsRef = useRef<ClickBar[]>([]);
+  const clickTrackRef = useRef<Click[]>([]);
+  const clickCursorRef = useRef(0);
+  const lastTickRef = useRef(0);
+  // One count-in is scheduled in full from its first tick, so later ticks of
+  // the same count-in are ignored.
+  const countInScheduledRef = useRef(false);
+
   // Drag state. Refs, not state: these change many times per drag and must
   // not re-render the score underneath it.
   const dragStartBeatRef = useRef<any>(null);
@@ -128,8 +146,12 @@ export function useAlphaTabPlayback(options: PlaybackOptions): PlaybackHandle {
      * One click, every beat, with the downbeat louder — same tone, same decay,
      * only the gain differs, because two different tones are distracting to
      * play along to.
+     *
+     * `inSeconds` schedules it ahead on the audio clock instead of playing it
+     * now, which is how the count-in stays even: its ticks are handed to us
+     * all at the wrong moments (see `clickTrack`), but their spacing is known.
      */
-    const playClick = (level: number, accent: boolean) => {
+    const playClick = (level: number, accent: boolean, inSeconds = 0) => {
       try {
         let ctx = clickContextRef.current;
         if (!ctx) {
@@ -144,7 +166,7 @@ export function useAlphaTabPlayback(options: PlaybackOptions): PlaybackHandle {
         osc.connect(gain);
         gain.connect(ctx.destination);
         osc.frequency.value = CLICK_HZ;
-        const at = ctx.currentTime;
+        const at = ctx.currentTime + Math.max(0, inSeconds);
         gain.gain.setValueAtTime(level * (accent ? 1 : OFFBEAT_GAIN), at);
         gain.gain.exponentialRampToValueAtTime(0.001, at + 0.05);
         osc.start(at);
@@ -166,6 +188,52 @@ export function useAlphaTabPlayback(options: PlaybackOptions): PlaybackHandle {
     const applyClickVolumes = (api: any) => {
       api.metronomeVolume = 0;
       api.countInVolume = (countInVolumeRef.current ?? 0) > 0 ? INAUDIBLE : 0;
+    };
+
+    /**
+     * Rebuild the click grid from alphaTab's tick cache — the order bars are
+     * actually played in, repeats and all — and put the cursor back where
+     * playback currently is, so a rebuild never replays what has been heard.
+     */
+    const rebuildClickTrack = () => {
+      const lookups = apiRef.current?.tickCache?.masterBars ?? [];
+      const bars: ClickBar[] = [];
+      for (const mb of lookups) {
+        const master = mb?.masterBar;
+        if (!master || !Number.isFinite(mb.start) || !Number.isFinite(mb.end)) continue;
+        bars.push({
+          start: mb.start,
+          end: mb.end,
+          numerator: master.timeSignatureNumerator,
+          denominator: master.timeSignatureDenominator,
+        });
+      }
+      clickBarsRef.current = bars;
+      clickTrackRef.current = buildClickTrack(bars);
+      clickCursorRef.current = seekClicks(clickTrackRef.current, lastTickRef.current);
+    };
+
+    /** A click the playhead has just reached, at whatever volume is set now. */
+    const emitClick = (click: Click) => {
+      const level = metronomeVolumeRef.current ?? 0;
+      if (level > 0) playClick(level, click.accent);
+    };
+
+    /**
+     * The whole count-in, scheduled from its first tick.
+     *
+     * Only the first tick arrives at an honest moment — the start of the audio
+     * — so the rest are laid out from it on the audio clock at the spacing the
+     * event itself reports, divided by the practice speed. Waiting for each
+     * tick to be delivered instead is what made the count-in uneven.
+     */
+    const scheduleCountIn = (midi: any) => {
+      const level = countInVolumeRef.current ?? 0;
+      if (level <= 0) return;
+      const rate = speedToRate(speedRef.current);
+      const spacing = (midi?.metronomeDurationInMilliseconds ?? 0) / 1000 / (rate || 1);
+      const count = countInClicks(clickBarsRef.current, apiRef.current?.tickPosition ?? 0);
+      for (let k = 0; k < count; k++) playClick(level, k === 0, k * spacing);
     };
 
     /**
@@ -285,30 +353,57 @@ export function useAlphaTabPlayback(options: PlaybackOptions): PlaybackHandle {
         // and emits the same metronome events for it. There is no public flag
         // for the phase, so track it here: it ends as soon as the position
         // starts moving.
-        if (e.state === 1) countingInRef.current = (countInVolumeRef.current ?? 0) > 0;
+        if (e.state === 1) {
+          countingInRef.current = (countInVolumeRef.current ?? 0) > 0;
+          countInScheduledRef.current = false;
+          // The grid only exists once alphaTab has generated the midi, which
+          // it certainly has by the time it plays.
+          lastTickRef.current = api.tickPosition ?? 0;
+          rebuildClickTrack();
+        }
       });
 
+      // The click, driven off the playhead rather than off alphaTab's own
+      // metronome events: a tick position is correct in real time at every
+      // practice speed, and those events are not (see `clickTrack`). alphaTab
+      // reports a position roughly every 3ms, so a click lands within that of
+      // its beat — the same accuracy the old path happened to get at 100%.
       api.playerPositionChanged.on((e: any) => {
-        if (!detached && e?.currentTime > 0) countingInRef.current = false;
+        if (detached) return;
+        if (e?.currentTime > 0) countingInRef.current = false;
+        const tick = e?.currentTick ?? 0;
+        // A seek, or a loop that has just wrapped, has not played the clicks
+        // it skipped over.
+        const jumped = !!e?.isSeek || tick < lastTickRef.current;
+        lastTickRef.current = tick;
+        // The cursor advances whether or not the click is audible, so turning
+        // the metronome on mid-bar does not let off everything missed.
+        clickCursorRef.current = advanceClicks(
+          clickTrackRef.current,
+          clickCursorRef.current,
+          tick,
+          jumped,
+          emitClick,
+        );
       });
 
-      // Every tick is ours. alphaTab plays all of them at one fixed velocity
-      // and its synthesiser ignores the beat number the event carries, so
-      // there is no way to accent a downbeat through it — and a second,
-      // different tone layered on top just sounds like two instruments. Its
-      // own click is silenced (see applyClickVolumes) and each tick is played
-      // here instead: one sound throughout, the downbeat simply louder.
+      // Only the count-in is still taken from alphaTab's metronome events: it
+      // is a phase of its own, with no position updates to drive it, and its
+      // first tick is the one honest marker of where the audio actually began.
+      // alphaTab plays all its own ticks at one fixed velocity and its
+      // synthesiser ignores the beat number the event carries, so there is no
+      // way to accent a downbeat through it — and a second, different tone
+      // layered on top just sounds like two instruments. Its own click is
+      // silenced (see applyClickVolumes) and every tick is played here
+      // instead: one sound throughout, the downbeat simply louder.
       api.midiEventsPlayedFilter = [alphaTab.midi.MidiEventType.AlphaTabMetronome];
       api.midiEventsPlayed.on((e: any) => {
-        if (detached) return;
+        if (detached || !countingInRef.current || countInScheduledRef.current) return;
         for (const midi of e?.events ?? []) {
           if (!midi?.isMetronome) continue;
-          // Which volume applies depends on the phase, exactly as it does for
-          // alphaTab's own click: zero means that kind of click is switched off.
-          const level = countingInRef.current
-            ? (countInVolumeRef.current ?? 0)
-            : (metronomeVolumeRef.current ?? 0);
-          if (level > 0) playClick(level, midi.metronomeNumerator === 0);
+          countInScheduledRef.current = true;
+          scheduleCountIn(midi);
+          return;
         }
       });
 
@@ -321,7 +416,9 @@ export function useAlphaTabPlayback(options: PlaybackOptions): PlaybackHandle {
       const unsubscribeSink = subscribeToAudioSinkChanges(applySink);
 
       api.postRenderFinished.on(() => {
-        if (!detached) reapplyLoop();
+        if (detached) return;
+        reapplyLoop();
+        rebuildClickTrack();
       });
 
       api.beatMouseDown.on((beat: any) => {
