@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Author } from '@/types';
+import CertificateSetupCard from './CertificateSetupCard';
 
 interface BookOption {
   bookId: string;
@@ -387,6 +388,8 @@ export default function Tools() {
             </div>
           )}
         </div>
+
+        <CertificateSetupCard />
       </div>
     </div>
   );

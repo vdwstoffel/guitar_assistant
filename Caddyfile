@@ -1,15 +1,20 @@
 # Caddyfile — HTTPS reverse proxy in front of the Next.js app.
 #
-# `tls internal` makes Caddy issue a self-signed cert from its own local CA.
-# Browsers will warn the first time you visit; accept the warning once per
-# device and getUserMedia / MediaRecorder will work (HTTPS is a secure context).
+# `tls internal` makes Caddy issue certificates from its own local CA, which
+# lives in the `caddy_data` volume at /data/caddy/pki/authorities/local/.
+# The certificates are perfectly valid; they are simply signed by an authority
+# no device trusts out of the box, which is why browsers show
+# ERR_CERT_AUTHORITY_INVALID on a first visit.
 #
-# To get a warning-free experience, replace `:443` with your hostname (e.g.
-# `guitar.local:443`), generate a cert for that hostname with mkcert, install
-# the mkcert root CA on each client device, and swap `tls internal` for
-# `tls /etc/caddy/cert.pem /etc/caddy/key.pem` (mounting the files in via the
-# docker-compose `caddy` service).
-
+# The fix is to trust that authority once per machine, NOT to replace the
+# certificate. Run scripts/install-ca.sh (Linux/macOS) or scripts/install-ca.ps1
+# (Windows) on each machine on the LAN; both fetch the root CA from the
+# /rootca.crt route below and install it into the system and browser stores.
+#
+# Two things invalidate every installed copy, so avoid them:
+#   - deleting the `caddy_data` volume (Caddy mints a brand-new root CA)
+#   - changing the LAN IP below (certificates are bound to it — pin the address
+#     with a DHCP reservation on the router)
 {
 	admin off
 	# If the client doesn't send SNI (some browsers/clients omit it for raw
@@ -27,7 +32,33 @@ https://192.168.129.11, https://localhost {
 	}
 }
 
-# Redirect plain HTTP to HTTPS so people can type the bare IP/hostname.
+# An explicit http:// site for these hosts, which also suppresses Caddy's
+# automatic HTTP->HTTPS redirect for them. That redirect is host-matched, so it
+# sorts ahead of a catch-all `:80` block and would otherwise shadow /rootca.crt.
+http://192.168.129.11, http://localhost {
+	# Serve the local CA over plain HTTP, so a machine that does not trust it
+	# yet can still fetch it without hitting the very warning it is meant to
+	# cure.
+	#
+	# Only the exact path /rootca.crt reaches the file_server, and the URI is
+	# rewritten to a fixed path, so the rest of /data stays unreachable.
+	# The install scripts check the file's SHA-256 against a pinned value, so
+	# serving it unencrypted does not let anyone substitute their own CA.
+	handle /rootca.crt {
+		header Content-Type application/x-x509-ca-cert
+		rewrite * /caddy/pki/authorities/local/root.crt
+		file_server {
+			root /data
+		}
+	}
+
+	# Everything else goes to HTTPS, as before.
+	handle {
+		redir https://{host}{uri} permanent
+	}
+}
+
+# Any other name pointed at this box still gets bounced to HTTPS.
 :80 {
 	redir https://{host}{uri} permanent
 }

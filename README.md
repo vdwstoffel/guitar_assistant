@@ -138,6 +138,105 @@ The Docker image includes:
 - ffmpeg for audio/video processing
 - yt-dlp + Python 3 for YouTube audio downloads
 
+## HTTPS on the Local Network
+
+Caddy serves the app over HTTPS at `https://192.168.129.11`, which is what makes
+microphone recording work (browsers only expose `getUserMedia` on a secure
+origin). It signs its certificates with its own private CA, so the first visit
+from any machine shows:
+
+> **Your connection is not private** — `NET::ERR_CERT_AUTHORITY_INVALID`
+
+Nothing is wrong with the certificate. The machine simply does not know the
+authority that signed it. Trust that authority once per machine and the warning
+is gone for good — clicking "Advanced → Proceed" is not equivalent, because
+browsers re-prompt and keep the origin flagged.
+
+**The quickest route:** click through the warning once, open **Tools**, and copy
+the command shown under "Trust this server's certificate". That card detects the
+visitor's OS and fills in the live fingerprint, so there is nothing to look up.
+The per-platform instructions below are the same thing written out.
+
+### Windows
+
+In an **elevated** PowerShell (right-click → Run as administrator):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\install-ca.ps1
+```
+
+No admin rights? `-CurrentUser` installs it for your account only, which Chrome,
+Edge and Brave all honour:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\install-ca.ps1 -CurrentUser
+```
+
+Chrome, Edge and Brave share the Windows root store, so one run covers them all.
+Firefox reads it too, because `security.enterprise_roots.enabled` defaults to
+true on Windows.
+
+If the Windows machine does not have this repository checked out, paste this
+into an elevated PowerShell instead — it does the same thing, fingerprint check
+included:
+
+```powershell
+$f = Join-Path $env:TEMP 'ga-ca.crt'
+Invoke-WebRequest http://192.168.129.11/rootca.crt -OutFile $f -UseBasicParsing
+$c = New-Object Security.Cryptography.X509Certificates.X509Certificate2 $f
+$h = -join ([Security.Cryptography.SHA256]::Create().ComputeHash($c.RawData) | ForEach-Object { $_.ToString('X2') })
+if ($h -ne '1AFC17066F2ECFD976D7866F36CAD7E413CF67EA727574D76A56639A48BE5367') { throw "FINGERPRINT MISMATCH: $h" }
+$s = New-Object Security.Cryptography.X509Certificates.X509Store('Root','LocalMachine')
+$s.Open('ReadWrite'); $s.Add($c); $s.Close()
+"Installed. Fingerprint verified: $h"
+```
+
+Swap `'LocalMachine'` for `'CurrentUser'` to install without admin rights.
+
+### Linux / macOS
+
+```bash
+./scripts/install-ca.sh                 # system store + every browser found
+./scripts/install-ca.sh --skip-system   # browsers only, no root required
+```
+
+Browsers on Linux each keep a private NSS database and ignore the system store,
+so the script walks them individually: Chrome, Chromium and Brave (deb, snap and
+flatpak builds alike) plus every Firefox profile. It needs `certutil`:
+
+```bash
+sudo apt install libnss3-tools
+```
+
+Re-run it after installing a new browser or creating a new Firefox profile — it
+is idempotent.
+
+### Phones and tablets
+
+Open `http://192.168.129.11/rootca.crt` in the device's browser. Android offers
+to install it directly; on iOS, install the downloaded profile under
+**Settings → General → VPN & Device Management**, then enable it under
+**Settings → General → About → Certificate Trust Settings**.
+
+### After installing
+
+Fully quit and reopen the browser — closing the tab is not enough, since
+browsers cache TLS failures for the life of a session.
+
+### What invalidates it
+
+Both scripts pin the CA's SHA-256 fingerprint, so the plain-HTTP download cannot
+be swapped by anyone else on the network. Two things break every installed copy
+at once and need every machine re-run:
+
+- **Destroying the `caddy_data` volume.** Caddy mints a brand-new CA. A backup
+  of the current one lives at `~/.local/share/guitar-assistant/caddy-ca/`, with
+  restore instructions in the `README.txt` beside it — restoring it avoids the
+  re-run entirely.
+- **Changing the host's LAN IP.** Certificates are bound to it. Pin the address
+  with a DHCP reservation on the router, and update `Caddyfile` plus the
+  `$HostAddress`/`GUITAR_ASSISTANT_HOST` defaults in both scripts if it does move.
+
 ## Environment Variables
 
 | Variable | Description | Default |
