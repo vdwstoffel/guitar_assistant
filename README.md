@@ -37,6 +37,7 @@ Standalone play-along tracks (backing tracks, songs) that live outside the book 
 ### Guitar Pro Import
 - **One entry per song, two sources** - A song is a single entry in Jam Tracks that may have an audio recording, a Guitar Pro tab, or both. With both, an Audio / Tab switch picks which you hear; only one plays at a time, so there is nothing to keep in sync. **+ Add track** offers all three ways in (audio upload, YouTube, Guitar Pro), and a track that has only one source offers to add the other — including ones imported separately beforehand. **Add audio** on a tab-only song takes either a file or a YouTube link, and the recording keeps the song's existing name rather than the video's
 - **Import a Guitar Pro file and practise against it** - Import a `.gp`, `.gp3`, `.gp4`, `.gp5` or `.gpx` file from the Jam Tracks section. The file plays itself — every instrument synthesised — so there is no audio recording and nothing to keep in sync, and slowing down is exact rather than time-stretched
+- **Import straight from a Songsterr link** - A song with no tab offers **🎸 Import from Songsterr** beside the file picker: paste the tab's URL and the score arrives as a Guitar Pro file attached to that song, with no trip through a download site. Songsterr serves no Guitar Pro file to fetch, so the score is rebuilt from the data its own player reads — faithful, but not bit-identical, and the occasional effect Guitar Pro cannot spell is dropped. Parts the server withholds are skipped rather than failing the whole import
 - **Mute your own part** - A per-track mixer with volume, mute and solo, so you can turn your own part down and play it while the rest of the band keeps going. This is the point of importing a tab rather than a recording
 - **One instrument at a time** - Read whichever part you are learning and switch between them; every part stays audible whichever is on screen
 - **Named practice sections** - Drag across the score to pick whole bars, name it ("Solo", "the fast bit"), and it is there next time; clicking one jumps to it and loops it
@@ -120,7 +121,7 @@ Note: Some features (PDF conversion, YouTube import) require system dependencies
 #### Jam Tracks
 1. Navigate to "Jam Tracks" in the sidebar
 2. Click "Upload Files" to add local audio, or "YouTube" to import from a URL
-3. Select a track in the list; its Guitar Pro score reads on the right while the recording plays. **🎼 Add tab** imports one for a song that has none
+3. Select a track in the list; its Guitar Pro score reads on the right while the recording plays. A song with no tab offers **🎼 Import a Guitar Pro file** or **🎸 Import from Songsterr**, which takes a tab URL directly
 
 ## Docker Deployment
 

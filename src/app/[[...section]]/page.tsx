@@ -9,6 +9,7 @@ import GpSongPlayer from "@/components/gp/GpSongPlayer";
 import { describeUploadFailures } from "@/lib/gp/uploadErrors";
 import { isStandaloneGpSong } from "@/lib/gp/parentLink";
 import AddRecordingButton from "@/components/gp/AddRecordingButton";
+import AddTabFromSongsterr from "@/components/gp/AddTabFromSongsterr";
 import BottomPlayer, { MarkerBarState } from "@/components/BottomPlayer";
 import MarkersBar from "@/components/MarkersBar";
 import PageFlipDialog from "@/components/PageFlipDialog";
@@ -210,6 +211,7 @@ export default function Home() {
   const [isUploading, setIsUploading] = useState(false);
   const [isUploadingJamTracks, setIsUploadingJamTracks] = useState(false);
   const [isImportingFromYouTube, setIsImportingFromYouTube] = useState(false);
+  const [isImportingSongsterrTrack, setIsImportingSongsterrTrack] = useState(false);
   const [extractingVideoId, setExtractingVideoId] = useState<string | null>(null);
   const [pageFlipAnticipation, setPageFlipAnticipation] = useState(() => {
     if (typeof window !== "undefined") {
@@ -480,6 +482,61 @@ export default function Home() {
       }
     },
     [currentJamTrackId, refreshGpSongs],
+  );
+
+  // The same attachment, from a Songsterr link rather than a file. Resolves
+  // to a message for the field to show rather than alerting: a bad link is
+  // the form's problem, and it is the form the user is looking at.
+  const handleAddTabFromSongsterr = useCallback(
+    async (url: string): Promise<string | null> => {
+      if (!currentJamTrackId) return "Open a jam track first.";
+      setIsLinking(true);
+      try {
+        const res = await fetch("/api/gpsongs/songsterr", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url, jamTrackId: currentJamTrackId }),
+        });
+        const data = await res.json().catch(() => ({}));
+        await refreshGpSongs();
+        const failure = describeUploadFailures(data.results);
+        if (!res.ok || failure) return failure || data.error || "Could not import that link.";
+        return null;
+      } catch {
+        return "Could not reach the server.";
+      } finally {
+        setIsLinking(false);
+      }
+    },
+    [currentJamTrackId, refreshGpSongs],
+  );
+
+  /*
+   * The same import from the "+ Add track" menu, with no parent: a tab
+   * imported this way is a track in its own right rather than the score
+   * beside a recording, which is what a parentless GpSong already means.
+   */
+  const handleImportSongsterrTrack = useCallback(
+    async (url: string): Promise<string | null> => {
+      setIsImportingSongsterrTrack(true);
+      try {
+        const res = await fetch("/api/gpsongs/songsterr", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url }),
+        });
+        const data = await res.json().catch(() => ({}));
+        await refreshGpSongs();
+        const failure = describeUploadFailures(data.results);
+        if (!res.ok || failure) return failure || data.error || "Could not import that link.";
+        return null;
+      } catch {
+        return "Could not reach the server.";
+      } finally {
+        setIsImportingSongsterrTrack(false);
+      }
+    },
+    [refreshGpSongs],
   );
 
   // Attach an audio recording to the tab-only song that is open: upload it,
@@ -2494,6 +2551,8 @@ export default function Home() {
                 }}
                 onGpUpload={handleGpUpload}
                 isUploadingGp={isUploadingGp}
+                onSongsterrImport={handleImportSongsterrTrack}
+                isImportingFromSongsterr={isImportingSongsterrTrack}
                 onDeleteGpSong={handleGpSongDelete}
                 onToggleGpFavorite={(id) => {
                   const song = gpSongs.find((g) => g.id === id);
@@ -2630,14 +2689,18 @@ export default function Home() {
             ) : currentJamTrack ? (
               <div className="h-full flex flex-col items-center justify-center gap-3 text-gray-500 px-6 text-center">
                 <p>No tab for this song yet.</p>
-                <button
-                  type="button"
-                  onClick={() => addTabInputRef.current?.click()}
-                  disabled={isLinking}
-                  className="px-3 py-1.5 text-xs rounded bg-gray-700 hover:bg-gray-600 text-gray-200 disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  {isLinking ? "Adding…" : "🎼 Import a Guitar Pro file"}
-                </button>
+                <div className="w-full max-w-lg flex flex-wrap items-center justify-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => addTabInputRef.current?.click()}
+                    disabled={isLinking}
+                    className="px-3 py-1.5 text-xs rounded bg-gray-700 hover:bg-gray-600 text-gray-200 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    {isLinking ? "Adding…" : "🎼 Import a Guitar Pro file"}
+                  </button>
+                  <span className="text-xs text-gray-600">or</span>
+                  <AddTabFromSongsterr onImport={handleAddTabFromSongsterr} busy={isLinking} />
+                </div>
               </div>
             ) : (
               <div className="h-full flex items-center justify-center text-gray-500">

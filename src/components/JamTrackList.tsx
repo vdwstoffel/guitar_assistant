@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef } from "react";
 import { JamTrack, GpSong } from "@/types";
 import { formatDuration } from "@/lib/formatting";
+import AddSourceModal from "@/components/modals/AddSourceModal";
 
 interface JamTrackListProps {
   jamTracks: JamTrack[];
@@ -27,6 +28,12 @@ interface JamTrackListProps {
   onToggleGpFavorite: (id: string) => void;
   onGpUpload: (files: FileList) => void;
   isUploadingGp: boolean;
+  /**
+   * Imports a Songsterr link as a track of its own. Resolves to a message
+   * to show in the modal, or null when the import succeeded.
+   */
+  onSongsterrImport: (url: string) => Promise<string | null>;
+  isImportingFromSongsterr: boolean;
 }
 
 export default function JamTrackList({
@@ -45,24 +52,24 @@ export default function JamTrackList({
   onToggleGpFavorite,
   onGpUpload,
   isUploadingGp,
+  onSongsterrImport,
+  isImportingFromSongsterr,
 }: JamTrackListProps) {
   const uploadInputRef = useRef<HTMLInputElement>(null);
   const gpUploadInputRef = useRef<HTMLInputElement>(null);
   const [showAddMenu, setShowAddMenu] = useState(false);
-  const busy = isUploading || isUploadingGp || isImportingFromYouTube;
-  const youtubeInputRef = useRef<HTMLInputElement>(null);
+  const busy = isUploading || isUploadingGp || isImportingFromYouTube || isImportingFromSongsterr;
 
-  const [showYouTubeModal, setShowYouTubeModal] = useState(false);
+  // One modal per kind of thing being added; each offers a link or a file.
+  const [showAudioModal, setShowAudioModal] = useState(false);
   const [youtubeUrl, setYoutubeUrl] = useState("");
   const [youtubeError, setYoutubeError] = useState("");
   const [youtubeNeedsTitle, setYoutubeNeedsTitle] = useState(false);
   const [youtubeTitle, setYoutubeTitle] = useState("");
 
-  useEffect(() => {
-    if (showYouTubeModal && youtubeInputRef.current) {
-      youtubeInputRef.current.focus();
-    }
-  }, [showYouTubeModal]);
+  const [showTabModal, setShowTabModal] = useState(false);
+  const [songsterrUrl, setSongsterrUrl] = useState("");
+  const [songsterrError, setSongsterrError] = useState("");
 
   const isValidYouTubeUrl = (url: string) =>
     /^https?:\/\/(www\.)?(youtube\.com\/(watch\?.*v=|shorts\/)|youtu\.be\/|music\.youtube\.com\/watch\?.*v=)/.test(url);
@@ -80,7 +87,7 @@ export default function JamTrackList({
     setYoutubeError("");
     try {
       await onYouTubeImport(youtubeUrl.trim(), youtubeNeedsTitle ? youtubeTitle.trim() : undefined);
-      closeYouTubeModal();
+      closeAudioModal();
     } catch (err: unknown) {
       const error = err as Error & { needsTitle?: boolean };
       if (error.needsTitle) {
@@ -92,85 +99,100 @@ export default function JamTrackList({
     }
   };
 
-  const closeYouTubeModal = () => {
-    setShowYouTubeModal(false);
+  const closeAudioModal = () => {
+    setShowAudioModal(false);
     setYoutubeUrl("");
     setYoutubeError("");
     setYoutubeTitle("");
     setYoutubeNeedsTitle(false);
   };
 
+  /*
+   * No link validation here, unlike YouTube's: the server recognises a
+   * Songsterr link, checks the page it lands on is really that song's tab,
+   * and says so in a sentence. A second rule here could only disagree.
+   */
+  const handleSongsterrSubmit = async () => {
+    if (!songsterrUrl.trim()) return;
+    setSongsterrError("");
+    const message = await onSongsterrImport(songsterrUrl.trim());
+    if (message) {
+      setSongsterrError(message);
+      return;
+    }
+    closeTabModal();
+  };
+
+  const closeTabModal = () => {
+    setShowTabModal(false);
+    setSongsterrUrl("");
+    setSongsterrError("");
+  };
+
+  /** Picking a file is the other way in; the modal has done its job. */
+  const chooseFile = (ref: { current: HTMLInputElement | null }, close: () => void) => {
+    close();
+    ref.current?.click();
+  };
+
   return (
     <div className="flex flex-col h-full bg-gray-900">
-      {/* YouTube import modal */}
-      {showYouTubeModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md mx-4 shadow-xl">
-            <h3 className="text-lg font-semibold mb-4 text-white">Import from YouTube</h3>
-            <div className="space-y-3">
-              <div>
-                <label className="block text-sm text-gray-400 mb-1">YouTube URL</label>
-                <input
-                  ref={youtubeInputRef}
-                  type="text"
-                  value={youtubeUrl}
-                  onChange={(e) => { setYoutubeUrl(e.target.value); setYoutubeError(""); }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && youtubeUrl.trim() && !isImportingFromYouTube) handleYouTubeSubmit();
-                    if (e.key === "Escape") closeYouTubeModal();
-                  }}
-                  placeholder="https://www.youtube.com/watch?v=..."
-                  disabled={isImportingFromYouTube}
-                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:border-purple-500 disabled:opacity-50"
-                />
-              </div>
-              {youtubeNeedsTitle && (
-                <div>
-                  <label className="block text-sm text-gray-400 mb-1">Track Title</label>
-                  <input
-                    type="text"
-                    value={youtubeTitle}
-                    onChange={(e) => { setYoutubeTitle(e.target.value); setYoutubeError(""); }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && youtubeTitle.trim() && !isImportingFromYouTube) handleYouTubeSubmit();
-                      if (e.key === "Escape") closeYouTubeModal();
-                    }}
-                    placeholder="Enter a name for this track"
-                    disabled={isImportingFromYouTube}
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:border-purple-500 disabled:opacity-50"
-                    autoFocus
-                  />
-                </div>
-              )}
-              {youtubeError && <p className="text-sm text-red-400">{youtubeError}</p>}
-              {isImportingFromYouTube && (
-                <p className="text-sm text-gray-400">Importing... this may take a moment</p>
-              )}
-            </div>
-            <div className="flex justify-end gap-3 mt-5">
-              <button
-                onClick={closeYouTubeModal}
+      {/* One modal per kind of thing added; each takes a link or a file. */}
+      {showAudioModal && (
+        <AddSourceModal
+          title="Add audio"
+          linkLabel="YouTube URL"
+          linkPlaceholder="https://www.youtube.com/watch?v=..."
+          url={youtubeUrl}
+          onUrlChange={(value) => { setYoutubeUrl(value); setYoutubeError(""); }}
+          onSubmit={handleYouTubeSubmit}
+          onCancel={closeAudioModal}
+          onChooseFile={() => chooseFile(uploadInputRef, closeAudioModal)}
+          fileHint="mp3, flac, wav, ogg, m4a, aac"
+          busy={isImportingFromYouTube}
+          busyNote="Importing... this may take a moment"
+          error={youtubeError}
+        >
+          {/*
+            Only shown once the server has told us it could not read the
+            video's own title, which is the only time we need to ask.
+          */}
+          {youtubeNeedsTitle && (
+            <div>
+              <label className="block text-sm text-gray-400 mb-1">Track Title</label>
+              <input
+                type="text"
+                value={youtubeTitle}
+                onChange={(e) => { setYoutubeTitle(e.target.value); setYoutubeError(""); }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && youtubeTitle.trim() && !isImportingFromYouTube) handleYouTubeSubmit();
+                  if (e.key === "Escape") closeAudioModal();
+                }}
+                placeholder="Enter a name for this track"
                 disabled={isImportingFromYouTube}
-                className="px-4 py-2 text-gray-400 hover:text-white transition-colors disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleYouTubeSubmit}
-                disabled={isImportingFromYouTube || !youtubeUrl.trim()}
-                className="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded font-medium transition-colors text-white flex items-center gap-2"
-              >
-                {isImportingFromYouTube && (
-                  <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
-                )}
-                {isImportingFromYouTube ? "Importing..." : "Import"}
-              </button>
+                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:border-purple-500 disabled:opacity-50"
+                autoFocus
+              />
             </div>
-          </div>
-        </div>
+          )}
+        </AddSourceModal>
+      )}
+
+      {showTabModal && (
+        <AddSourceModal
+          title="Add tab"
+          linkLabel="Songsterr link"
+          linkPlaceholder="https://www.songsterr.com/a/wsa/..."
+          url={songsterrUrl}
+          onUrlChange={(value) => { setSongsterrUrl(value); setSongsterrError(""); }}
+          onSubmit={handleSongsterrSubmit}
+          onCancel={closeTabModal}
+          onChooseFile={() => chooseFile(gpUploadInputRef, closeTabModal)}
+          fileHint="gp, gp3, gp4, gp5, gpx"
+          busy={isImportingFromSongsterr}
+          busyNote="Fetching the score from Songsterr…"
+          error={songsterrError}
+        />
       )}
 
       {/* Header */}
@@ -197,25 +219,18 @@ export default function JamTrackList({
           {showAddMenu && !busy && (
             <div className="absolute z-30 mt-1 left-0 w-52 rounded bg-gray-800 border border-gray-600 shadow-xl overflow-hidden">
               <button
-                onClick={() => { setShowAddMenu(false); uploadInputRef.current?.click(); }}
+                onClick={() => { setShowAddMenu(false); setShowAudioModal(true); }}
                 className="w-full text-left px-3 py-2 text-xs text-gray-200 hover:bg-gray-700"
               >
-                Upload audio
-                <span className="block text-[10px] text-gray-500">mp3, flac, wav, ogg, m4a</span>
+                Add audio
+                <span className="block text-[10px] text-gray-500">a recording to play along to</span>
               </button>
               <button
-                onClick={() => { setShowAddMenu(false); setShowYouTubeModal(true); }}
+                onClick={() => { setShowAddMenu(false); setShowTabModal(true); }}
                 className="w-full text-left px-3 py-2 text-xs text-gray-200 hover:bg-gray-700"
               >
-                Import from YouTube
-                <span className="block text-[10px] text-gray-500">downloaded for offline playback</span>
-              </button>
-              <button
-                onClick={() => { setShowAddMenu(false); gpUploadInputRef.current?.click(); }}
-                className="w-full text-left px-3 py-2 text-xs text-gray-200 hover:bg-gray-700"
-              >
-                Import Guitar Pro
-                <span className="block text-[10px] text-gray-500">gp, gp3, gp4, gp5, gpx</span>
+                Add tab
+                <span className="block text-[10px] text-gray-500">a score to read</span>
               </button>
             </div>
           )}
@@ -313,7 +328,7 @@ export default function JamTrackList({
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
             </svg>
             <p className="text-sm">No jam tracks yet</p>
-            <p className="text-xs mt-1">Upload audio or import from YouTube</p>
+            <p className="text-xs mt-1">Add audio to play along to, or a tab to read</p>
           </div>
         ) : (
           jamTracks.map((jt) => {
