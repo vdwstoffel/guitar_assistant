@@ -4,6 +4,7 @@ import * as fs from "fs/promises";
 import * as path from "path";
 import { serializeGpSong } from "@/lib/gp/serialize";
 import { validateGpParent } from "@/lib/gp/parentLink";
+import { trackMixColumn } from "@/lib/gp/trackMix";
 
 const MUSIC_DIR = process.env.MUSIC_DIR || "./music";
 
@@ -21,6 +22,11 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   ] as const;
   const data: Record<string, unknown> = {};
   for (const key of allowed) if (key in body) data[key] = body[key];
+
+  // The mixer is sent as the list the player holds and stored as one JSON
+  // column, normalised on the way in so the row cannot hold a channel a
+  // load would reject.
+  if ("trackMix" in body) data.trackMix = trackMixColumn(body.trackMix);
 
   // The row being patched may already carry the other parent, so the check
   // is against the merged result rather than the patch alone.

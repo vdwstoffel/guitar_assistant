@@ -12,7 +12,8 @@ function tab(over: Partial<TrackTab> = {}): TrackTab {
 function song(over: Partial<GpSong> = {}): GpSong {
   return {
     id: "gp-1", title: "Imported", artist: "Iron Maiden", filePath: "GpSongs/a.gp5",
-    tempo: 150, trackNames: ["Lead"], barCount: 351, favorite: false,
+    tempo: 150, trackNames: ["Lead"], trackMix: [{ level: 1, muted: false, soloed: false }],
+    barCount: 351, favorite: false,
     completed: false, inProgress: false, lastPlayedAt: null, completedAt: null,
     playbackSpeed: null, lastTrackIndex: 0, jamTrackId: null, trackId: "track-1",
     sections: [], createdAt: "2026-10-04T10:00:00.000Z", ...over,

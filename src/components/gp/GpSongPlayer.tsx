@@ -12,6 +12,7 @@ import GpTrackPicker from "./GpTrackPicker";
 import GpSectionsPanel from "./GpSectionsPanel";
 import GpTrackMixer from "./GpTrackMixer";
 import { gpFileUrl } from "@/lib/gp/fileUrl";
+import { channelsOf, toTrackMix } from "@/lib/gp/trackMix";
 import type { BarRange } from "./useAlphaTabPlayback";
 import type { GpSongSection } from "@/types";
 import PlaybackSpeedControl from "@/components/PlaybackSpeedControl";
@@ -102,10 +103,10 @@ export default function GpSongPlayer({
     setMix({ ...getMix(), ...patch });
   }, []);
 
-  // The mix resets to all-audible on open: which part you silence changes
-  // with what you are working on, so there is nothing worth persisting.
   // Open state is remembered: someone who works with the mixer open wants it
   // open next time, and someone who never touches it should never see it.
+  // In localStorage rather than on the row, because it is about this person
+  // at this screen, not about the song.
   const [mixerOpen, setMixerOpen] = useState(false);
   useEffect(() => {
     try {
@@ -126,15 +127,78 @@ export default function GpSongPlayer({
     });
   }, []);
 
-  const [levels, setLevels] = useState<number[]>(() => song.trackNames.map(() => 1));
-  const [muted, setMuted] = useState<boolean[]>(() => song.trackNames.map(() => false));
-  const [soloed, setSoloed] = useState<boolean[]>(() => song.trackNames.map(() => false));
+  /*
+    The mix belongs to the song. Which part you turn down is a decision about
+    this arrangement — your own instrument, a doubled guitar, a click you
+    cannot stand — and it is still the right decision the next time you open
+    it, so it is restored from the row rather than reset.
 
-  // Read by the scoreLoaded handler, which was created before these existed.
+    Three parallel arrays rather than one list of channels: each control sets
+    only its own, which keeps a fader drag from rewriting mute and solo
+    state it never touched. `toTrackMix` gathers them when it is time to save.
+  */
+  const [levels, setLevels] = useState<number[]>(() =>
+    channelsOf(song.trackMix, song.trackNames.length).map((c) => c.level),
+  );
+  const [muted, setMuted] = useState<boolean[]>(() =>
+    channelsOf(song.trackMix, song.trackNames.length).map((c) => c.muted),
+  );
+  const [soloed, setSoloed] = useState<boolean[]>(() =>
+    channelsOf(song.trackMix, song.trackNames.length).map((c) => c.soloed),
+  );
+
+  // Read by the scoreLoaded handler, which was created before these existed,
+  // and by the save below, which must see the mix as it stands when its
+  // timer fires rather than as it stood when the fader moved.
   const mixRef = useRef({ levels, muted, soloed });
   useEffect(() => {
     mixRef.current = { levels, muted, soloed };
   });
+
+  // Latest-value ref for the same reason: a save outlives the render that
+  // scheduled it, and on a song switch this player is unmounted before the
+  // new prop ever reaches it.
+  const onUpdateRef = useRef(onUpdate);
+  useEffect(() => {
+    onUpdateRef.current = onUpdate;
+  });
+
+  const mixSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const saveMixNow = useCallback(() => {
+    const current = mixRef.current;
+    onUpdateRef.current({
+      trackMix: toTrackMix(current.levels, current.muted, current.soloed),
+    });
+  }, []);
+
+  /*
+    Debounced. A fader drag fires onChange for every pixel the handle moves,
+    and each one would be its own PATCH — a few hundred writes to set one
+    track's level. Half a second after the hand stops still reads as instant
+    and is a single write.
+  */
+  const scheduleMixSave = useCallback(() => {
+    if (mixSaveTimer.current) clearTimeout(mixSaveTimer.current);
+    mixSaveTimer.current = setTimeout(() => {
+      mixSaveTimer.current = null;
+      saveMixNow();
+    }, 500);
+  }, [saveMixNow]);
+
+  // A change made and the song left straight away — muting a part and
+  // moving on to the next song — would otherwise die with the timer. This
+  // covers leaving within the app, which is how a song is left; closing the
+  // tab outright is not covered, because the browser tears the page down
+  // without running cleanups.
+  useEffect(
+    () => () => {
+      if (!mixSaveTimer.current) return;
+      clearTimeout(mixSaveTimer.current);
+      mixSaveTimer.current = null;
+      saveMixNow();
+    },
+    [saveMixNow],
+  );
 
   const trackAt = useCallback((index: number) => apiRef.current?.score?.tracks?.[index] ?? null, []);
 
@@ -149,8 +213,9 @@ export default function GpSongPlayer({
           /* ignore */
         }
       }
+      scheduleMixSave();
     },
-    [trackAt],
+    [trackAt, scheduleMixSave],
   );
 
   const toggleMute = useCallback(
@@ -167,8 +232,9 @@ export default function GpSongPlayer({
         }
         return next;
       });
+      scheduleMixSave();
     },
-    [trackAt],
+    [trackAt, scheduleMixSave],
   );
 
   const toggleSolo = useCallback(
@@ -185,8 +251,9 @@ export default function GpSongPlayer({
         }
         return next;
       });
+      scheduleMixSave();
     },
-    [trackAt],
+    [trackAt, scheduleMixSave],
   );
 
   const [sections, setSections] = useState<GpSongSection[]>(song.sections);

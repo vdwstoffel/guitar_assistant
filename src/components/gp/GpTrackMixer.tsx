@@ -33,8 +33,8 @@ function changedCount(levels: number[], muted: boolean[], soloed: boolean[]): nu
  * Balance the band.
  *
  * This is the point of importing a Guitar Pro file rather than a recording:
- * turn your own part down, or off, and the rest keeps playing. Not persisted
- * — which part you silence changes with what you are working on that day.
+ * turn your own part down, or off, and the rest keeps playing. Saved on the
+ * song, so the balance you set is the one you come back to.
  *
  * Folded away behind a button by default. A real file has six or more tracks
  * with names like "Kerry King | ESP Explorer | Lead Guitar - Distortion

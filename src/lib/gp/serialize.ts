@@ -1,11 +1,13 @@
 import type { GpSong } from "@/types";
+import { parseTrackMix } from "./trackMix";
 
-/** Row shape as Prisma returns it, with trackNames still a JSON string. */
+/** Row shape as Prisma returns it, with the JSON columns still strings. */
 type GpSongRow = Omit<
   GpSong,
-  "trackNames" | "sections" | "lastPlayedAt" | "completedAt" | "createdAt"
+  "trackNames" | "trackMix" | "sections" | "lastPlayedAt" | "completedAt" | "createdAt"
 > & {
   trackNames: string;
+  trackMix: string | null;
   lastPlayedAt: Date | null;
   completedAt: Date | null;
   createdAt: Date;
@@ -18,6 +20,8 @@ type GpSongRow = Omit<
  *
  * A corrupt trackNames column yields an empty list rather than throwing —
  * the song is still playable, and the picker falls back to numbered parts.
+ * The mixer is sized to whatever names survived, so the two can never
+ * disagree about how many tracks there are.
  */
 export function serializeGpSong(row: GpSongRow): GpSong {
   let trackNames: string[] = [];
@@ -30,6 +34,7 @@ export function serializeGpSong(row: GpSongRow): GpSong {
   return {
     ...row,
     trackNames,
+    trackMix: parseTrackMix(row.trackMix, trackNames.length),
     sections: row.sections ?? [],
     lastPlayedAt: row.lastPlayedAt?.toISOString() ?? null,
     completedAt: row.completedAt?.toISOString() ?? null,

@@ -299,6 +299,9 @@ model GpSong {
   playbackSpeed  Int?
   /// Index into trackNames; which part was last on screen.
   lastTrackIndex Int       @default(0)
+  /// JSON-encoded {level,muted,soloed}[] of mixer settings, index-aligned
+  /// with trackNames; null = the mixer was never touched, play all-audible.
+  trackMix       String?
 
   /// When set, this tab belongs to that jam track and the two are one entry
   /// in the list. Null means a tab-only song, which stands on its own.

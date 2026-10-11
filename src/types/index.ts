@@ -1,3 +1,9 @@
+// The mixer's per-track shape lives beside the code that parses and
+// validates it, and is re-exported here so GpSong's consumers have one
+// import for the whole song.
+export type { TrackMix } from "@/lib/gp/trackMix";
+import type { TrackMix } from "@/lib/gp/trackMix";
+
 export interface TrackTab {
   id: string;
   name: string;
@@ -183,6 +189,12 @@ export interface GpSong {
   tempo: number | null;
   /** Parsed from the row's JSON column by the API, never raw JSON here. */
   trackNames: string[];
+  /**
+   * The mixer's fader, mute and solo per track, index-aligned with
+   * trackNames. Always one channel per track: the API fills in the
+   * all-audible default for a song whose mix was never set.
+   */
+  trackMix: TrackMix[];
   barCount: number;
   favorite: boolean;
   completed: boolean;
