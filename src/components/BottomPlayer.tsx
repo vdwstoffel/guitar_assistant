@@ -732,13 +732,18 @@ function BottomPlayer({
     if (scrollContainer) {
       scrollContainer.addEventListener("scroll", handleScroll);
     }
-    window.addEventListener("resize", handleResize);
+    // The container, not the window: on the Jam Tracks view the pane this
+    // sits in is resizable on its own, and watching the window would leave
+    // the marker labels at their old offsets — visibly adrift from the lines
+    // they name — until the window itself happened to change size.
+    const resizeObserver = new ResizeObserver(handleResize);
+    resizeObserver.observe(outerContainer);
 
     return () => {
       if (scrollContainer) {
         scrollContainer.removeEventListener("scroll", handleScroll);
       }
-      window.removeEventListener("resize", handleResize);
+      resizeObserver.disconnect();
       // Clean up any pending animation frames to prevent memory leaks
       if (scrollRafId !== null) {
         cancelAnimationFrame(scrollRafId);

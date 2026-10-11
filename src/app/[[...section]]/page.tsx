@@ -35,6 +35,7 @@ import AddAudioDialog from "@/components/AddAudioDialog";
 import { focusPlayer } from "@/lib/playerFocus";
 import { useFocusedPlayer } from "@/lib/usePlayerFocus";
 import { resolvePageFlip } from "@/lib/pageFlips";
+import { DEFAULT_SPLIT, loadSplit, saveSplit, splitFromPointer } from "@/lib/splitPane";
 
 type Section = 'home' | 'lessons' | 'videos' | 'fretboard' | 'chords' | 'tools' | 'circle' | 'jamtracks' | 'recordings' | 'caged' | 'tabs';
 
@@ -280,6 +281,61 @@ export default function Home() {
   const [isFitToPage, setIsFitToPage] = useState(true);
   const listPaneWidth = isFitToPage ? "xl:w-1/2" : "xl:w-1/3";
   const pdfPaneWidth = isFitToPage ? "xl:w-1/2" : "xl:w-2/3";
+
+  // Where the divider sits on the Jam Tracks view, as a fraction of the pane
+  // the two halves share. Read on mount rather than in the initialiser: this
+  // page renders on the server too, where localStorage does not exist.
+  const [jamSplit, setJamSplit] = useState(DEFAULT_SPLIT);
+  useEffect(() => {
+    setJamSplit(loadSplit());
+  }, []);
+  const jamSplitRef = useRef<HTMLDivElement>(null);
+
+  // alphaTab lays a score out on window resize, not on container resize, so
+  // without this the staff keeps the width it was rendered at and the SVG
+  // simply stretches. Called once the drag is over, not on every frame of it
+  // — a full re-layout of the score is far too expensive to do per pointer
+  // move. (The waveform redraws itself as the pane moves; it watches its own
+  // container.)
+  //
+  // In a frame of its own so the new width has been committed to the DOM
+  // before anything measures it; dispatched straight from the handler, the
+  // score would re-lay out to the width it is about to stop having.
+  const relayoutAfterSplit = () => {
+    requestAnimationFrame(() => window.dispatchEvent(new Event("resize")));
+  };
+
+  // Pointer capture rather than window listeners, so the drag survives the
+  // cursor crossing the score (or leaving the window) mid-gesture.
+  const startSplitDrag = (e: React.PointerEvent<HTMLDivElement>) => {
+    const handle = e.currentTarget;
+    handle.setPointerCapture(e.pointerId);
+
+    const onMove = (ev: PointerEvent) => {
+      const bounds = jamSplitRef.current?.getBoundingClientRect();
+      if (bounds) setJamSplit(splitFromPointer(ev.clientX, bounds));
+    };
+    const onUp = () => {
+      handle.removeEventListener("pointermove", onMove);
+      handle.removeEventListener("pointerup", onUp);
+      handle.removeEventListener("pointercancel", onUp);
+      setJamSplit((split) => {
+        saveSplit(split);
+        return split;
+      });
+      relayoutAfterSplit();
+    };
+
+    handle.addEventListener("pointermove", onMove);
+    handle.addEventListener("pointerup", onUp);
+    handle.addEventListener("pointercancel", onUp);
+  };
+
+  const resetSplit = () => {
+    setJamSplit(DEFAULT_SPLIT);
+    saveSplit(DEFAULT_SPLIT);
+    relayoutAfterSplit();
+  };
 
   // Marker bar state from BottomPlayer
   const [markerBarState, setMarkerBarState] = useState<MarkerBarState | null>(null);
@@ -2515,10 +2571,11 @@ export default function Home() {
           </div>
         </>
       ) : activeSection === 'jamtracks' ? (
-        <div className="flex h-full overflow-hidden">
-          {/* Left half: track list (top) stacked over the waveform (bottom) */}
+        <div className="flex h-full overflow-hidden" ref={jamSplitRef}>
+          {/* Left side: track list (top) stacked over the waveform (bottom) */}
           <div
-            className="w-1/2 flex flex-col min-h-0 border-r border-gray-700"
+            style={{ width: `${jamSplit * 100}%` }}
+            className="flex flex-col min-h-0 min-w-0 border-r border-gray-700"
             // Anything on this side — picking a track, scrubbing the waveform,
             // jumping to a marker — is working with the recording, so it takes
             // the keyboard back from a tab beside it. Capture, so it still
@@ -2629,8 +2686,28 @@ export default function Home() {
               </div>
             )}
           </div>
-          {/* Right half: the song's score, filling top to bottom */}
-          <div className="w-1/2 min-w-0 min-h-0 flex flex-col">
+          {/*
+            Drag to give the recording or the score more room; double-click
+            to go back to an even split. A flex child between the two panes
+            rather than something absolutely positioned over their seam, so
+            there is nothing to get the hit-testing or the z-order wrong.
+
+            Deliberately a sibling of the left pane and not a child of it:
+            that pane claims the keyboard on pointer-down, and resizing the
+            view should not change which half Space belongs to.
+          */}
+          <div
+            onPointerDown={startSplitDrag}
+            onDoubleClick={resetSplit}
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize the recording and score panes"
+            aria-valuenow={Math.round(jamSplit * 100)}
+            title="Drag to resize · double-click to even up"
+            className="w-1.5 shrink-0 cursor-col-resize bg-transparent hover:bg-blue-500/50 transition-colors"
+          />
+          {/* Right side: the song's score, filling top to bottom */}
+          <div className="flex-1 min-w-0 min-h-0 flex flex-col">
             {(currentGpSong || currentJamTrack) && (
               <div className="shrink-0 flex items-center gap-2 px-3 pt-3">
                 {/*
