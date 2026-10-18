@@ -1,8 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
-import ScoreCanvas, { type ScoreCanvasHandle } from "./ScoreCanvas";
+import ScoreCanvas, { type MenuRequest, type ScoreCanvasHandle } from "./ScoreCanvas";
+import NoteMenu, { type NoteMenuHandle } from "./NoteMenu";
+import { onOwnScrollbar } from "./ownScrollbar";
 import PlaybackSpeedControl from "@/components/PlaybackSpeedControl";
 import KeyboardShortcutsHelp from "@/components/KeyboardShortcutsHelp";
 import TempoControl from "./TempoControl";
@@ -19,17 +21,27 @@ import RepeatBarsControl from "./RepeatBarsControl";
 
 import { parseTex } from "@/lib/tabscore/parse";
 import { normalizeNewlines } from "@/lib/tabscore/offsets";
-import { clampCaret, type Caret } from "@/lib/tabscore/locate";
-import { type CommandResult } from "@/lib/tabscore/apply";
-import { matchChord } from "@/lib/tabscore/keymap";
+import { clampCaret, type BeatPos, type Caret } from "@/lib/tabscore/locate";
+import { claims, clipboardChord, matchChord, type ChordCommand } from "@/lib/tabscore/keymap";
+import { menuItems, menuStaysOpen, type MenuGroup, type MenuItem } from "@/lib/tabscore/menuItems";
+import { rangeOf, sizeOf, stillValid } from "@/lib/tabscore/selection";
+import { SELECTION_CLEARED, selectionAnnouncement } from "@/lib/tabscore/clipMessages";
+import {
+  createPreviewScheduler,
+  previewAction,
+  type PreviewScheduler,
+  type PreviewSource,
+} from "@/lib/tabscore/notePreview";
 import { claimGlobalShortcuts } from "@/lib/globalShortcuts";
-import { setFret, clearNote } from "@/lib/tabscore/commands/setFret";
-import { scaleDuration, toggleDotted } from "@/lib/tabscore/commands/duration";
-import { insertBeat, deleteBeat, addBar, deleteBar } from "@/lib/tabscore/commands/structure";
-import { isBarFull } from "@/lib/tabscore/barCapacity";
-import { toggleTechnique, type Technique } from "@/lib/tabscore/commands/technique";
-import { toggleTie } from "@/lib/tabscore/commands/tie";
-import { toggleTuplet, tupletAt, TRIPLET } from "@/lib/tabscore/commands/tuplet";
+import { type Technique } from "@/lib/tabscore/commands/technique";
+import { tupletAt, TRIPLET } from "@/lib/tabscore/commands/tuplet";
+import { fixAllBars } from "@/lib/tabscore/commands/fixBar";
+import { brokenBars } from "@/lib/tabscore/barFill";
+import { fixAllNotice, stripMessage } from "@/lib/tabscore/barMessages";
+import { NOTHING_TO_PASTE, PARSE_ERROR_NOTICE, pastedFromEditorNotice } from "@/lib/tabscore/menuMessages";
+import {
+  BAR_NOTICE_MS, copyText, cutText, pasteText, readForPaste, runCommand, type CommandDeps, type DigitBuffer,
+} from "@/lib/tabscore/runCommand";
 import {
   subscribeMix,
   getMix,
@@ -45,7 +57,6 @@ import {
   toggleRepeatEnd,
   readBarRepeat,
 } from "@/lib/tabscore/commands/repeat";
-import { moveBeat, moveString } from "@/lib/tabscore/commands/navigate";
 
 export interface TabEditorProps {
   initialTex: string;
@@ -72,15 +83,101 @@ export interface TabEditorProps {
 type SaveState = "idle" | "saving" | "saved" | "error";
 
 const HISTORY_LIMIT = 200;
-const DIGIT_COMPOSE_MS = 800;
+// How long the note preview waits after the last keystroke or caret move.
+// Long enough that a briskly typed two-digit fret sounds once, and a held
+// arrow only where it stops; short enough to feel immediate.
+const PREVIEW_DELAY_MS = 150;
 const AUTOSAVE_DELAY_MS = 1000;
 const NOTICE_MS = 2500;
-const PARSE_ERROR_NOTICE = "Fix the source errors to edit on the canvas";
-// A tie sounds the PREVIOUS note on the same string again. With nothing
-// earlier on that string alphaTex still accepts `-`, but renders it as an
-// open string — so the command refuses, and this says why.
-const NOTHING_TO_TIE_NOTICE = "Nothing earlier on this string to tie to";
+// How long the selection must stay put before a screen reader hears its size:
+// longer than a held arrow key's repeat delay, so holding Shift+→ is said once.
+const SELECTION_SPOKEN_MS = 500;
 const INITIAL_CARET: Caret = { barIndex: 0, beatIndex: 0, string: 6 };
+
+// The last clip copied or cut, for a browser whose copy and paste events
+// carry no clipboardData. Module-level, so it outlives a remount; never the
+// source of truth — the system clipboard is, whenever there is one.
+let fallbackClip: string | null = null;
+
+// Set when the note menu's Copy or Cut could not reach the system clipboard —
+// plain http over the LAN gives the page none, or the browser refused the
+// write — so the editor's clip is newer than what the system clipboard
+// holds: the next paste here, from the menu or Ctrl+V, takes the editor's
+// clip instead of the stale text. A copy or cut anywhere else on the page
+// clears it: the system clipboard has the newest passage then. The editor's
+// own copy and cut clear it only when they write (writeClip) — a refused one
+// writes nothing, and leaves the editor's clip the newer.
+let editorClipNewer = false;
+const systemClipboardIsNewest = () => {
+  editorClipNewer = false;
+};
+
+/** A clip onto the clipboard a copy or cut event offers, and into the fallback. */
+function writeClip(event: React.ClipboardEvent<HTMLDivElement>, text: string): void {
+  fallbackClip = text;
+  editorClipNewer = false;
+  event.clipboardData?.setData("text/plain", text);
+}
+
+/**
+ * The note menu's Copy and Cut: the clip into the fallback, and onto the
+ * system clipboard where the page may write it — or, where it may not, marked
+ * as newer than whatever the system clipboard holds.
+ */
+function putOnClipboard(text: string): void {
+  fallbackClip = text;
+  const clipboard = typeof navigator === "undefined" ? undefined : navigator.clipboard;
+  if (!clipboard?.writeText) {
+    editorClipNewer = true;
+    return;
+  }
+  editorClipNewer = false;
+  clipboard.writeText(text).catch(() => {
+    editorClipNewer = true;
+  });
+}
+
+/** The page's own clipboard reader, where it has one (a secure context). */
+const clipboardReader = (): (() => Promise<string>) | undefined => {
+  const clipboard = typeof navigator === "undefined" ? undefined : navigator.clipboard;
+  return clipboard?.readText ? () => clipboard.readText() : undefined;
+};
+
+/** The note menu, as TabEditor holds it. */
+interface MenuState {
+  /** The note menu, or the selection menu: fixed when it opens. */
+  scope: "note" | "selection";
+  /** The beat it hangs under: its bar, from the beat's left edge. */
+  anchor: BeatPos;
+  /**
+   * NoteMenu's focusRequest: a new number above 0 moves focus into it (a
+   * keyboard open); 0 leaves focus on the editor (a pointer open).
+   */
+  focus: number;
+}
+
+const NO_GROUPS: MenuGroup[] = [];
+
+// The note menu is a popover. A browser without the Popover API (Chrome
+// before 114, Safari before 17) gets no menu at all — nothing opens one, the
+// ⋯ Menu button is not drawn, and a right-click, the Menu key and Shift+F10
+// get the browser's own menu, as before the note menu — rather than a menu
+// state that goes open with nothing on screen. Read once, at load: TabEditor
+// mounts only in the browser, after a fetch or a click, so no server render
+// can disagree.
+const MENU_SUPPORTED = typeof HTMLElement !== "undefined" && typeof HTMLElement.prototype.showPopover === "function";
+
+/**
+ * Drop a text selection outside the editor — a heading, a notice, Ctrl+A
+ * outside the score. It survives a press on the score, whose default alphaTab
+ * prevents, and the browser aims copy, cut and paste at it rather than at the
+ * focused editor, whose handlers then never run. A selection inside the editor
+ * (the score's own text) is left alone.
+ */
+function dropStraySelection(editor: HTMLElement | null): void {
+  const selection = window.getSelection();
+  if (editor && selection && selection.rangeCount > 0 && !editor.contains(selection.anchorNode)) selection.removeAllRanges();
+}
 
 const SAVE_LABEL: Record<SaveState, string | null> = {
   idle: null,
@@ -100,10 +197,12 @@ const SAVE_LABEL: Record<SaveState, string | null> = {
  * (`matchChord`), not here — extracted in review round 3 after three prior
  * rounds of correctness fixes to this exact table were validated only by
  * hand-tracing (see task-14-report.md, "Fix rounds 1-3", and
- * `keymap.test.ts`'s exhaustive cross-product test). This component's job
- * is applying whatever `matchChord` resolves to: guarding it on the current
- * parse result, composing two-digit fret entry, and routing the result
- * through `commitTex`.
+ * `keymap.test.ts`'s exhaustive cross-product test). Running what it
+ * resolves to lives elsewhere too: the parse guard, two-digit fret entry,
+ * the dispatch, its notices and its preview are `@/lib/tabscore/runCommand`,
+ * which a key and a toolbar button go through alike. This component supplies
+ * its dependencies (`commandDeps`) — the refs it reads, and the callbacks,
+ * `commitTex` among them, through which it acts.
  */
 export default function TabEditor({
   initialTex,
@@ -126,6 +225,10 @@ export default function TabEditor({
   const [speed, setSpeed] = useState(() => clampPlaybackSpeed(initialSpeed));
   const [isPlaying, setIsPlaying] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+  // The selection's fixed end. It runs from here to the caret (its head), in
+  // either direction; null is no selection. Positions, never alphaTab Beats:
+  // every edit renders a fresh Score.
+  const [selectionAnchor, setSelectionAnchor] = useState<BeatPos | null>(null);
   const [looping, setLooping] = useState(false);
   // How loud the score and the click are: a listening preference kept in
   // localStorage, unlike the practice speed, which belongs to the tab. Read
@@ -151,12 +254,6 @@ export default function TabEditor({
   // in-progress state, revisit-tracks).
   const sessionTracker = usePracticeSessionTracker(track);
   const sessionTrackerRef = useRef(sessionTracker);
-
-  const handlePlayingChange = useCallback((playing: boolean) => {
-    setIsPlaying(playing);
-    if (playing) sessionTrackerRef.current.onPlay();
-    else sessionTrackerRef.current.onPause();
-  }, []);
 
   const handleFinished = useCallback(() => {
     sessionTrackerRef.current.onFinish();
@@ -190,7 +287,7 @@ export default function TabEditor({
   const historyIndexRef = useRef(0);
   const onSaveRef = useRef(onSave);
 
-  const digitBufferRef = useRef<{ digits: string; at: number } | null>(null);
+  const digitBufferRef = useRef<DigitBuffer | null>(null);
   const noticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // The last `tex` the autosave effect below actually scheduled a save
@@ -199,9 +296,10 @@ export default function TabEditor({
   const lastHandledTexRef = useRef(tex);
 
   // Shared once per render: SourcePane's diagnostics, TechniquePalette's
-  // disabled state, and the keyboard guard below all read this one result
-  // instead of each calling parseTex again (~2.7ms on a 300-bar document —
-  // fine once per render, wasteful several times).
+  // disabled state, the note menu's items, and runCommand's parse guard
+  // (through commandDeps.parsedOk, which reads it from parsedRef) all read
+  // this one result instead of each calling parseTex again (~2.7ms on a
+  // 300-bar document — fine once per render, wasteful several times).
   const parsed = useMemo(() => parseTex(tex), [tex]);
   // The notated tempo lives in the document, so it is derived rather than
   // held in state — editing it is an ordinary, undoable text edit. null means
@@ -228,6 +326,16 @@ export default function TabEditor({
   const shownRepeatCountRef = useRef(repeatCount);
   const tempoRef = useRef(tempo);
   const parsedRef = useRef(parsed);
+  const previewNotesRef = useRef(mix.previewNotes);
+  const showHelpRef = useRef(showHelp);
+  const selectionAnchorRef = useRef<BeatPos | null>(null);
+  // Set by a keydown that pastes — Ctrl+V and Shift+Insert over the music,
+  // Ctrl+Shift+V in front of it (the paste event itself cannot say which) —
+  // and taken by the paste event it brings. A paste with none is not from the
+  // keys: Linux fires one for a middle-click, carrying whatever text was last
+  // selected anywhere. Cleared when a key comes up, so it never outlives the
+  // keydown that set it.
+  const pasteArmRef = useRef<{ inserts: boolean } | null>(null);
 
   useEffect(() => {
     texRef.current = tex;
@@ -238,13 +346,153 @@ export default function TabEditor({
     tempoRef.current = tempo;
     repeatCountRef.current = repeatCount;
     sessionTrackerRef.current = sessionTracker;
+    previewNotesRef.current = mix.previewNotes;
+    showHelpRef.current = showHelp;
   });
 
-  const showNotice = useCallback((message: string) => {
+  const showNotice = useCallback((message: string, ms: number = NOTICE_MS) => {
     setNotice(message);
     if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
-    noticeTimerRef.current = setTimeout(() => setNotice(null), NOTICE_MS);
+    noticeTimerRef.current = setTimeout(() => setNotice(null), ms);
   }, []);
+
+  // The note menu. This state is the one truth about it: NoteMenu only
+  // mirrors it, with showPopover() and hidePopover(), and nothing in the
+  // browser opens or closes it on its own (popover="manual"). Open is
+  // `menu`; shown is open with its bar in the score panel — what Escape and
+  // the ⋯ button's aria-expanded mean by open. `menuRef` is mirrored eagerly
+  // beside its setter, for the handlers that read it; `menuShownRef` changes
+  // only through NoteMenu's report (onShownChange), in the commit that shows
+  // or hides the menu.
+  const [menu, setMenu] = useState<MenuState | null>(null);
+  const menuRef = useRef<MenuState | null>(null);
+  const [menuShown, setMenuShown] = useState(false);
+  const menuShownRef = useRef(false);
+  const noteMenuRef = useRef<NoteMenuHandle>(null);
+  // The menu's id, for the ⋯ Menu button's aria-controls.
+  const menuId = useId();
+  // Whether the press now under way closed a menu that showed: a press on an
+  // opener — the ⋯ button, the caret's own note — then closes it, and does
+  // not open it again on release.
+  const closedByPressRef = useRef(false);
+  const focusSeqRef = useRef(0);
+  // Whether the editor holds a passage of its own, for the menu's Paste.
+  const [hasClip, setHasClip] = useState(() => fallbackClip !== null);
+
+  const showMenu = useCallback((next: MenuState) => {
+    if (!MENU_SUPPORTED) return;
+    digitBufferRef.current = null;
+    menuRef.current = next;
+    setMenu(next);
+  }, []);
+
+  // Every close hands the keyboard back to the editor if the menu had it.
+  // Shown is left to NoteMenu's report, which says false in the commit that
+  // closes the menu: a close and a re-open in one keydown (the Menu key or
+  // Shift+F10 inside a keyboard-opened menu) never hides it, so NoteMenu
+  // reports nothing, and a false written here would stay on a menu that shows.
+  const closeMenu = useCallback(() => {
+    if (!menuRef.current) return;
+    const hadFocus = noteMenuRef.current?.contains(document.activeElement) ?? false;
+    menuRef.current = null;
+    setMenu(null);
+    if (hadFocus) containerRef.current?.focus();
+  }, []);
+
+  const handleMenuShown = useCallback((shown: boolean) => {
+    menuShownRef.current = shown;
+    setMenuShown(shown);
+  }, []);
+
+  // The menu at the caret's bar, scrolled into view: the selection menu over a
+  // selection, else the note menu. `focus` is its focus request: a new number
+  // moves focus inside (opened from the keyboard), 0 leaves it on the editor
+  // (opened with the pointer). Where there is no menu (MENU_SUPPORTED),
+  // nothing — not even the scroll.
+  const openAtCaret = useCallback(
+    (focus: number) => {
+      if (!MENU_SUPPORTED) return;
+      const c = caretRef.current;
+      scoreCanvasRef.current?.scrollBarIntoView(c.barIndex);
+      showMenu({ scope: selectionAnchorRef.current ? "selection" : "note", anchor: c, focus });
+    },
+    [showMenu],
+  );
+
+  // Enter, the Menu key and Shift+F10 (runCommand's openMenu): the menu at
+  // the caret, with focus inside — or, while a menu opened with the mouse
+  // shows, focus into that one, not a new one.
+  const openMenuFromKeys = useCallback(() => {
+    const current = menuRef.current;
+    if (current && menuShownRef.current) {
+      showMenu({ ...current, focus: ++focusSeqRef.current });
+      return;
+    }
+    openAtCaret(++focusSeqRef.current);
+  }, [showMenu, openAtCaret]);
+
+  // The score starting to play closes the menu — from Space, the Play button
+  // or wherever.
+  const handlePlayingChange = useCallback(
+    (playing: boolean) => {
+      setIsPlaying(playing);
+      if (playing) {
+        sessionTrackerRef.current.onPlay();
+        closeMenu();
+      } else {
+        sessionTrackerRef.current.onPause();
+      }
+    },
+    [closeMenu],
+  );
+
+  // The note preview. One scheduler per mounted editor: each request
+  // restarts its wait and queues the caret as a candidate; when it fires,
+  // ScoreCanvas plays the newest candidate that has something to sound.
+  // Built in an effect rather than a useState initializer: `onFire` reads
+  // refs, and react-hooks/refs rejects that during render. So Strict Mode's
+  // mount, cleanup, mount just builds a fresh one, and everything it reads
+  // when it fires is a ref. The optional chaining where it is used makes the
+  // window before the effect harmless: a request there is dropped.
+  const previewSchedulerRef = useRef<PreviewScheduler | null>(null);
+  useEffect(() => {
+    const scheduler = createPreviewScheduler({
+      delayMs: PREVIEW_DELAY_MS,
+      onFire: (candidates) => {
+        if (!previewNotesRef.current || !parsedRef.current.ok) return;
+        scoreCanvasRef.current?.previewBeat(candidates);
+      },
+    });
+    previewSchedulerRef.current = scheduler;
+    return () => {
+      scheduler.cancel();
+      previewSchedulerRef.current = null;
+    };
+  }, []);
+
+  // Every preview decision goes through here, called from each handler that
+  // can start or stop one — never from an effect watching `caret`, because
+  // the re-clamp effect below moves the caret after undo and Source edits,
+  // which must not preview.
+  const notePreview = useCallback(
+    (prev: Caret, next: Caret, source: PreviewSource) => {
+      const action = previewAction(prev, next, source);
+      if (action === "request") {
+        previewSchedulerRef.current?.request(next);
+      } else if (action === "cancel") {
+        previewSchedulerRef.current?.cancel();
+        scoreCanvasRef.current?.stopPreview();
+      }
+    },
+    [],
+  );
+
+  // What the inputs that are not note entry do — Stop, the Source pane, the
+  // tempo, tuning and repeat-sign controls, switching Notes off: drop a
+  // pending preview and stop one that is sounding.
+  const cancelPreview = useCallback(() => {
+    notePreview(caretRef.current, caretRef.current, { kind: "excluded" });
+  }, [notePreview]);
 
   // Behaviour 1 (state) + Behaviour 5 (undo history). One path for every
   // source of a `tex` change — a canvas command's result and SourcePane's
@@ -253,7 +501,12 @@ export default function TabEditor({
   // directly rather than a functional setState updater: React may invoke a
   // functional updater twice under StrictMode, which would double-push
   // history.
-  const commitTex = useCallback((nextText: string, nextCaret?: Caret) => {
+  //
+  // Every commit also sets the selection: none unless the command passes one
+  // — Delete keeps its selection, a paste or duplicate selects what it wrote
+  // — so no other edit, from the Source pane or the toolbar, can leave a
+  // selection pointing at music that moved.
+  const commitTex = useCallback((nextText: string, nextCaret?: Caret, nextAnchor: BeatPos | null = null) => {
     const prevText = texRef.current;
     if (nextText !== prevText) {
       const base = historyRef.current.slice(0, historyIndexRef.current + 1);
@@ -273,6 +526,13 @@ export default function TabEditor({
       caretRef.current = nextCaret;
       setCaret(nextCaret);
     }
+    selectionAnchorRef.current = nextAnchor;
+    setSelectionAnchor(nextAnchor);
+  }, []);
+
+  const setAnchor = useCallback((anchor: BeatPos | null) => {
+    selectionAnchorRef.current = anchor;
+    setSelectionAnchor(anchor);
   }, []);
 
   const undo = useCallback(() => {
@@ -283,6 +543,12 @@ export default function TabEditor({
     // whatever the undo landed on, instead of the "2" the user actually
     // typed.
     digitBufferRef.current = null;
+    setAnchor(null);
+    // And the note menu closes, however undo was asked for — its key, the
+    // menu, or the toolbar button, clicked or pressed from the keyboard — as
+    // the menu's close table says (closesMenu): the music under it may move.
+    closeMenu();
+    notePreview(caretRef.current, caretRef.current, { kind: "command", command: "undo", accepted: true });
     const idx = historyIndexRef.current;
     if (idx <= 0) return;
     const nextText = historyRef.current[idx - 1];
@@ -290,10 +556,13 @@ export default function TabEditor({
     texRef.current = nextText;
     setHistoryIndex(idx - 1);
     setTex(nextText);
-  }, []);
+  }, [closeMenu, notePreview, setAnchor]);
 
   const redo = useCallback(() => {
     digitBufferRef.current = null; // see undo's comment above
+    setAnchor(null);
+    closeMenu(); // see undo's, too
+    notePreview(caretRef.current, caretRef.current, { kind: "command", command: "redo", accepted: true });
     const idx = historyIndexRef.current;
     const h = historyRef.current;
     if (idx >= h.length - 1) return;
@@ -302,7 +571,7 @@ export default function TabEditor({
     texRef.current = nextText;
     setHistoryIndex(idx + 1);
     setTex(nextText);
-  }, []);
+  }, [closeMenu, notePreview, setAnchor]);
 
   // Behaviour 3's "clear the buffer on any caret move," shared by arrow-key
   // navigation and canvas clicks (ScoreCanvas's onCaretChange) alike.
@@ -311,6 +580,48 @@ export default function TabEditor({
     caretRef.current = next;
     setCaret(next);
   }, []);
+
+  // What runCommand reads and does, from this editor's refs and callbacks.
+  // Every getter reads a ref, so the one object stays current; it changes
+  // only if a callback does, and none of them ever does.
+  const commandDeps = useMemo<CommandDeps>(
+    () => ({
+      text: () => texRef.current,
+      caret: () => caretRef.current,
+      anchor: () => selectionAnchorRef.current,
+      parsedOk: () => parsedRef.current.ok,
+      digits: () => digitBufferRef.current,
+      setDigits: (buffer) => {
+        digitBufferRef.current = buffer;
+      },
+      now: () => Date.now(),
+      commit: commitTex,
+      moveCaret,
+      setAnchor,
+      notice: showNotice,
+      preview: notePreview,
+      undo,
+      redo,
+      playPause: () => scoreCanvasRef.current?.playPause(),
+      toggleHelp: () => setShowHelp((prev) => !prev),
+      openMenu: openMenuFromKeys,
+    }),
+    [commitTex, moveCaret, setAnchor, showNotice, notePreview, undo, redo, openMenuFromKeys],
+  );
+
+  // A chord command from a key, a toolbar button or a menu item: one way to
+  // run it (runCommand.ts), so the three cannot drift apart. Then the menu
+  // closes or stays open by spec §1's table (menuStaysOpen).
+  const run = useCallback(
+    (command: ChordCommand) => {
+      const before = caretRef.current;
+      runCommand(command, commandDeps);
+      const open = menuRef.current;
+      const selecting = selectionAnchorRef.current !== null;
+      if (open && !menuStaysOpen(command.kind, open.scope, before, caretRef.current, selecting)) closeMenu();
+    },
+    [commandDeps, closeMenu],
+  );
 
   // Re-clamp the caret whenever the document reparses successfully. A
   // SourcePane edit can shrink the document below wherever the caret was
@@ -328,7 +639,13 @@ export default function TabEditor({
       caretRef.current = clamped;
       setCaret(clamped);
     }
-  }, [parsed]);
+    // A selection that no longer names beats is dropped, never clamped into
+    // a different range. Checked against the caret as it was, not the clamped
+    // one: the clamp pulls a stranded head back into the score, which would
+    // clamp the selection along with it.
+    const anchor = selectionAnchorRef.current;
+    if (anchor && !stillValid(parsed.scoreNode, rangeOf(anchor, c))) setAnchor(null);
+  }, [parsed, setAnchor]);
 
   // Transport. The handle methods have existed since Task 12; until now
   // nothing called stop() at all and playPause() was reachable only via
@@ -341,11 +658,13 @@ export default function TabEditor({
   useEffect(() => claimGlobalShortcuts(), []);
 
   const handlePlayPause = useCallback(() => {
+    setAnchor(null);
+    notePreview(caretRef.current, caretRef.current, { kind: "command", command: "playPause", accepted: true });
     scoreCanvasRef.current?.playPause();
     // Keep focus on the canvas so Space stays meaningful after a click;
     // otherwise focus sits on the button and Space just re-presses it.
     containerRef.current?.focus();
-  }, []);
+  }, [notePreview, setAnchor]);
 
   // The other half of that: with the player stood down, something still has
   // to act on Space when focus is elsewhere in the editor. Bound in the
@@ -364,6 +683,7 @@ export default function TabEditor({
         metaKey: event.metaKey,
         shiftKey: event.shiftKey,
         altKey: event.altKey,
+        repeat: event.repeat,
       })?.kind !== "playPause") {
         return;
       }
@@ -375,9 +695,10 @@ export default function TabEditor({
   });
 
   const handleStop = useCallback(() => {
+    cancelPreview();
     scoreCanvasRef.current?.stop();
     containerRef.current?.focus();
-  }, []);
+  }, [cancelPreview]);
 
   // Dragging out a section is only ever done in order to drill it, so it
   // turns Repeat on by itself; clearing the section leaves Repeat alone,
@@ -395,27 +716,13 @@ export default function TabEditor({
     containerRef.current?.focus();
   }, []);
 
-  // Structure, exposed as buttons because the only way to reach these was
-  // Insert / Ctrl+Enter / Shift+Delete / Ctrl+Shift+Backspace, and nothing
-  // on screen said so — a filled bar looked like the end of the tab.
-  const runStructural = useCallback(
-    (fn: (text: string, caret: Caret) => CommandResult | null) => {
-      if (!parsedRef.current.ok) {
-        showNotice(PARSE_ERROR_NOTICE);
-        return;
-      }
-      const result = fn(texRef.current, caretRef.current);
-      if (result) commitTex(result.text, result.caret);
-    },
-    [commitTex, showNotice],
-  );
-
   // Editing the written tempo is an ordinary document edit: it goes through
   // commitTex, so it lands in undo history and the autosave like any other.
   const handleTempoChange = useCallback((bpm: number) => {
+    cancelPreview();
     const result = setTempo(texRef.current, bpm, caretRef.current);
     if (result) commitTex(result.text, result.caret);
-  }, [commitTex]);
+  }, [commitTex, cancelPreview]);
 
   // Repeat signs go on the bar the caret is in — start and end are marked
   // separately, so there is nothing to select in between. The drag-selected
@@ -441,6 +748,7 @@ export default function TabEditor({
 
   const handleRepeatCountChange = useCallback(
     (next: number) => {
+      cancelPreview();
       setRepeatCount(next);
       // Already marked: rewrite in place, so changing 2 to 4 is one action
       // rather than un-marking and re-marking.
@@ -453,16 +761,18 @@ export default function TabEditor({
       );
       if (result) commitTex(result.text, result.caret);
     },
-    [commitTex],
+    [commitTex, cancelPreview],
   );
 
   const handleToggleRepeatStart = useCallback(() => {
+    cancelPreview();
     const result = toggleRepeatStart(texRef.current, caretRef.current, caretRef.current.barIndex);
     if (result) commitTex(result.text, result.caret);
     containerRef.current?.focus();
-  }, [commitTex]);
+  }, [commitTex, cancelPreview]);
 
   const handleToggleRepeatEnd = useCallback(() => {
+    cancelPreview();
     const result = toggleRepeatEnd(
       texRef.current,
       caretRef.current,
@@ -471,13 +781,14 @@ export default function TabEditor({
     );
     if (result) commitTex(result.text, result.caret);
     containerRef.current?.focus();
-  }, [commitTex]);
+  }, [commitTex, cancelPreview]);
 
   const handleTuningChange = useCallback((presetId: string) => {
+    cancelPreview();
     const result = setTuning(texRef.current, presetId, caretRef.current);
     if (result) commitTex(result.text, result.caret);
     containerRef.current?.focus();
-  }, [commitTex]);
+  }, [commitTex, cancelPreview]);
 
   // The one place that actually calls onSave. Always reads the LATEST text
   // via texRef, never a closed-over `tex` — that's what makes it safe to
@@ -565,6 +876,12 @@ export default function TabEditor({
 
   const handleSourceChange = useCallback(
     (nextTex: string) => {
+      // A Source-pane edit closes the menu: the music under it may have moved.
+      // So do undo and redo — they close it themselves, however they are
+      // asked for — the only other ways a document can stop parsing, so the
+      // menu never stays over a tab that no longer parses.
+      closeMenu();
+      cancelPreview();
       // Belt-and-suspenders: a textarea's onChange value is already
       // LF-normalised per spec, but this exact CRLF/offset hazard has
       // already bitten this codebase three times (see
@@ -572,7 +889,7 @@ export default function TabEditor({
       // `tex` costs one idempotent replace.
       commitTex(normalizeNewlines(nextTex));
     },
-    [commitTex],
+    [commitTex, cancelPreview, closeMenu],
   );
 
   // Whether the caret's beat is already in a triplet, so the button reads
@@ -580,36 +897,6 @@ export default function TabEditor({
   const tuplet = useMemo(
     () => (parsed.ok && parsed.scoreNode ? tupletAt(tex, parsed.scoreNode, caret) : null),
     [tex, parsed, caret],
-  );
-
-  const handleTupletSelect = useCallback(() => {
-    digitBufferRef.current = null;
-    if (!parsedRef.current.ok) {
-      showNotice(PARSE_ERROR_NOTICE);
-      return;
-    }
-    const result = toggleTuplet(texRef.current, caretRef.current, TRIPLET);
-    if (result) commitTex(result.text, result.caret);
-  }, [commitTex, showNotice]);
-
-  const handleTieSelect = useCallback(() => {
-    digitBufferRef.current = null;
-    if (!parsedRef.current.ok) {
-      showNotice(PARSE_ERROR_NOTICE);
-      return;
-    }
-    const result = toggleTie(texRef.current, caretRef.current);
-    if (result) commitTex(result.text, result.caret);
-    else showNotice(NOTHING_TO_TIE_NOTICE);
-  }, [commitTex, showNotice]);
-
-  const handleTechniqueSelect = useCallback(
-    (technique: Technique) => {
-      digitBufferRef.current = null;
-      const result = toggleTechnique(texRef.current, caretRef.current, technique);
-      if (result) commitTex(result.text, result.caret);
-    },
-    [commitTex],
   );
 
   // Behaviours 2 + 4. Bound on this component's own container below, NOT
@@ -621,173 +908,385 @@ export default function TabEditor({
   // to bubble up to that handler.
   const handleCanvasKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLDivElement>) => {
-      const command = matchChord({
+      const chord = {
         key: event.key,
+        code: event.code,
         ctrlKey: event.ctrlKey,
         metaKey: event.metaKey,
         shiftKey: event.shiftKey,
         altKey: event.altKey,
-      });
-      if (!command) return; // Not one of ours — let it bubble (Tab, or any unbound chord).
+        repeat: event.repeat,
+      };
+      // The clipboard keys are left to bubble below, never preventDefault()ed:
+      // the browser turns them into the copy, cut and paste events handled
+      // further down. Before it does, a text selection elsewhere on the page,
+      // which would take those events instead, goes; and a paste key arms the
+      // paste event it brings, saying whether it pastes in front (Ctrl+Shift+V),
+      // which the event cannot say.
+      const clipboard = clipboardChord(chord);
+      if (clipboard) {
+        dropStraySelection(containerRef.current);
+        if (clipboard === "paste" || clipboard === "pasteInsert") {
+          pasteArmRef.current = { inserts: clipboard === "pasteInsert" };
+        }
+      }
+      const command = matchChord(chord);
+      // Without the Popover API there is no note menu (MENU_SUPPORTED): Enter,
+      // the Menu key and Shift+F10 are not the editor's then, and go on to the
+      // browser — the Menu key and Shift+F10 to its own menu — as before the
+      // note menu.
+      if (command?.kind === "openMenu" && !MENU_SUPPORTED) return;
+      // Not one of ours — let it bubble (Tab, Ctrl+C/X/V, or any unbound
+      // chord). Nor is Escape unless it has the menu to close or a selection
+      // to clear: with neither, or with the shortcuts panel open, it still
+      // reaches whatever listens on the window — the panel closes on it.
+      const selecting = selectionAnchorRef.current !== null;
+      const menuShowing = menuShownRef.current;
+      if (!command || !claims(command, { selecting, helpOpen: showHelpRef.current, menuShown: menuShowing })) return;
 
       event.preventDefault();
       event.stopPropagation();
+      // Escape with the menu showing closes the menu, and only the menu: a
+      // second Escape clears the selection.
+      if (command.kind === "clearSelection" && menuShowing) {
+        closeMenu();
+        return;
+      }
+      // A held Enter, Menu key or Shift+F10 opens the menu once: its repeats
+      // are claimed above, so the browser's own menu never opens, and dropped.
+      if (command.kind === "openMenu" && event.repeat) return;
+      run(command);
+    },
+    [run, closeMenu],
+  );
 
-      // Exempt from the parsing guard below: undo/redo replay committed
-      // history snapshots — never the current, possibly-broken, text — and
-      // playback controls whatever ScoreCanvas last rendered successfully.
-      // Neither reads the current (possibly stale/absent) AST, so neither
-      // is subject to the "stale AST" hazard the guard exists to prevent.
-      if (command.kind === "undo") {
-        undo();
-        return;
-      }
-      if (command.kind === "redo") {
-        redo();
-        return;
-      }
-      if (command.kind === "playPause") {
-        digitBufferRef.current = null; // see undo's comment above
-        scoreCanvasRef.current?.playPause();
-        return;
-      }
-      // Also exempt, and for a stronger reason than the three above: the
-      // help panel reads nothing from the document. Gating it on a parsing
-      // document would hide the shortcut list exactly when a confused user
-      // most needs it.
-      if (command.kind === "showHelp") {
-        digitBufferRef.current = null;
-        setShowHelp((prev) => !prev);
-        return;
-      }
+  // A plain press on the score — a click, or the start of a practice-loop
+  // drag — moves the caret and ends any edit selection: the two never mix.
+  const handleCanvasCaret = useCallback(
+    (next: Caret) => {
+      setAnchor(null);
+      moveCaret(next);
+    },
+    [moveCaret, setAnchor],
+  );
 
-      // Behaviour 4 / Review Focus item 5, this task's namesake: every
-      // remaining command reads or writes through the current AST —
-      // moveBeat/moveString included, since a caret silently frozen in
-      // place while the document doesn't parse is the same "feels broken"
-      // failure as a rejected edit.
+  // A Shift+click extends the selection to the clicked beat, starting one at
+  // the caret if there is none. ScoreCanvas swallows the press, so the
+  // playback hook never sees it — no seek, no practice-loop change, no
+  // onCaretClick — which also means it never reaches the container's
+  // onMouseDown: focus comes back here, and the preview is asked for here.
+  // A Shift+press on no beat never gets here, and so does nothing.
+  const handleShiftClick = useCallback(
+    (next: Caret) => {
+      containerRef.current?.focus();
+      digitBufferRef.current = null;
       if (!parsedRef.current.ok) {
-        digitBufferRef.current = null;
         showNotice(PARSE_ERROR_NOTICE);
         return;
       }
-
-      const text = texRef.current;
       const c = caretRef.current;
-      const applyResult = (result: CommandResult | null) => {
-        if (result) commitTex(result.text, result.caret);
-      };
-
-      if (command.kind === "setFret") {
-        // Behaviour 3: two-digit fret entry. The first digit always applies
-        // on its own; a second digit within the window on the same caret
-        // (never moved in between — see moveCaret) composes with it. A
-        // third rapid digit would need 3+ characters, which can never be a
-        // valid fret (max 24), so it starts fresh instead of composing
-        // rather than silently failing.
-        const now = Date.now();
-        const buf = digitBufferRef.current;
-        const digit = String(command.digit);
-        const digits =
-          buf && buf.digits.length < 2 && now - buf.at <= DIGIT_COMPOSE_MS
-            ? buf.digits + digit
-            : digit;
-        digitBufferRef.current = { digits, at: now };
-        applyResult(setFret(text, c, Number(digits)));
-        return;
-      }
-      if (command.kind === "moveBeat") {
-        const moved = moveBeat(text, c, command.delta);
-        // moveBeat deliberately stops at the document's edges. Stopping is
-        // right going backwards, but going forwards it dead-ends note entry:
-        // the natural flow is type, right, type, right, and at the last beat
-        // that simply stopped with nothing on screen explaining why. Extend
-        // instead, so the score grows as you write it.
-        const atEnd =
-          command.delta === 1 &&
-          moved.barIndex === c.barIndex &&
-          moved.beatIndex === c.beatIndex;
-        if (atEnd) {
-          // Parse `text` freshly rather than reading parsedRef: commitTex
-          // updates texRef eagerly but parsedRef only after the next render,
-          // so while typing at speed the memoised parse can be one edit
-          // behind — and "is this bar full?" would then be answered about
-          // the previous state.
-          const fresh = parseTex(text);
-          const full = fresh.ok && isBarFull(fresh.score, c.barIndex);
-          // A bar that already holds its time signature's worth should roll
-          // over rather than keep accepting beats past the bar line.
-          const grown = full ? addBar(text, c) : insertBeat(text, c);
-          if (grown) {
-            // Same reason moveCaret clears it: the caret is moving, so a
-            // half-typed fret must not compose with the next digit. Without
-            // this, typing 7 → 9 composed "79", which exceeds fret 24, and
-            // setFret rejected it — the keystroke vanished with no feedback.
-            digitBufferRef.current = null;
-            commitTex(grown.text, grown.caret);
-            return;
-          }
-        }
-        moveCaret(moved);
-        return;
-      }
-      if (command.kind === "moveString") {
-        moveCaret(moveString(c, command.delta));
-        return;
-      }
-
-      // Every remaining command is a discrete action, not a composition —
-      // clear the buffer once, up front, rather than repeating it per case.
-      digitBufferRef.current = null;
-      switch (command.kind) {
-        case "clearNote":
-          applyResult(clearNote(text, c));
-          return;
-        case "insertBeat":
-          applyResult(insertBeat(text, c));
-          return;
-        case "deleteBeat":
-          applyResult(deleteBeat(text, c));
-          return;
-        case "addBar":
-          applyResult(addBar(text, c));
-          return;
-        case "deleteBar":
-          applyResult(deleteBar(text, c));
-          return;
-        case "scaleDuration":
-          applyResult(scaleDuration(text, c, command.direction));
-          return;
-        case "toggleDotted":
-          applyResult(toggleDotted(text, c));
-          return;
-        case "toggleTechnique":
-          applyResult(toggleTechnique(text, c, command.technique));
-          return;
-        case "toggleTuplet":
-          applyResult(toggleTuplet(text, c, TRIPLET));
-          return;
-        case "toggleTie": {
-          // Not applyResult: a null here has a specific, actionable cause —
-          // there is no earlier note on this string — and saying so beats
-          // the generic "that did nothing".
-          const tied = toggleTie(text, c);
-          if (tied) commitTex(tied.text, tied.caret);
-          else showNotice(NOTHING_TO_TIE_NOTICE);
-          return;
-        }
-        default: {
-          // Exhaustiveness check: a compile error here means a new
-          // ChordCommand kind was added to keymap.ts without being handled
-          // above (undo/redo/playPause/setFret/moveBeat/moveString are
-          // narrowed out by the early returns above this switch).
-          const exhaustiveCheck: never = command;
-          return exhaustiveCheck;
-        }
-      }
+      if (!selectionAnchorRef.current) setAnchor({ barIndex: c.barIndex, beatIndex: c.beatIndex });
+      moveCaret(next);
+      notePreview(c, next, { kind: "click", dragged: false });
     },
-    [commitTex, moveCaret, showNotice, undo, redo],
+    [moveCaret, notePreview, setAnchor, showNotice],
   );
+
+  // Ctrl+C, Ctrl+X and Ctrl+V reach the editor as the browser's own copy,
+  // cut and paste events — their keydowns are left alone (keymap.ts) — so a
+  // clip goes through the real clipboard as AlphaTex text, and pastes into
+  // the Source pane or another tab as well as back here. What each one does
+  // is runCommand.ts's copyText, cutText and pasteText, which the note menu
+  // runs too; these only take the text from the event or put it there.
+  const handleCopy = useCallback(
+    (event: React.ClipboardEvent<HTMLDivElement>) => {
+      event.preventDefault();
+      const text = copyText(commandDeps);
+      if (text === null) return;
+      writeClip(event, text);
+      setHasClip(true);
+    },
+    [commandDeps],
+  );
+
+  const handleCut = useCallback(
+    (event: React.ClipboardEvent<HTMLDivElement>) => {
+      event.preventDefault();
+      const text = cutText(commandDeps);
+      if (text === null) return;
+      writeClip(event, text);
+      setHasClip(true);
+    },
+    [commandDeps],
+  );
+
+  // Ctrl+V (or Shift+Insert) pastes over what is there, Ctrl+Shift+V in front
+  // of it — the keydown said which. This only takes the passage from the
+  // event, or from the editor's last clip where the event carries no
+  // clipboardData or where that clip is newer than the system clipboard
+  // (editorClipNewer), and hands it to pasteText (runCommand.ts), which does
+  // the rest: the parse guard, the line ends, where it lands, the notice and
+  // the preview. Then it closes the note menu, as the menu's own Paste does.
+  //
+  // A paste no key armed is ignored, unsaid: a middle-click, whose paste
+  // Linux fills with whatever text was last selected anywhere (the Source
+  // pane, say), would otherwise write over the music at the caret, and save.
+  // The browser's own menu's Paste is ignored with it; on this element it
+  // offers none.
+  const handlePaste = useCallback(
+    (event: React.ClipboardEvent<HTMLDivElement>) => {
+      event.preventDefault();
+      const arm = pasteArmRef.current;
+      pasteArmRef.current = null;
+      if (!arm) return;
+      // The editor's own clip when it is newer than the system clipboard (a
+      // menu Copy over plain http), else what the event carries.
+      const raw =
+        editorClipNewer && fallbackClip !== null
+          ? fallbackClip
+          : event.clipboardData
+            ? event.clipboardData.getData("text/plain")
+            : (fallbackClip ?? "");
+      pasteText(commandDeps, raw, arm.inserts);
+      closeMenu();
+    },
+    [commandDeps, closeMenu],
+  );
+
+  // The menu's own items. A command runs exactly as its key runs it (run),
+  // which then closes the menu or keeps it (menuStaysOpen). Copy and Cut put
+  // the clip on the system clipboard where the page may, and keep the menu
+  // open; Paste and Paste in front close it, then read the system clipboard —
+  // which may wait on a permission prompt, so pasteText reads the document
+  // as it is when the text arrives.
+  const runMenuItem = useCallback(
+    (item: MenuItem) => {
+      const { action } = item;
+      if (action.kind === "command") {
+        run(action.command);
+        return;
+      }
+      if (action.action === "copy" || action.action === "cut") {
+        const text = (action.action === "copy" ? copyText : cutText)(commandDeps);
+        if (text === null) return;
+        putOnClipboard(text);
+        setHasClip(true);
+        return;
+      }
+      // Paste or Paste in front.
+      closeMenu();
+      const inserts = action.action === "pasteInsert";
+      void readForPaste({ readText: clipboardReader(), editorClip: fallbackClip, editorClipNewer }).then((found) => {
+        if (!found) {
+          showNotice(NOTHING_TO_PASTE, BAR_NOTICE_MS);
+          return;
+        }
+        pasteText(commandDeps, found.raw, inserts, found.blocked ? pastedFromEditorNotice : undefined);
+      });
+    },
+    [run, commandDeps, closeMenu, showNotice],
+  );
+
+  // Where the menu goes: its anchor beat's bar, and the score panel.
+  const locateMenu = useCallback(() => {
+    const at = menuRef.current?.anchor;
+    const canvas = scoreCanvasRef.current;
+    const anchor = at && canvas ? canvas.barClientRect(at) : null;
+    const bounds = canvas ? canvas.scoreClientRect() : null;
+    return anchor && bounds ? { anchor, bounds } : null;
+  }, []);
+
+  const focusEditor = useCallback(() => containerRef.current?.focus(), []);
+
+  const handleViewChange = useCallback(() => noteMenuRef.current?.reposition(), []);
+
+  // The pointer's ways in. A right-click on a beat inside the selection keeps
+  // it and opens the selection menu there; on any other beat it moves the
+  // caret there (string from the click), ends the selection, and opens the
+  // note menu and plays it, as a left click plays it; on empty score, the
+  // menu opens at the caret, scrolled into view. A click on the caret's own
+  // note opens the note menu — unless that press just closed it, which makes
+  // the click a toggle. (ScoreCanvas asks only where there is a menu:
+  // MENU_SUPPORTED.)
+  const handleMenuRequest = useCallback(
+    (request: MenuRequest) => {
+      if (request.kind === "caretNote") {
+        if (closedByPressRef.current) return;
+        showMenu({ scope: "note", anchor: request.caret, focus: 0 });
+        return;
+      }
+      if (request.kind === "beat") {
+        if (!request.inSelection) {
+          setAnchor(null);
+          moveCaret(request.caret);
+          notePreview(request.caret, request.caret, { kind: "click", dragged: false });
+        }
+        showMenu({ scope: request.inSelection ? "selection" : "note", anchor: request.caret, focus: 0 });
+        return;
+      }
+      openAtCaret(0);
+    },
+    [moveCaret, notePreview, setAnchor, showMenu, openAtCaret],
+  );
+
+  // The ⋯ Menu button toggles the menu at the caret's bar, scrolled into view.
+  // Clicked, focus stays on the editor; activated from the keyboard (a click
+  // with no pointer behind it), focus moves into the menu.
+  const handleMenuButton = useCallback(
+    (event: React.MouseEvent<HTMLButtonElement>) => {
+      const byPointer = event.detail !== 0;
+      if (byPointer && closedByPressRef.current) return;
+      if (menuShownRef.current) {
+        closeMenu();
+        return;
+      }
+      openAtCaret(byPointer ? 0 : ++focusSeqRef.current);
+    },
+    [closeMenu, openAtCaret],
+  );
+
+  // A press anywhere outside the menu closes it — the capture phase, so it
+  // sees every press first, Shift+presses ScoreCanvas swallows included —
+  // and records whether this press closed a menu that showed. The record is
+  // reset first, by every press, so none outlives the press that made it.
+  useEffect(() => {
+    const onPress = (event: MouseEvent) => {
+      closedByPressRef.current = false;
+      const target = event.target as Node | null;
+      // A press on the score panel's own scrollbar scrolls; it is not a press on anything.
+      if (containerRef.current?.contains(target) && onOwnScrollbar(target, event)) return;
+      if (!menuRef.current || noteMenuRef.current?.contains(target)) return;
+      closedByPressRef.current = menuShownRef.current;
+      closeMenu();
+    };
+    document.addEventListener("mousedown", onPress, true);
+    return () => document.removeEventListener("mousedown", onPress, true);
+  }, [closeMenu]);
+
+  // A copy or cut anywhere else on the page puts the newest passage on the
+  // system clipboard. The editor's own copy and cut say for themselves
+  // (writeClip): a refused one writes nothing, and must not clear the mark.
+  useEffect(() => {
+    const onCopyOrCut = (event: ClipboardEvent) => {
+      if (containerRef.current?.contains(event.target as Node | null)) return;
+      systemClipboardIsNewest();
+    };
+    document.addEventListener("copy", onCopyOrCut);
+    document.addEventListener("cut", onCopyOrCut);
+    return () => {
+      document.removeEventListener("copy", onCopyOrCut);
+      document.removeEventListener("cut", onCopyOrCut);
+    };
+  }, []);
+
+  // The selection ScoreCanvas draws: anchor to caret. Memoised, so a render
+  // that changes neither hands it the same object and its overlay effect
+  // does not re-run.
+  const selection = useMemo(() => (selectionAnchor ? rangeOf(selectionAnchor, caret) : null), [selectionAnchor, caret]);
+
+  // What the menu holds, worked out only while it is open. `menu` in the deps
+  // is load-bearing for placement too, not only for its scope: a close and a
+  // re-open in one commit (the Menu key or Shift+F10 inside a keyboard-opened
+  // menu) never takes NoteMenu's `open` to false, so NoteMenu places itself
+  // again — at the new anchor — only because the new state brings new groups.
+  const menuGroups = useMemo(
+    () =>
+      menu
+        ? menuItems({
+            tex,
+            parsed,
+            caret,
+            selection: menu.scope === "selection" ? selection : null,
+            clipboard: { secure: clipboardReader() !== undefined, hasFallbackClip: hasClip },
+          })
+        : NO_GROUPS,
+    [menu, tex, parsed, caret, selection, hasClip],
+  );
+
+  // What a screen reader hears about the selection: its size once it has
+  // stayed put for a moment — so a held Shift+→ is said where it stops, not
+  // at every step — and, once there was one, that it was cleared. The words
+  // are set from a timer each change restarts, never during the effect.
+  const [selectionSpoken, setSelectionSpoken] = useState("");
+  useEffect(() => {
+    const size = selection && parsed.ok ? sizeOf(parsed.scoreNode, selection) : null;
+    const words = selection && size && size.beats > 0 ? selectionAnnouncement(size, selection.from.barIndex) : null;
+    const timer = setTimeout(
+      () => setSelectionSpoken((said) => words ?? (said === "" ? "" : SELECTION_CLEARED)),
+      SELECTION_SPOKEN_MS,
+    );
+    return () => clearTimeout(timer);
+  }, [selection, parsed]);
+
+  // A key coming up ends any paste arm its keydown set (pasteArmRef).
+  const handleCanvasKeyUp = useCallback(() => {
+    pasteArmRef.current = null;
+  }, []);
+
+  // Focus leaving the editor for another control — Shift+Tab to the toolbar,
+  // say — closes the note menu: the keys, Escape among them, no longer reach
+  // it. Focus moving into the menu stays inside this container, and the
+  // window losing focus names no next element: neither closes it.
+  const handleCanvasBlur = useCallback(
+    (event: React.FocusEvent<HTMLDivElement>) => {
+      const next = event.relatedTarget;
+      if (next instanceof Node && !event.currentTarget.contains(next)) closeMenu();
+    },
+    [closeMenu],
+  );
+
+  // A plain left press anywhere on the score ends the edit selection — on a
+  // beat, which also moves the caret (handleCanvasCaret), or on empty space:
+  // below the last system, the title, the grey panel. A Shift+press on a beat
+  // never gets here (ScoreCanvas swallows it); a Shift+press elsewhere, a
+  // middle press and a press on the panel's scrollbar keep it, and so does a
+  // right press — on a beat outside the selection the note menu's request
+  // (handleMenuRequest) ends it.
+  const handleCanvasMouseDown = useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      containerRef.current?.focus();
+      if (event.button === 0 && !event.shiftKey && !onOwnScrollbar(event.target, event.nativeEvent)) setAnchor(null);
+    },
+    [setAnchor],
+  );
+
+  // A press on the score moved the caret at mouse-down (handleCanvasCaret,
+  // through ScoreCanvas's onCaretChange). The playback hook reports the
+  // release only when the press did not become a drag, so dragging out a
+  // practice loop never previews — however long the press was held first.
+  const handleCaretClick = useCallback(() => {
+    const c = caretRef.current;
+    notePreview(c, c, { kind: "click", dragged: false });
+  }, [notePreview]);
+
+  // The bars that do not add up, from the parse every render already has, and
+  // what the strip under the score says about them. Hidden while the source
+  // does not parse: the canvas keeps its last good render and its colours.
+  const broken = useMemo(() => (parsed.ok ? brokenBars(parsed.score) : []), [parsed]);
+  const barStatus = useMemo(
+    () => (parsed.ok ? stripMessage(caret.barIndex, broken) : null),
+    [parsed.ok, broken, caret.barIndex],
+  );
+
+  // The strip's Fix all: every broken bar it can fix, as one undo step. The
+  // button never takes focus (BarStatusStrip); like the transport, this hands
+  // the keyboard back to the canvas, so Space and Enter keep going to the
+  // editor. It closes the note menu first, as Shift+B does (closesMenu): it
+  // changes the bars under the menu, and may trim away the beat the menu
+  // hangs from. (A click has closed it already, with its press; this is for
+  // Enter on the button, reached with Tab.)
+  const handleFixAll = useCallback(() => {
+    closeMenu();
+    digitBufferRef.current = null;
+    cancelPreview();
+    if (parsedRef.current.ok) {
+      const { result, fixed, skipped } = fixAllBars(texRef.current, caretRef.current);
+      if (result) commitTex(result.text, result.caret);
+      const message = fixAllNotice(fixed, skipped);
+      if (message) showNotice(message, BAR_NOTICE_MS);
+    }
+    containerRef.current?.focus();
+  }, [commitTex, showNotice, cancelPreview, closeMenu]);
 
   const saveLabel = SAVE_LABEL[saveState];
   const canUndo = historyIndex > 0;
@@ -905,6 +1404,13 @@ export default function TabEditor({
           onMetronomeChange={(metronome) => updateMix({ metronome: Math.max(0.05, metronome) })}
           countIn={mix.countIn}
           onCountInToggle={() => updateMix({ countIn: !mix.countIn })}
+          previewNotes={mix.previewNotes}
+          onPreviewNotesToggle={() => {
+            const next = !mix.previewNotes;
+            updateMix({ previewNotes: next });
+            // Off means silence now, not after a ringing whole note ends.
+            if (!next) cancelPreview();
+          }}
         />
         <div className="flex items-center gap-1">
           <button
@@ -943,7 +1449,12 @@ export default function TabEditor({
           </button>
           <button
             type="button"
-            onClick={() => setShowHelp(true)}
+            // Opening the panel closes the note menu, as `?` does: a click's
+            // press has already closed it; pressed from the keyboard, this does.
+            onClick={() => {
+              closeMenu();
+              setShowHelp(true);
+            }}
             title="Keyboard shortcuts (?)"
             aria-label="Keyboard shortcuts"
             className="px-2 py-1 text-xs rounded bg-gray-600 border border-gray-500 text-gray-300 hover:bg-gray-500 hover:text-white focus:outline-none focus:border-blue-500"
@@ -970,20 +1481,37 @@ export default function TabEditor({
       </div>
 
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        {MENU_SUPPORTED && (
+          <button
+            type="button"
+            aria-haspopup="menu"
+            aria-expanded={menuShown}
+            aria-controls={menuId}
+            onClick={handleMenuButton}
+            title="Note menu: every command for the note at the caret (Enter, or right-click a beat)"
+            className={`px-2 py-1 text-xs rounded border focus:outline-none focus:border-blue-500 ${
+              menuShown
+                ? "bg-gray-500 border-gray-400 text-white"
+                : "bg-gray-600 border-gray-500 text-gray-300 hover:bg-gray-500 hover:text-white"
+            }`}
+          >
+            ⋯ Menu
+          </button>
+        )}
         <div className="flex items-center gap-1">
           {(
             [
-              ["+ Beat", "Insert a beat after the caret (Insert, or → at the end)", insertBeat],
-              ["− Beat", "Delete the beat at the caret (Shift+Delete)", deleteBeat],
-              ["+ Bar", "Add a bar at the end (Ctrl+Enter)", addBar],
-              ["− Bar", "Delete the bar at the caret (Ctrl+Shift+Backspace)", deleteBar],
+              ["+ Beat", "Insert a beat after the caret (Insert)", "insertBeat"],
+              ["− Beat", "Delete the beat at the caret, or the selected beats (Shift+Delete)", "deleteBeat"],
+              ["+ Bar", "Add a bar at the end (Ctrl+Enter)", "addBar"],
+              ["− Bar", "Delete the bar at the caret (Ctrl+Shift+Backspace)", "deleteBar"],
             ] as const
-          ).map(([label, title, fn]) => (
+          ).map(([label, title, kind]) => (
             <button
               key={label}
               type="button"
               disabled={!parsed.ok}
-              onClick={() => runStructural(fn)}
+              onClick={() => run({ kind })}
               title={title}
               className="px-2 py-1 text-xs rounded bg-gray-600 border border-gray-500 text-gray-300 hover:bg-gray-500 hover:text-white focus:outline-none focus:border-blue-500 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-gray-600 disabled:hover:text-gray-300"
             >
@@ -1006,7 +1534,7 @@ export default function TabEditor({
           <button
             type="button"
             disabled={!parsed.ok}
-            onClick={handleTieSelect}
+            onClick={() => run({ kind: "toggleTie" })}
             title="Tie to the previous note on this string (i)"
             className="px-2 py-1 text-xs rounded bg-gray-600 border border-gray-500 text-gray-300 hover:bg-gray-500 hover:text-white focus:outline-none focus:border-blue-500 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-gray-600 disabled:hover:text-gray-300"
           >
@@ -1015,7 +1543,7 @@ export default function TabEditor({
           <button
             type="button"
             disabled={!parsed.ok}
-            onClick={handleTupletSelect}
+            onClick={() => run({ kind: "toggleTuplet" })}
             aria-pressed={tuplet === TRIPLET}
             title="Triplet — make this beat and the next two one group (u)"
             className={`px-2 py-1 text-xs rounded border focus:outline-none focus:border-blue-500 disabled:opacity-40 disabled:cursor-not-allowed ${
@@ -1026,7 +1554,10 @@ export default function TabEditor({
           >
             Triplet<span className="ml-1 text-gray-500">u</span>
           </button>
-          <TechniquePalette disabled={!parsed.ok} onSelect={handleTechniqueSelect} />
+          <TechniquePalette
+            disabled={!parsed.ok}
+            onSelect={(technique: Technique) => run({ kind: "toggleTechnique", technique })}
+          />
         </div>
       </div>
       </div>
@@ -1039,11 +1570,18 @@ export default function TabEditor({
           {displayedNotice}
         </div>
       )}
+      {/* The selection's size, for a screen reader: always present, so a change to it is announced. */}
+      <div data-testid="selection-announcement" className="sr-only" aria-live="polite" aria-atomic="true">
+        {selectionSpoken}
+      </div>
 
       {/*
         Invariant load-bearing for BOTH keyboard and mouse isolation:
         onKeyDown and onMouseDown below must stay on a div whose only
-        descendant is ScoreCanvas. SourcePane is a SIBLING, not nested
+        descendants are ScoreCanvas and the note menu — a popover, drawn in
+        the top layer, kept in here so its keys and clipboard events reach
+        this div's handlers; its root stops presses from reaching
+        onMouseDown. SourcePane is a SIBLING, not nested
         inside it — an event targeting its <textarea> bubbles up through
         SourcePane's own wrapper and never enters this div's subtree, so
         neither handler can fire for it (structural, not timing-dependent:
@@ -1061,6 +1599,11 @@ export default function TabEditor({
           aria-label="Tab canvas"
           tabIndex={0}
           onKeyDown={handleCanvasKeyDown}
+          onKeyUp={handleCanvasKeyUp}
+          onBlur={handleCanvasBlur}
+          onCopy={handleCopy}
+          onCut={handleCut}
+          onPaste={handlePaste}
           // Important, Task 18: a click alone never focused this element —
           // tabIndex makes it focusable, not auto-focused on click, and
           // nothing else here called .focus(). onMouseDown (not onClick) so
@@ -1069,8 +1612,21 @@ export default function TabEditor({
           // the handler is ever attached somewhere other than the element
           // that actually holds the tabIndex. No preventDefault: that would
           // break text selection and alphaTab's own mouse handling (see
-          // ScoreCanvas's noteMouseDown/beatMouseDown).
-          onMouseDown={() => containerRef.current?.focus()}
+          // ScoreCanvas's noteMouseDown/beatMouseDown). A plain left press
+          // also ends the edit selection (handleCanvasMouseDown).
+          onMouseDown={handleCanvasMouseDown}
+          // The middle button's release is what pastes on Linux: its default
+          // goes, a second guard beside handlePaste's arm.
+          onMouseUp={(e) => {
+            if (e.button === 1) e.preventDefault();
+          }}
+          // The browser's own context menu never opens over the editor: a
+          // right-click on the score opens the note menu (ScoreCanvas), and
+          // the Menu key's own event, which Windows sends after the keydown
+          // that opened the note menu, must not open a second one. Where
+          // there is no note menu (MENU_SUPPORTED), the browser's opens as
+          // it always did.
+          onContextMenu={MENU_SUPPORTED ? (e) => e.preventDefault() : undefined}
           // Minor (review round 3): `focus:outline-none` alone removed the
           // browser default with nothing standing in for it — a keyboard-
           // driven region with no visible focus affordance is unusable,
@@ -1085,7 +1641,7 @@ export default function TabEditor({
             ref={scoreCanvasRef}
             tex={tex}
             caret={caret}
-            onCaretChange={moveCaret}
+            onCaretChange={handleCanvasCaret}
             onPlayingChange={handlePlayingChange}
             onFinished={handleFinished}
             speed={speed}
@@ -1094,6 +1650,25 @@ export default function TabEditor({
             metronomeVolume={metronomeVolumeOf(mix)}
             countInVolume={countInVolumeOf(mix)}
             onLoopChange={handleLoopChange}
+            onCaretClick={handleCaretClick}
+            barStatus={barStatus}
+            onFixAll={handleFixAll}
+            selection={selection}
+            onShiftClick={handleShiftClick}
+            onMenuRequest={MENU_SUPPORTED ? handleMenuRequest : undefined}
+            onViewChange={handleViewChange}
+          />
+          <NoteMenu
+            ref={noteMenuRef}
+            id={menuId}
+            open={menu !== null}
+            focusRequest={menu?.focus ?? 0}
+            groups={menuGroups}
+            locate={locateMenu}
+            onShownChange={handleMenuShown}
+            onRun={runMenuItem}
+            onClose={closeMenu}
+            focusEditor={focusEditor}
           />
         </div>
         {showSource && (

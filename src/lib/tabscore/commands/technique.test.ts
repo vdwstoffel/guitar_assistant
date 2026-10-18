@@ -1,5 +1,10 @@
-import { describe, it, expect } from "vitest";
-import { toggleTechnique, TECHNIQUE_KEYS } from "./technique";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { Logger, LogLevel } from "@coderline/alphatab";
+import { techniquesAt, toggleTechnique, TECHNIQUE_KEYS, TECHNIQUE_LABEL, TECHNIQUES } from "./technique";
+import { parseTex } from "../parse";
+import { sliceCp } from "../offsets";
+import { beatSpliceRange, type Caret } from "../locate";
+import { parseBeatText, tokensOf } from "./beatText";
 
 const TEX = "\\tempo 120\n.\n3.6.8 5.6\n";
 const at = (barIndex: number, beatIndex: number, string = 6) => ({ barIndex, beatIndex, string });
@@ -144,5 +149,79 @@ describe("toggleTechnique: code review round 2", () => {
     expect(once.text).toBe("\\tempo 120\n.\n3.6{pm h}.8 5.6\n");
     const twice = toggleTechnique(once.text, at(0, 0), "hammer")!;
     expect(twice.text).toBe(tex);
+  });
+});
+
+describe("techniquesAt: pressed exactly when toggling would take it off", () => {
+  // The fixture that writes two bends on one note makes alphaTab log "Unsupported
+  // bend type detected" on every parse of it, and every toggle below re-parses:
+  // hundreds of stderr lines in a plain terminal. Silence its logger for this
+  // block and put it back after.
+  let prevLogLevel: LogLevel;
+  beforeAll(() => {
+    prevLogLevel = Logger.logLevel;
+    Logger.logLevel = LogLevel.None;
+  });
+  afterAll(() => {
+    Logger.logLevel = prevLogLevel;
+  });
+
+  const doc = (body: string) => `\\tempo 120\n.\n${body}\n`;
+  /** How many effect tokens the note at the caret carries; null for no note there. */
+  const tokenCount = (text: string, caret: Caret): number | null => {
+    const { scoreNode } = parseTex(text);
+    const range = beatSpliceRange(text, scoreNode, caret);
+    const note = range && parseBeatText(sliceCp(text, range.cpStart, range.cpEnd))?.notes.find((n) => n.string === caret.string);
+    return note ? tokensOf(note.effects).length : null;
+  };
+
+  // A note, a chord's notes, a rest, empty strings; each bend written; spellings toggleTechnique rewrites
+  // rather than removes ({lht()}, {h ()}); two bends on one note, of which toggling finds the first.
+  const BODIES = [
+    "3.6{h pm}.4 r.4 (5.5{v b (0 2)} 7.4{x}).4 3.6{lht g nh lr sl}.4",
+    "3.6{b (0 4)}.4 3.6{b (0 4 0)}.4 3.6{b (4 4)}.4 3.6{b (0 2) h}.4",
+    "3.6{lht()}.4 5.5{h ()}.4 (3.6 5.5{b (0 2) b (0 4)}).4 7.6.4",
+  ];
+
+  it.each(BODIES)("on every string of every beat of %s, for every technique", (body) => {
+    const text = doc(body);
+    const { scoreNode } = parseTex(text);
+    let checked = 0;
+    for (let beatIndex = 0; beatIndex < scoreNode.bars[0].beats.length; beatIndex++) {
+      for (let string = 1; string <= 6; string++) {
+        const caret = { barIndex: 0, beatIndex, string };
+        const pressed = techniquesAt(text, scoreNode, caret);
+        const before = tokenCount(text, caret);
+        for (const technique of TECHNIQUES) {
+          const toggled = toggleTechnique(text, caret, technique);
+          const removes = before !== null && toggled !== null && tokenCount(toggled.text, caret) === before - 1;
+          expect(pressed.has(technique), `beat ${beatIndex} string ${string} ${technique}`).toBe(removes);
+          checked++;
+        }
+      }
+    }
+    expect(checked).toBeGreaterThan(200);
+  });
+
+  it("presses only the bend written, and every technique of a chord's note", () => {
+    const text = doc("3.6{b (0 2)}.4 (5.5{v b (0 4 0)} 7.4{x}).4");
+    const { scoreNode } = parseTex(text);
+    expect([...techniquesAt(text, scoreNode, { barIndex: 0, beatIndex: 0, string: 6 })]).toEqual(["bendHalf"]);
+    expect([...techniquesAt(text, scoreNode, { barIndex: 0, beatIndex: 1, string: 5 })].sort()).toEqual(["bendRelease", "vibrato"]);
+    expect([...techniquesAt(text, scoreNode, { barIndex: 0, beatIndex: 1, string: 4 })]).toEqual(["dead"]);
+  });
+
+  it("presses nothing on a rest, an empty string, a beat the editor cannot read, or with no parse", () => {
+    const text = doc("3.6{h}.4 r.4 x.6{h}.4");
+    const { scoreNode } = parseTex(text);
+    expect(techniquesAt(text, scoreNode, { barIndex: 0, beatIndex: 0, string: 1 }).size).toBe(0);
+    expect(techniquesAt(text, scoreNode, { barIndex: 0, beatIndex: 1, string: 6 }).size).toBe(0);
+    expect(techniquesAt(text, scoreNode, { barIndex: 0, beatIndex: 2, string: 6 }).size).toBe(0);
+    expect(techniquesAt(text, null, { barIndex: 0, beatIndex: 0, string: 6 }).size).toBe(0);
+  });
+
+  it("lists all thirteen techniques once, each with a label", () => {
+    expect(new Set(TECHNIQUES).size).toBe(13);
+    for (const technique of TECHNIQUES) expect(TECHNIQUE_LABEL[technique]).toBeTruthy();
   });
 });

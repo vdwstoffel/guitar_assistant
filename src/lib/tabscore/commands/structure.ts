@@ -5,8 +5,13 @@
  */
 import { parseTex } from "../parse";
 import { spliceCp } from "../offsets";
-import { beatSpliceRange, countBars, countBeats, type Caret } from "../locate";
+import { beatSpliceRange, countBars, countBeats, type BeatPos, type Caret } from "../locate";
 import { commitEdit, type CommandResult } from "../apply";
+import { barState } from "../barFill";
+import { frac } from "../fraction";
+import { fill, plain } from "../durationValues";
+import { durationAt, repinAt } from "../repin";
+import { formatRests, nextBeatPos } from "./barEdit";
 
 export function insertBeat(text: string, caret: Caret): CommandResult | null {
   const { scoreNode, ok } = parseTex(text);
@@ -53,22 +58,48 @@ export function deleteBeat(text: string, caret: Caret): CommandResult | null {
     to = next.cpStart - 1;
   }
 
-  const nextText = spliceCp(text, from, to, "");
+  // The beat that followed keeps its duration, even if it inherited it from
+  // the beat going (re-pinning). It moves up one place within the bar.
+  const after = nextBeatPos(scoreNode, caret);
+  let nextText: string | null = spliceCp(text, from, to, "");
+  if (after) {
+    const moved: BeatPos =
+      after.barIndex === caret.barIndex ? { ...after, beatIndex: after.beatIndex - 1 } : after;
+    nextText = repinAt(nextText, moved, durationAt(scoreNode, after));
+    if (nextText === null) return null;
+  }
   return commitEdit(nextText, caret, {
     bars: countBars(scoreNode),
     beats: countBeats(scoreNode) - 1,
   });
 }
 
+/**
+ * Append a bar full of rests: bare rests of the duration in force at the end
+ * of the score, as many as the last bar's time signature holds (eight after
+ * 8ths in 4/4, three quarters in 3/4). When that duration does not divide the
+ * bar, the short-bar padding instead (fill: plain values from the beat unit).
+ */
 export function addBar(text: string, caret: Caret): CommandResult | null {
-  const { scoreNode, ok } = parseTex(text);
-  if (!ok || !scoreNode) return null;
+  const { scoreNode, score, ok } = parseTex(text);
+  if (!ok || !scoreNode || !score) return null;
+
+  const bars = countBars(scoreNode);
+  const lastBeats = scoreNode.bars[bars - 1]?.beats?.length ?? 0;
+  const inForce = durationAt(scoreNode, { barIndex: bars - 1, beatIndex: lastBeats - 1 });
+  const masterBar = score.masterBars[score.masterBars.length - 1];
+  const values = fill(frac(masterBar.timeSignatureNumerator, masterBar.timeSignatureDenominator), {
+    unit: masterBar.timeSignatureDenominator,
+    uniform: plain(inForce),
+  });
+  if (!values || values.length === 0) return null;
+  const rests = formatRests(values, inForce);
 
   const trimmed = text.replace(/\s+$/, "");
-  const nextText = `${trimmed} | r r r r\n`;
-  return commitEdit(nextText, { ...caret, barIndex: countBars(scoreNode), beatIndex: 0 }, {
-    bars: countBars(scoreNode) + 1,
-    beats: countBeats(scoreNode) + 4,
+  const nextText = `${trimmed} | ${rests.join(" ")}\n`;
+  return commitEdit(nextText, { ...caret, barIndex: bars, beatIndex: 0 }, {
+    bars: bars + 1,
+    beats: countBeats(scoreNode) + rests.length,
   });
 }
 
@@ -111,9 +142,11 @@ export function deleteBar(text: string, caret: Caret): CommandResult | null {
     from = prev.cpEnd + 1;
     to = last.cpEnd;
   } else {
-    // A following bar exists: measure `to` against where ITS first beat
-    // actually starts. Same zero-beat hazard as `prev` above, on the other
-    // side.
+    // A following bar exists: measure `to` against where IT starts — its own
+    // directives (`\rc 2`, `\section`) if it has any, else its first beat — so
+    // they stay on it. The bar going keeps its own directives in place, as
+    // before: they open the bar that follows now. Same zero-beat hazard as
+    // `prev` above, on the other side.
     const next = beatSpliceRange(text, scoreNode, {
       ...caret,
       barIndex: caret.barIndex + 1,
@@ -122,10 +155,17 @@ export function deleteBar(text: string, caret: Caret): CommandResult | null {
     if (!next) return null;
     const first = beatSpliceRange(text, scoreNode, { ...caret, beatIndex: 0 })!;
     from = first.cpStart;
-    to = next.cpStart - 1;
+    to = Math.min(next.cpStart, bars[caret.barIndex + 1]?.start?.offset ?? next.cpStart) - 1;
   }
 
-  const nextText = spliceCp(text, Math.max(from, 0), to, "");
+  let nextText: string | null = spliceCp(text, Math.max(from, 0), to, "");
+  // The first beat of the bar that followed keeps its duration, even if it
+  // inherited it from the bar going (re-pinning).
+  if (!isLastBar) {
+    const after = { barIndex: caret.barIndex + 1, beatIndex: 0 };
+    nextText = repinAt(nextText, { barIndex: caret.barIndex, beatIndex: 0 }, durationAt(scoreNode, after));
+    if (nextText === null) return null;
+  }
 
   // The deleted bar's own barIndex no longer denotes a beat range post-edit.
   // When it was the last bar, nothing shifts into its place, so fall back to
@@ -143,4 +183,22 @@ export function deleteBar(text: string, caret: Caret): CommandResult | null {
     bars: bars.length - 1,
     beats: countBeats(scoreNode) - beats.length,
   });
+}
+
+/**
+ * What → does past the last beat of the score, so the score grows as it is
+ * written. A bar that is not short — exact, too long, or exempt from the
+ * measure (a pickup, or a bar with no beats) — rolls over to a new bar; a
+ * short one takes another beat after the caret.
+ *
+ * `text` is parsed here, afresh: the caller's memoised parse can be one edit
+ * behind while keys arrive at speed, and "is this bar short?" must be answered
+ * about this text. A document that does not parse cannot be measured and gets
+ * the plain fallback of another beat — which refuses it too, so the result is
+ * null and the caller just moves the caret as it would anywhere else.
+ */
+export function extendScore(text: string, caret: Caret): CommandResult | null {
+  const { score, ok } = parseTex(text);
+  const state = ok ? barState(score, caret.barIndex) : null;
+  return state && state.kind !== "short" ? addBar(text, caret) : insertBeat(text, caret);
 }

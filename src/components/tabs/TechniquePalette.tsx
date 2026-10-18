@@ -1,6 +1,6 @@
 "use client";
 
-import { TECHNIQUE_KEYS, type Technique } from "@/lib/tabscore/commands/technique";
+import { TECHNIQUE_KEYS, TECHNIQUE_LABEL, TECHNIQUES, type Technique } from "@/lib/tabscore/commands/technique";
 
 export interface TechniquePaletteProps {
   /**
@@ -13,46 +13,6 @@ export interface TechniquePaletteProps {
   disabled: boolean;
   onSelect: (technique: Technique) => void;
 }
-
-// `technique.ts` exports the `Technique` type and `TECHNIQUE_KEYS`, but not
-// an enumeration of every technique (the TOKEN table that would double as
-// one isn't exported). Typing this object literal against
-// `Record<Technique, true>` is the one way to enumerate a union at runtime
-// that still fails to compile if a member is ever added without a matching
-// entry here.
-const TECHNIQUE_ORDER: Record<Technique, true> = {
-  hammer: true,
-  slide: true,
-  palmMute: true,
-  vibrato: true,
-  dead: true,
-  ghost: true,
-  tap: true,
-  harmonic: true,
-  letRing: true,
-  bendFull: true,
-  bendHalf: true,
-  bendRelease: true,
-  preBend: true,
-};
-
-const TECHNIQUES = Object.keys(TECHNIQUE_ORDER) as Technique[];
-
-const LABEL: Record<Technique, string> = {
-  hammer: "Hammer-on / Pull-off",
-  slide: "Slide",
-  palmMute: "Palm mute",
-  vibrato: "Vibrato",
-  dead: "Dead note",
-  ghost: "Ghost note",
-  tap: "Tap",
-  harmonic: "Harmonic",
-  letRing: "Let ring",
-  bendFull: "Bend",
-  bendHalf: "Bend (half)",
-  bendRelease: "Bend & release",
-  preBend: "Pre-bend",
-};
 
 // TECHNIQUE_KEYS maps key -> Technique; inverted once at module scope so
 // each button can look its own shortcut up in O(1). A technique with no
@@ -68,7 +28,7 @@ export default function TechniquePalette({ disabled, onSelect }: TechniquePalett
     <div role="toolbar" aria-label="Techniques" className="flex flex-wrap items-center gap-1">
       {TECHNIQUES.map((technique) => {
         const shortcut = KEY_BY_TECHNIQUE[technique];
-        const label = LABEL[technique];
+        const label = TECHNIQUE_LABEL[technique];
         return (
           <button
             key={technique}

@@ -25,6 +25,12 @@ export interface MixPrefs {
    * practise — but it borrows the same level, since both are the same click.
    */
   countIn: boolean;
+  /**
+   * Play the beat at the caret as you enter a note or move onto it (the note
+   * preview). A listening preference like the others: on by default, and the
+   * same for every tab.
+   */
+  previewNotes: boolean;
 }
 
 const KEY = "tabEditorMix";
@@ -34,6 +40,7 @@ export const DEFAULT_MIX: MixPrefs = {
   metronome: 0.7,
   metronomeOn: false,
   countIn: true,
+  previewNotes: true,
 };
 
 function clamp01(value: unknown, fallback: number): number {
@@ -59,6 +66,9 @@ function loadMix(): MixPrefs {
       // existed have no flag at all, and those should get the default rather
       // than the opposite of it.
       countIn: p.countIn !== false,
+      // Same reasoning as countIn: prefs saved before the preview existed
+      // carry no flag, and must come back as the default (on).
+      previewNotes: p.previewNotes !== false,
     };
   } catch {
     return DEFAULT_MIX;

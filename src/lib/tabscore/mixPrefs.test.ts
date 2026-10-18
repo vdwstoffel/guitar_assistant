@@ -79,13 +79,14 @@ describe("subscribers", () => {
 
 describe("reading back what was stored", () => {
   it("round-trips through localStorage", async () => {
-    setMix({ volume: 0.4, metronome: 0.8, metronomeOn: true, countIn: true });
+    setMix({ volume: 0.4, metronome: 0.8, metronomeOn: true, countIn: true, previewNotes: false });
     const raw = localStorage.getItem(KEY)!;
     expect(JSON.parse(raw)).toEqual({
       volume: 0.4,
       metronome: 0.8,
       metronomeOn: true,
       countIn: true,
+      previewNotes: false,
     });
   });
 
@@ -170,6 +171,33 @@ describe("the stored shape", () => {
     return freshModule().then((mod) => {
       expect(mod.getMix().countIn).toBe(false);
       expect(mod.countInVolumeOf(mod.getMix())).toBe(0);
+    });
+  });
+
+  it("gives an absent note preview the default — on", () => {
+    // Prefs written before the preview existed have no flag at all.
+    installStorage();
+    localStorage.setItem(KEY, JSON.stringify({ volume: 0.5, metronome: 0.6, metronomeOn: true, countIn: true }));
+    return freshModule().then((mod) => {
+      expect(mod.getMix().previewNotes).toBe(true);
+      expect(mod.DEFAULT_MIX.previewNotes).toBe(true);
+    });
+  });
+
+  it("still honours a note preview that was switched off", () => {
+    installStorage();
+    localStorage.setItem(KEY, JSON.stringify({ ...DEFAULT_MIX, previewNotes: false }));
+    return freshModule().then((mod) => {
+      expect(mod.getMix().previewNotes).toBe(false);
+    });
+  });
+
+  it("reads a note preview that is not a real boolean as the default — on, like the count-in", () => {
+    // Only a stored `false` is a deliberate off; the string "false" is junk.
+    installStorage();
+    localStorage.setItem(KEY, JSON.stringify({ ...DEFAULT_MIX, previewNotes: "false" }));
+    return freshModule().then((mod) => {
+      expect(mod.getMix().previewNotes).toBe(true);
     });
   });
 });

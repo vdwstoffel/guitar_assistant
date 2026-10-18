@@ -8,7 +8,7 @@ import { sliceCp } from "../offsets";
 import { beatSpliceRange, type Caret } from "../locate";
 import { type CommandResult } from "../apply";
 import { editBeat, parseBeatText, tokensOf, formatEffects, type ParsedBeat } from "./beatText";
-import { effectiveDuration } from "./duration";
+import { inheritedDuration } from "../repin";
 import { insertBeat } from "./structure";
 
 /** The default and by far the commonest: three in the time of two. */
@@ -63,7 +63,7 @@ export function tupletAt(text: string, scoreNode: any, caret: Caret): number | n
 
 /** Put the marker on one beat, or take it off. Idempotent, unlike a toggle. */
 function setBeatTuplet(text: string, caret: Caret, n: number | null): CommandResult | null {
-  const duration = effectiveDuration(text, caret);
+  const duration = inheritedDuration(text, caret);
   if (duration === null) return null;
 
   return editBeat(text, caret, (beat) => {

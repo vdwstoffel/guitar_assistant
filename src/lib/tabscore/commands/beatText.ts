@@ -105,9 +105,77 @@ export function tokensOf(effects: string): string[] {
   return inner.match(/[a-z]+(?:\s*\([^)]*\)|\s+\d+)*/g) ?? [];
 }
 
+/**
+ * The property a token sets: its name, without the argument that a space or a
+ * parenthesis starts (`b (0 4)` -> `b`, `lht()` -> `lht`). alphaTab reads
+ * `{lht()}` and `{h ()}` as `{lht}` and `{h}`, so a command that looks for a
+ * property compares the head, never the whole token.
+ */
+export const tokenHead = (token: string): string => token.split(/[\s(]/)[0];
+
+/**
+ * Whether a note of the beat is left-hand tapped (`{lht}`, in any spelling
+ * tokenHead reads). alphaTab 1.8.1 binds a hammer-on to the first tapped note
+ * it meets on another string (`Note.findHammerPullDestination`), so a beat
+ * holding one is a destination for a hammer-on from any string.
+ */
+export const isTapped = (beat: ParsedBeat): boolean =>
+  beat.notes.some((note) => tokensOf(note.effects).some((token) => tokenHead(token) === "lht"));
+
 /** Inverse of `tokensOf`: `[]` -> `""`, otherwise `"{" + tokens.join(" ") + "}"`. */
 export function formatEffects(tokens: string[]): string {
   return tokens.length ? `{${tokens.join(" ")}}` : "";
+}
+
+/** What `{gr …}` may name as its argument: alphaTab 1.8.1's grace types. */
+const GRACE_ARGUMENTS = new Set(["onbeat", "beforebeat", "bendgrace", "ob", "bb", "b"]);
+
+/**
+ * Split effect tokens into the beat's length markers — a dot (`d`), a double
+ * dot (`dd`), a tuplet (`tu 3`) and a grace (`gr`, with its argument) — and
+ * everything else. tokensOf reads `{gr ob}` as two tokens; here they stay one.
+ */
+export function splitLengthMarkers(tokens: string[]): { markers: string[]; others: string[] } {
+  const markers: string[] = [];
+  const others: string[] = [];
+  for (let i = 0; i < tokens.length; i++) {
+    const token = tokens[i];
+    if (token === "gr" && GRACE_ARGUMENTS.has(tokens[i + 1])) {
+      markers.push(`gr ${tokens[++i]}`);
+    } else if (/^(d|dd|gr|tu\s+\d+)$/.test(token)) {
+      markers.push(token);
+    } else {
+      others.push(token);
+    }
+  }
+  return { markers, others };
+}
+
+/**
+ * Move length markers off the notes onto the beat. alphaTab applies a `{d}`,
+ * `{tu 3}` or `{gr}` to the beat wherever it sits — and a duration-less single
+ * note's trailing brace reads back as the note's (see parseBeatText) — so a
+ * command that drops a beat's notes or gives it a duration must lift them
+ * first, or the bar changes length.
+ *
+ * alphaTab reads the notes' markers before the beat's own, and where two
+ * disagree (`{d}` and `{dd}`) the last one read wins. So the lifted markers go
+ * before the beat's own tokens, a marker the beat already has is not added
+ * again, and of a marker lifted twice only its last copy is kept: whichever
+ * marker won before still wins. Returns the beat itself when nothing moves.
+ */
+export function liftLengthMarkers(beat: ParsedBeat): ParsedBeat {
+  const lifted: string[] = [];
+  const notes = beat.notes.map((note) => {
+    const { markers, others } = splitLengthMarkers(tokensOf(note.effects));
+    if (markers.length === 0) return note;
+    lifted.push(...markers);
+    return { ...note, effects: formatEffects(others) };
+  });
+  if (lifted.length === 0) return beat;
+  const own = splitLengthMarkers(tokensOf(beat.effects)).markers;
+  const added = lifted.filter((marker, i) => !own.includes(marker) && lifted.lastIndexOf(marker) === i);
+  return { ...beat, notes, effects: formatEffects([...added, ...tokensOf(beat.effects)]) };
 }
 
 export function formatBeat(beat: ParsedBeat): string {

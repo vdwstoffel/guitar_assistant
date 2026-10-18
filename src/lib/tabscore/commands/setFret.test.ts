@@ -73,3 +73,41 @@ describe("clearNote", () => {
     expect(clearNote(TEX, at(0, 0, 1))).toBeNull();
   });
 });
+
+describe("clearNote of a beat's last note", () => {
+  it("keeps a length marker that sat on the note", () => {
+    const r = clearNote("\\tempo 120\n.\n3.6.8 5.6{d} 7.6.4 r\n", at(0, 1, 6))!;
+    expect(r.text).toBe("\\tempo 120\n.\n3.6.8 r{d} 7.6.4 r\n");
+  });
+
+  it("unbinds its string, like `r`", () => {
+    const r = clearNote("\\tempo 120\n.\n5.6.4 -.6 r r\n", at(0, 0, 6))!;
+    expect(r.text).toBe("\\tempo 120\n.\nr.4 5.6 r r\n");
+  });
+
+  it("does nothing when an unreadable beat blocks the unbinding, like `r`", () => {
+    // A beat the walk cannot read might be the very note it is looking for, so
+    // it refuses; the later tie would otherwise sound the open string.
+    expect(clearNote("\\tempo 120\n.\n5.6.4 r r r | x.1.4 r r r | -.6.4 r r r\n", at(0, 0, 6))).toBeNull();
+  });
+});
+
+// Queue item: one note of a chord going leaves its string silent at that beat,
+// as a rest would. A later tie on that string would otherwise re-bind to an
+// older note, and a hammer-on or slide reach past the beat.
+describe("clearNote of one note of a chord", () => {
+  it("turns a later tie on that string into the fret it sounded", () => {
+    // left alone, `-.6` would hold the 3 from beat 0 instead of the 5
+    const r = clearNote("\\tempo 120\n.\n3.6.4 (5.6 7.5) -.6 r\n", at(0, 1, 6))!;
+    expect(r.text).toBe("\\tempo 120\n.\n3.6.4 7.5 5.6 r\n");
+  });
+
+  it("removes a hammer-on on the previous note of that string, and only that string", () => {
+    const r = clearNote("\\tempo 120\n.\n(3.6{h} 2.5{h}).4 (5.6 7.5) 7.6 r\n", at(0, 1, 6))!;
+    expect(r.text).toBe("\\tempo 120\n.\n(3.6 2.5{h}).4 7.5 7.6 r\n");
+  });
+
+  it("does nothing when a beat it cannot read blocks the unbinding, like a lone note", () => {
+    expect(clearNote("\\tempo 120\n.\n(5.6 3.5).4 x.6.4 -.6 r\n", at(0, 0, 6))).toBeNull();
+  });
+});

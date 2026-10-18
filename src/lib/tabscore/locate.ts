@@ -17,6 +17,13 @@ export interface Caret {
   string: number;
 }
 
+/** A beat's address. A caret is one too; its string is ignored. */
+export interface BeatPos {
+  barIndex: number;
+  beatIndex: number;
+  string?: number;
+}
+
 /** Inclusive codepoint bounds. */
 export interface SpliceRange {
   cpStart: number;
@@ -34,31 +41,44 @@ export function countBeats(scoreNode: any): number {
   );
 }
 
-export function findBeatNode(scoreNode: any, caret: Caret): any | null {
-  const bar = scoreNode?.bars?.[caret.barIndex];
+export function findBeatNode(scoreNode: any, pos: BeatPos): any | null {
+  const bar = scoreNode?.bars?.[pos.barIndex];
   if (!bar) return null;
-  return bar.beats?.[caret.beatIndex] ?? null;
+  return bar.beats?.[pos.beatIndex] ?? null;
 }
 
 /**
  * The AST's end.offset is inclusive AND includes trailing whitespace, so
  * splicing it verbatim eats the separator and merges adjacent beats — a
- * corruption that still parses. Walk back over whitespace first.
+ * corruption that still parses. A bar line written straight after a bar's
+ * last beat (`8.6|9.6`) ends up inside that beat's node too, and so does the
+ * first `/` of a comment written straight after a beat (`r// end`, or `r/*`
+ * opening a block comment): a splice would swallow the one and cut the other
+ * in half, which no longer parses. Walk back over all three first.
  */
 export function beatSpliceRange(
   text: string,
   scoreNode: any,
-  caret: Caret,
+  pos: BeatPos,
 ): SpliceRange | null {
-  const node = findBeatNode(scoreNode, caret);
+  const node = findBeatNode(scoreNode, pos);
   if (!node?.start || !node?.end) return null;
 
   const cpStart = node.start.offset;
   let cpEnd = node.end.offset;
-  while (cpEnd > cpStart && /\s/.test(sliceCp(text, cpEnd, cpEnd))) {
+  const trailing = (cp: number): boolean => {
+    const char = sliceCp(text, cp, cp);
+    return /[\s|]/.test(char) || (char === "/" && /[/*]/.test(sliceCp(text, cp + 1, cp + 1)));
+  };
+  while (cpEnd > cpStart && trailing(cpEnd)) {
     cpEnd--;
   }
   return { cpStart, cpEnd };
+}
+
+/** Whether two carets are on the same string of the same beat — by value: commands hand back new objects. */
+export function sameCaret(a: Caret, b: Caret): boolean {
+  return a.barIndex === b.barIndex && a.beatIndex === b.beatIndex && a.string === b.string;
 }
 
 export function clampCaret(scoreNode: any, caret: Caret): Caret {

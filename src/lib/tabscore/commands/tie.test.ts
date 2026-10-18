@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { toggleTie } from "./tie";
+import { tieOrigin, tieRefusal, toggleTie } from "./tie";
 import { parseTex } from "../parse";
 
 // Two bars, four quarter-note beats each, so the across-a-barline case and
@@ -74,5 +74,79 @@ describe("toggleTie", () => {
 
   it("leaves the document alone when it does not parse", () => {
     expect(toggleTie("\\tempo 120\n.\n(((\n", at(0, 0))).toBeNull();
+  });
+});
+
+// alphaTab 1.8.1 looks for a tie's origin at most three bars back
+// (Note._maxOffsetForSameLineSearch), and a tie it cannot bind sounds the open
+// string. A tie that is itself tied looks three bars back from its own bar.
+describe("a tie's origin, as far as alphaTab looks", () => {
+  const doc = (body: string) => `\\tempo 120\n.\n${body}\n`;
+  const origin = (body: string, caret: { barIndex: number; beatIndex: number; string: number }) => {
+    const text = doc(body);
+    return tieOrigin(text, parseTex(text).scoreNode, caret);
+  };
+
+  it("is the fret three bars back", () => {
+    expect(origin("3.6.4 r r r | r r r r | r r r r | -.6.4 r r r", at(3, 0))).toEqual({ kind: "fret", fret: 3 });
+  });
+
+  it("is none four bars back", () => {
+    expect(origin("3.6.4 r r r | r r r r | r r r r | r r r r | -.6.4 r r r", at(4, 0))).toEqual({ kind: "none" });
+  });
+
+  it("follows a chain of ties, each looking three bars back from its own bar", () => {
+    const chain = "3.6.4 r r r | r r r r | r r r r | -.6.4 r r r | r r r r | r r r r | -.6.4 r r r";
+    expect(origin(chain, at(6, 0))).toEqual({ kind: "fret", fret: 3 });
+  });
+
+  it("is blocked by a beat it cannot read, which might hold that string", () => {
+    expect(origin("3.6.4 x.1.4 -.6.4 r", at(0, 2))).toEqual({ kind: "blocked" });
+  });
+
+  it("is blocked by a note marked as a tie, whose written fret is not the one it sounds", () => {
+    expect(origin("5.6.4 3.6{t}.4 -.6.4 r", at(0, 2))).toEqual({ kind: "blocked" });
+  });
+});
+
+describe("toggleTie, as far as alphaTab looks", () => {
+  const doc = (body: string) => `\\tempo 120\n.\n${body}\n`;
+
+  it("ties to a note three bars back", () => {
+    expect(toggleTie(doc("3.6.4 r r r | r r r r | r r r r | 5.6.4 r r r"), at(3, 0))!.text).toContain("| -.6.4 r r r");
+  });
+
+  it("refuses to tie to a note four bars back, which alphaTab would sound as the open string", () => {
+    expect(toggleTie(doc("3.6.4 r r r | r r r r | r r r r | r r r r | 5.6.4 r r r"), at(4, 0))).toBeNull();
+  });
+
+  it("unties a tie alphaTab never bound by taking the note out, not by giving it a fret it never sounded", () => {
+    const out = toggleTie(doc("3.6.4 r r r | r r r r | r r r r | r r r r | -.6.4 r r r"), at(4, 0))!;
+    expect(out.text).toContain("| r.4 r r r\n");
+  });
+
+  it("will not untie a tie whose chain passes a marked tie: the fret it sounds cannot be named", () => {
+    expect(toggleTie(doc("5.6.4 3.6{t}.4 -.6.4 r"), at(0, 2))).toBeNull();
+  });
+
+  it("still ties after a marked tie, which alphaTab binds the new tie to", () => {
+    expect(toggleTie(doc("5.6.4 3.6{t}.4 7.6.4 r"), at(0, 2))!.text).toContain("3.6{t}.4 -.6.4 r");
+  });
+});
+
+// What TabEditor tells the user when the tie key does nothing: the old
+// "nothing to tie to", unless it declined to untie a tie whose fret it cannot
+// name — that is a refusal, and says so.
+describe("tieRefusal", () => {
+  const doc = (body: string) => `\\tempo 120\n.\n${body}\n`;
+
+  it("is a refusal for an untie blocked by a marked tie or a beat it cannot read", () => {
+    expect(tieRefusal(doc("5.6.4 3.6{t}.4 -.6.4 r"), at(0, 2))).toBe("refused");
+    expect(tieRefusal(doc("5.6.4 x.6.4 -.6.4 r"), at(0, 2))).toBe("refused");
+  });
+
+  it("is nothing to tie to otherwise", () => {
+    expect(tieRefusal(doc("3.6.4 5.6 7.6 8.6"), at(0, 0))).toBe("nothingToTie");
+    expect(tieRefusal(doc("3.6.4 r r r | r r r r | r r r r | r r r r | 5.6.4 r r r"), at(4, 0))).toBe("nothingToTie");
   });
 });

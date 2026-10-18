@@ -13,6 +13,12 @@ export interface ShortcutGroup {
      * every other entry against the keymap.
      */
     mouse?: boolean;
+    /**
+     * A clipboard chord (Ctrl+C/X/V) the browser turns into a copy, cut or
+     * paste event, which the editor handles; deliberately not a keydown the
+     * keymap resolves. Rendered the same way, skipped by the same test.
+     */
+    clipboard?: boolean;
   }[];
 }
 

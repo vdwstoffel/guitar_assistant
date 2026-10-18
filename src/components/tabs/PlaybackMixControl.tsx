@@ -12,6 +12,13 @@ interface PlaybackMixControlProps {
   /** Tick out a bar before playback starts. */
   countIn: boolean;
   onCountInToggle: () => void;
+  /**
+   * Play the beat at the caret as you edit (the tab editor's note preview).
+   * The toggle renders only when both of these are passed, so the Guitar Pro
+   * player, which has no caret, shows no control that would do nothing.
+   */
+  previewNotes?: boolean;
+  onPreviewNotesToggle?: () => void;
 }
 
 const TOGGLE =
@@ -25,7 +32,8 @@ const SLIDER =
 
 /**
  * The two things you balance while practising a tab: how loud the notes are
- * and how loud the click is.
+ * and how loud the click is. (In the editor it also holds the Notes toggle,
+ * which plays each beat as you enter it.)
  *
  * Both are alphaTab's own 0-1 volumes rather than the 10-200% practice speed
  * beside them. alphaTab has no separate metronome enable — a volume of zero
@@ -44,6 +52,8 @@ export default function PlaybackMixControl({
   onMetronomeChange,
   countIn,
   onCountInToggle,
+  previewNotes,
+  onPreviewNotesToggle,
 }: PlaybackMixControlProps) {
   return (
     <div className="flex items-center gap-2">
@@ -59,6 +69,25 @@ export default function PlaybackMixControl({
           className={SLIDER}
         />
       </label>
+
+      {previewNotes !== undefined && onPreviewNotesToggle && (
+        // Beside the tab volume, the level previews play at, and away from the
+        // click's own slider, which does not affect them.
+        <button
+          type="button"
+          onClick={onPreviewNotesToggle}
+          aria-pressed={previewNotes}
+          aria-label="Notes"
+          title={
+            previewNotes
+              ? "Stop playing each beat as you enter it"
+              : "Play each beat as you enter it or move onto it"
+          }
+          className={`${TOGGLE} ${previewNotes ? TOGGLE_ON : TOGGLE_OFF}`}
+        >
+          ♪ Notes
+        </button>
+      )}
 
       <div className="flex items-center gap-1">
         <button

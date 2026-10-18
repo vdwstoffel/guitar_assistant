@@ -5,9 +5,10 @@
  */
 import { useEffect, useMemo, useRef } from "react";
 import {
-  applyAlphaTabSink,
   getAudioSinkPreference,
+  routeAlphaTabOutput,
   routeContextToSink,
+  shouldApplySink,
   subscribeToAudioSinkChanges,
 } from "@/lib/audioSink";
 import { speedToRate } from "@/lib/playbackSpeed";
@@ -49,6 +50,12 @@ export interface PlaybackOptions {
   countInVolume?: number;
   /** A bar range was dragged out, or dropped. */
   onLoopChange?: (range: BarRange | null) => void;
+  /**
+   * A press on the score ended as a plain click, not a drag. Called on
+   * release, once a drag has been ruled out — which is what lets the tab
+   * editor preview a clicked beat without ever previewing a loop drag.
+   */
+  onClick?: () => void;
 }
 
 export interface PlaybackHandle {
@@ -86,6 +93,7 @@ export function useAlphaTabPlayback(options: PlaybackOptions): PlaybackHandle {
   const metronomeVolumeRef = useRef(options.metronomeVolume);
   const countInVolumeRef = useRef(options.countInVolume);
   const onLoopChangeRef = useRef(options.onLoopChange);
+  const onClickRef = useRef(options.onClick);
 
   // Synced in an effect rather than during render: the long-lived alphaTab
   // subscriptions read these from handlers, which only ever fire long after
@@ -97,6 +105,7 @@ export function useAlphaTabPlayback(options: PlaybackOptions): PlaybackHandle {
     metronomeVolumeRef.current = options.metronomeVolume;
     countInVolumeRef.current = options.countInVolume;
     onLoopChangeRef.current = options.onLoopChange;
+    onClickRef.current = options.onClick;
   });
 
   // The properties alphaTab holds itself, pushed whenever they change.
@@ -408,9 +417,27 @@ export function useAlphaTabPlayback(options: PlaybackOptions): PlaybackHandle {
       });
 
       // Respect the app-wide output device. Applied on playerReady (the output
-      // does not exist before then) and again whenever it changes elsewhere.
+      // does not exist before then) and again whenever it changes elsewhere —
+      // but only when the output or the preference actually changed:
+      // playerReady fires about four times per edit. Routed by setSinkId on the
+      // output's own context; alphaTab's setOutputDevice leaks an AudioContext
+      // on every call (see routeAlphaTabOutput). A pair is remembered as soon
+      // as its switch starts, so the repeats of playerReady that arrive while
+      // it is in flight do nothing, and forgotten if the switch fails (a
+      // headset that is not connected yet), so the next playerReady or change
+      // retries it.
+      let lastSink: { output: unknown; pref: string } | null = null;
       const applySink = () => {
-        void applyAlphaTabSink(api.player?.output, getAudioSinkPreference());
+        if (detached) return;
+        const output = api.player?.output;
+        const pref = getAudioSinkPreference();
+        if (!shouldApplySink(lastSink, output, pref)) return;
+        const attempt = { output, pref };
+        lastSink = attempt;
+        void routeAlphaTabOutput(output, pref).then((applied) => {
+          // Not if a newer switch has started since: lastSink describes that one.
+          if (!applied && lastSink === attempt) lastSink = null;
+        });
       };
       api.playerReady.on(applySink);
       const unsubscribeSink = subscribeToAudioSinkChanges(applySink);
@@ -458,6 +485,7 @@ export function useAlphaTabPlayback(options: PlaybackOptions): PlaybackHandle {
         // are drilling is exactly what you do while practising, so put the
         // section back.
         reapplyLoop();
+        onClickRef.current?.();
       });
 
       // Bubble phase, so alphaTab's capture-phase handler on its own canvas

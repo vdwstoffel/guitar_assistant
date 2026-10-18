@@ -1,3 +1,24 @@
+// The last text converted, and its codepoint → UTF-16 table (null when it has
+// no astral characters, so the two indexes coincide). Commands convert many
+// offsets of one text — a range command reads every beat of a 300-bar tab —
+// and walking from the start for each was quadratic.
+let lastText: string | null = null;
+let lastTable: number[] | null = null;
+
+function tableFor(text: string): number[] | null {
+  if (text !== lastText) {
+    lastText = text;
+    lastTable = null;
+    if (/[\uD800-\uDFFF]/.test(text)) {
+      const table: number[] = [];
+      for (let i = 0; i < text.length; i += text.codePointAt(i)! > 0xffff ? 2 : 1) table.push(i);
+      table.push(text.length);
+      lastTable = table;
+    }
+  }
+  return lastTable;
+}
+
 /**
  * alphaTab AST nodes carry 0-based CODEPOINT offsets, but JS strings are
  * indexed in UTF-16 code units. They agree on BMP-only text and diverge by
@@ -6,14 +27,9 @@
  */
 export function codepointToUtf16(text: string, cpIndex: number): number {
   if (cpIndex <= 0) return 0;
-  let cp = 0;
-  for (let i = 0; i < text.length; ) {
-    if (cp === cpIndex) return i;
-    const code = text.codePointAt(i)!;
-    i += code > 0xffff ? 2 : 1;
-    cp++;
-  }
-  return text.length;
+  const table = tableFor(text);
+  if (!table) return Math.min(cpIndex, text.length);
+  return table[Math.min(cpIndex, table.length - 1)];
 }
 
 /** Slice by inclusive codepoint bounds. */
