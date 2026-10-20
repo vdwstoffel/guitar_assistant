@@ -19,6 +19,7 @@ import PlaybackSpeedControl from "@/components/PlaybackSpeedControl";
 import PlaybackMixControl from "@/components/tabs/PlaybackMixControl";
 import { clampPlaybackSpeed } from "@/lib/playbackSpeed";
 import { claimGlobalShortcuts } from "@/lib/globalShortcuts";
+import { createPlaybackScrollHandler } from "@/lib/tabscore/playbackScroll";
 import { focusPlayer, focusedPlayer } from "@/lib/playerFocus";
 import { useFocusedPlayer, useRegisterPlayer } from "@/lib/usePlayerFocus";
 import {
@@ -455,17 +456,17 @@ export default function GpSongPlayer({
         settings.player.playerMode = alphaTab.PlayerMode.EnabledSynthesizer;
         settings.player.soundFont = "/soundfont/sonivox.sf2";
         settings.player.enableCursor = true;
-        // Smooth, not Continuous: Continuous re-scrolls only when a new system
-        // (line) begins, so the view sits still while the playhead crosses one
-        // and then jumps — the tab 'does not follow' complaint. Smooth scrolls
-        // the container in step with the playhead, as Songsterr does.
-        settings.player.scrollMode = alphaTab.ScrollMode.Smooth;
+        // Continuous, gated by createPlaybackScrollHandler: scroll only when
+        // a new line starts playing — one glide per line boundary at
+        // alphaTab's own speed — and never past the line's pinned top.
+        settings.player.scrollMode = alphaTab.ScrollMode.Continuous;
         settings.player.scrollElement = scrollRef.current!;
         // Keep a little music above the active bar rather than pinning it to
         // the very top edge, so you can see what you have just played.
         settings.player.scrollOffsetY = -40;
 
         const api = new AlphaTabApi(containerRef.current, settings);
+        api.customScrollHandler = createPlaybackScrollHandler(api);
         apiRef.current = api;
         detachPlayback = playback.attach(api, alphaTab);
 
