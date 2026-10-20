@@ -325,15 +325,6 @@ export function useAlphaTabPlayback(options: PlaybackOptions): PlaybackHandle {
     };
 
     /**
-     * Ends a drag with whatever bars it last covered. Called from beatMouseUp
-     * for a release over the score, and from the window listener for one that
-     * lands anywhere else — alphaTab binds mouseup to its own canvas element,
-     * so a release past the right edge of the last bar (the natural way to
-     * select "to the end") never reaches it, and without this the drag would
-     * hang: its own _isBeatMouseDown stays set, and plain hovering would then
-     * keep extending the selection.
-     */
-    /**
      * The midi tick at which `beat` sounds, in the same tick space
      * `api.tickPosition` seeks to (repeats resolved by alphaTab's own lookup).
      * Null for a release off any beat, or before midi generation built it.
@@ -347,6 +338,15 @@ export function useAlphaTabPlayback(options: PlaybackOptions): PlaybackHandle {
       }
     };
 
+    /**
+     * Ends a drag with whatever bars it last covered. Called from beatMouseUp
+     * for a release over the score, and from the window listener for one that
+     * lands anywhere else — alphaTab binds mouseup to its own canvas element,
+     * so a release past the right edge of the last bar (the natural way to
+     * select "to the end") never reaches it, and without this the drag would
+     * hang: its own _isBeatMouseDown stays set, and plain hovering would then
+     * keep extending the selection.
+     */
     const commitDrag = () => {
       const range = dragPreviewRef.current;
       dragStartBeatRef.current = null;
