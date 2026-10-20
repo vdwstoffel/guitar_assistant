@@ -266,6 +266,7 @@ export default function GpSongPlayer({
     volume: mix.volume,
     metronomeVolume: metronomeVolumeOf(mix),
     countInVolume: countInVolumeOf(mix),
+    clickToPlay: true,
     onLoopChange: (range) => {
       setDraggedRange(range);
       // A fresh drag replaces whichever saved section was looping.
@@ -454,7 +455,11 @@ export default function GpSongPlayer({
         settings.player.playerMode = alphaTab.PlayerMode.EnabledSynthesizer;
         settings.player.soundFont = "/soundfont/sonivox.sf2";
         settings.player.enableCursor = true;
-        settings.player.scrollMode = alphaTab.ScrollMode.Continuous;
+        // Smooth, not Continuous: Continuous re-scrolls only when a new system
+        // (line) begins, so the view sits still while the playhead crosses one
+        // and then jumps — the tab 'does not follow' complaint. Smooth scrolls
+        // the container in step with the playhead, as Songsterr does.
+        settings.player.scrollMode = alphaTab.ScrollMode.Smooth;
         settings.player.scrollElement = scrollRef.current!;
         // Keep a little music above the active bar rather than pinning it to
         // the very top edge, so you can see what you have just played.

@@ -56,6 +56,14 @@ export interface PlaybackOptions {
    * editor preview a clicked beat without ever previewing a loop drag.
    */
   onClick?: () => void;
+
+  /**
+   * A click while stopped also starts playback from the clicked beat,
+   * Songsterr-style. Whatever this says, a plain click seeks the playhead to
+   * the clicked beat; this only decides whether the transport follows the
+   * seek. On for players, off for editors, where a click edits.
+   */
+  clickToPlay?: boolean;
 }
 
 export interface PlaybackHandle {
@@ -94,6 +102,7 @@ export function useAlphaTabPlayback(options: PlaybackOptions): PlaybackHandle {
   const countInVolumeRef = useRef(options.countInVolume);
   const onLoopChangeRef = useRef(options.onLoopChange);
   const onClickRef = useRef(options.onClick);
+  const clickToPlayRef = useRef(options.clickToPlay);
 
   // Synced in an effect rather than during render: the long-lived alphaTab
   // subscriptions read these from handlers, which only ever fire long after
@@ -106,6 +115,7 @@ export function useAlphaTabPlayback(options: PlaybackOptions): PlaybackHandle {
     countInVolumeRef.current = options.countInVolume;
     onLoopChangeRef.current = options.onLoopChange;
     onClickRef.current = options.onClick;
+    clickToPlayRef.current = options.clickToPlay;
   });
 
   // The properties alphaTab holds itself, pushed whenever they change.
@@ -323,6 +333,20 @@ export function useAlphaTabPlayback(options: PlaybackOptions): PlaybackHandle {
      * hang: its own _isBeatMouseDown stays set, and plain hovering would then
      * keep extending the selection.
      */
+    /**
+     * The midi tick at which `beat` sounds, in the same tick space
+     * `api.tickPosition` seeks to (repeats resolved by alphaTab's own lookup).
+     * Null for a release off any beat, or before midi generation built it.
+     */
+    const clickedBeatTick = (beat: any): number | null => {
+      try {
+        const tick = apiRef.current?.tickCache?.getBeatStart(beat);
+        return typeof tick === "number" && Number.isFinite(tick) ? tick : null;
+      } catch {
+        return null;
+      }
+    };
+
     const commitDrag = () => {
       const range = dragPreviewRef.current;
       dragStartBeatRef.current = null;
@@ -483,8 +507,31 @@ export function useAlphaTabPlayback(options: PlaybackOptions): PlaybackHandle {
         // for a click (its _selectionEnd is unset, or equals _selectionStart)
         // it sets playbackRange to null. Editing a note inside the section you
         // are drilling is exactly what you do while practising, so put the
-        // section back.
+        // section back — but then jump back to where the click actually was.
+        // Without that second seek a click inside a practice loop lands on the
+        // loop's start (reapplyLoop seeks there) and a click anywhere else
+        // leaves the playhead where it was, which is why a click used to feel
+        // like starting from the beginning unless bars were dragged. mainSeek
+        // clamps to playbackRange, so this seek belongs after the loop
+        // restore, and lands on the section edge for a click outside it.
         reapplyLoop();
+        const beatTick = clickedBeatTick(beat);
+        if (beatTick !== null) {
+          try {
+            api.tickPosition = beatTick;
+          } catch {
+            /* ignore */
+          }
+          // A click while stopped starts playing from where it landed, the way
+          // Songsterr does. Players only: a click in the editor edits.
+          if (clickToPlayRef.current && api.playerState === 0) {
+            try {
+              api.play(); // synth.PlayerState.Paused
+            } catch {
+              /* ignore */
+            }
+          }
+        }
         onClickRef.current?.();
       });
 
@@ -544,9 +591,25 @@ export const SCORE_SURFACE_CSS = `
   .at-cursor-bar {
     background: rgba(255, 242, 0, 0.25);
   }
-  .at-beat-cursor {
-    background: rgba(64, 64, 255, 0.75);
+  /*
+    alphaTab names the in-bar playhead .at-cursor-beat (see its
+    createCursors), not .at-beat-cursor. The old rule matched nothing, so
+    the bar cursor was visible but the position inside the bar never was.
+    alphaTab sizes and moves this element itself (a 3px-wide absolutely
+    positioned div it scales and animates from beat to beat while playing);
+    only its colour is left to CSS.
+  */
+  .at-cursors .at-cursor-beat {
+    background: rgba(64, 64, 255, 0.9);
     width: 3px;
+  }
+  /*
+    Songsterr-style note tint: while playing, alphaTab puts at-highlight
+    on the notes and beats currently sounding (enableElementHighlighting,
+    on by default). Without a rule for it the highlighting runs invisibly.
+  */
+  .at-highlight {
+    background-color: rgba(59, 130, 246, 0.18);
   }
   /*
     The drag-selected practice range. alphaTab positions this overlay but

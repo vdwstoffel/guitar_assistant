@@ -100,7 +100,8 @@ export default function AlphaTexPlayer({ track, tab, onClose, onSave }: AlphaTex
         settings.player.playerMode = alphaTab.PlayerMode.EnabledSynthesizer;
         settings.player.soundFont = "/soundfont/sonivox.sf2";
         settings.player.enableCursor = true;
-        settings.player.scrollMode = alphaTab.ScrollMode.Continuous;
+        // Smooth follow: Continuous only re-scrolls at system boundaries.
+        settings.player.scrollMode = alphaTab.ScrollMode.Smooth;
         settings.player.scrollElement = scrollRef.current!;
 
         const api = new AlphaTabApi(containerRef.current!, settings);
@@ -394,9 +395,12 @@ export default function AlphaTexPlayer({ track, tab, onClose, onSave }: AlphaTex
                     .at-cursor-bar {
                       background: rgba(255, 242, 0, 0.25);
                     }
-                    .at-beat-cursor {
-                      background: rgba(64, 64, 255, 0.75);
+                    .at-cursors .at-cursor-beat {
+                      background: rgba(64, 64, 255, 0.9);
                       width: 3px;
+                    }
+                    .at-highlight {
+                      background-color: rgba(59, 130, 246, 0.18);
                     }
                     .at-selection div {
                       background: rgba(64, 64, 255, 0.1);
