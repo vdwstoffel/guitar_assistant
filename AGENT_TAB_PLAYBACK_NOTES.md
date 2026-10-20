@@ -34,16 +34,18 @@ progress survives across sessions; keep it updated, commit with each chunk.
      row held ~1577px of controls in ~992px and wrapped onto a second line;
      mix sliders now behind a persisted `mixOpen` pref (folded by default),
      undo/redo moved to the writing row. Row 1: 63px -> 29px.
-   - NEXT candidate (safe): fit-to-width — bind alphaTab
-     `settings.layout.pageWidth` to the canvas container so the score stops
-     needing horizontal scroll on narrower windows.
-   - AWAIT FRIEND INPUT (opinionated layout choices he designed): source
-     pane fold/width, technique-palette compaction (13 buttons, ~1054px),
-     loop-range discoverability chip.
+   - Owner answers received:
+     - DONE: source pane is drag-resizable (width kept in localStorage
+       `tabEditorSourceWidth`); technique palette folded into a
+       "Techniques ▾" dropdown (shortcuts shown in the list).
+     - Fit-to-width: NOT needed — alphaTab already wraps bars to the container
+       width and no sideways scroll was seen (checked at 1280x720 with the
+       source pane widened). Revisit only if it shows up on his screen.
+     - Loop-range discoverability chip: deferred, low priority.
 3. ~~**Regression check after guard lands**~~ — done with item 1 (editor
    click edit-only confirmed live; drag-loop code path untouched).
-4. Optional polish vs Songsterr: cursor colors/opacity, count-in display,
-   mobile/touch hit targets — only if friend wants them.
+4. Optional polish vs Songsterr: owner does not want touch/tablet targets;
+   cursor colors / count-in display not requested.
 
 ## Known unrelated failures
 
