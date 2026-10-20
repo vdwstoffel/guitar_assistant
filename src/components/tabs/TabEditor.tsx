@@ -204,6 +204,19 @@ const SAVE_LABEL: Record<SaveState, string | null> = {
  * its dependencies (`commandDeps`) — the refs it reads, and the callbacks,
  * `commitTex` among them, through which it acts.
  */
+const SOURCE_WIDTH_KEY = "tabEditorSourceWidth";
+const SOURCE_WIDTH_DEFAULT = 420;
+const clampSourceWidth = (w: number) =>
+  Math.max(240, Math.min(w, Math.floor(window.innerWidth * 0.7)));
+function loadSourceWidth(): number {
+  try {
+    const n = Number(localStorage.getItem(SOURCE_WIDTH_KEY));
+    return Number.isFinite(n) && n > 0 ? n : SOURCE_WIDTH_DEFAULT;
+  } catch {
+    return SOURCE_WIDTH_DEFAULT;
+  }
+}
+
 export default function TabEditor({
   initialTex,
   initialSpeed,
@@ -247,6 +260,29 @@ export default function TabEditor({
   // button is pressed. Once written, the score itself carries the count.
   const [repeatCount, setRepeatCount] = useState(2);
   const [showSource, setShowSource] = useState(initialShowSource);
+  const [sourceWidth, setSourceWidth] = useState(loadSourceWidth);
+  const startSourceResize = (e: React.PointerEvent) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = sourceWidth;
+    let width = startWidth;
+    const onMove = (m: PointerEvent) => {
+      // The pane is on the right, so dragging left widens it.
+      width = clampSourceWidth(startWidth + (startX - m.clientX));
+      setSourceWidth(width);
+    };
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      try {
+        localStorage.setItem(SOURCE_WIDTH_KEY, String(width));
+      } catch {
+        /* storage unavailable: the width just won't be remembered */
+      }
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  };
 
   // Carried over from AlphaTexPlayer, which this replaces in the track
   // dialog: without it, practising a tab silently stops counting toward
@@ -1698,7 +1734,15 @@ export default function TabEditor({
           />
         </div>
         {showSource && (
-          <div className="w-[420px] shrink-0 min-h-0">
+          <div className="relative shrink-0 min-h-0" style={{ width: sourceWidth }}>
+            <div
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="Resize the source pane"
+              title="Drag to resize the source pane"
+              onPointerDown={startSourceResize}
+              className="absolute -left-1.5 top-0 bottom-0 w-1.5 z-10 cursor-col-resize rounded hover:bg-blue-500/60 active:bg-blue-500"
+            />
             <SourcePane tex={tex} diagnostics={parsed.diagnostics} onChange={handleSourceChange} />
           </div>
         )}
