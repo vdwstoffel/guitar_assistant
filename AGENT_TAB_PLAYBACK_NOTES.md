@@ -21,21 +21,20 @@ progress survives across sessions; keep it updated, commit with each chunk.
 
 ## Open items
 
-1. **Empty-tuning render guard** (robustness bug found while testing):
-   AlphaTex without `\tuning(...)` imports with empty `staff.tuning`;
-   alphaTab's tab renderer skips such staves (`canCreate` requires
-   tuning.length > 0) and layout then crashes with
-   `Cannot read properties of undefined (reading 'staves')` — blank canvas.
-   Fix: default to standard guitar tuning when a staff has none, at import
-   time in the app's parse path. Needs Jasper/vd wstoffel sign-off on where
-   it belongs. NOT yet implemented.
+1. ~~**Empty-tuning render guard**~~ — **DONE (`fix(tabs): default tuning guard`, see git log):**
+   `src/lib/tabscore/tuningGuard.ts` fills a default standard tuning (and
+   nearest-string/fret placement for bare-pitch notes like `e3`) before the
+   tab-only render in ScoreCanvas. Verified: the previously crashing
+   bare-pitch/no-`\tuning` tab now renders live; editor click still seeks
+   without auto-playing; 7 new unit tests. Note: bare pitches import from
+   AlphaTex with string/fret -1 — only a tuning fill alone still crashes in
+   collectSpaces, both steps are required (probes against 1.8.1).
 2. **Editor fine-tune for ease of use** (friend's own words: "creating tabs
    works, just needs to be fine tuned for ease of use") — inventory the
    friction points next session: source-pane ergonomics, caret/selection UX,
    drag-range discoverability.
-3. **Regression check after guard lands**: editor click must remain
-   edit-only (no accidental playback start), drag-multiple-bars practice
-   loop behavior unchanged.
+3. ~~**Regression check after guard lands**~~ — done with item 1 (editor
+   click edit-only confirmed live; drag-loop code path untouched).
 4. Optional polish vs Songsterr: cursor colors/opacity, count-in display,
    mobile/touch hit targets — only if friend wants them.
 

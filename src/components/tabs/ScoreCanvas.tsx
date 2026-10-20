@@ -21,6 +21,7 @@ import { selectionRects, type Rect } from "@/lib/tabscore/selectionRects";
 import type { Rect as ScreenRect } from "@/lib/tabscore/placeMenu";
 import { createPreviewSynth, type PreviewSynth } from "./previewSynth";
 import { styleBrokenBars } from "@/lib/tabscore/barStyles";
+import { ensureRenderableTuning } from "@/lib/tabscore/tuningGuard";
 import type { StripMessage } from "@/lib/tabscore/barMessages";
 import BarStatusStrip from "./BarStatusStrip";
 import { onOwnScrollbar } from "./ownScrollbar";
@@ -327,6 +328,16 @@ const ScoreCanvas = forwardRef<ScoreCanvasHandle, ScoreCanvasProps>(function Sco
         staff.showStandardNotation = false;
         staff.showTablature = true;
       }
+    }
+
+    // Tab-only rendering above removes the one renderer that tolerates an
+    // empty staff tuning, so a hand-typed tab without a `\tuning` line used
+    // to blank the canvas with 'reading staves'. Fill the tuning (and place
+    // bare-pitch notes on strings) before rendering — see tuningGuard.ts.
+    try {
+      if (alphaTabRef.current) ensureRenderableTuning(alphaTabRef.current, parsed.score);
+    } catch (e) {
+      console.warn("[tabs] could not apply the tuning guard", e);
     }
 
     // Bars that do not add up, in colour (barStyles.ts). Applied to this
