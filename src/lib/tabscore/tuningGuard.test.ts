@@ -103,6 +103,22 @@ describe("ensureRenderableTuning", () => {
     }
   });
 
+  it("places even out-of-range pitches so the tab renderer cannot crash", () => {
+    // e7 = MIDI 100: fret 36 on the high e — beyond the comfortable band,
+    // but a legal placement is mandatory (string -1 crashes collectSpaces).
+    const score = importScore("\\tempo 100\n.\ne7|\n");
+    ensureRenderableTuning(alphaTab, score);
+    const staff = score.tracks[0].staves[0];
+    const notes: any[] = [];
+    for (const bar of staff.bars)
+      for (const voice of bar.voices)
+        for (const beat of voice.beats) notes.push(...(beat.notes ?? []));
+    expect(notes.length).toBe(1);
+    expect(notes[0].string).toBeGreaterThanOrEqual(1);
+    expect(notes[0].string).toBeLessThanOrEqual(staff.tuning.length);
+    expect(notes[0].fret).toBeGreaterThanOrEqual(0);
+  });
+
   it("survives a score with no tracks/staves/bars at all", () => {
     ensureRenderableTuning(alphaTab, { tracks: [] });
     ensureRenderableTuning(alphaTab, { tracks: [{ staves: [] }] });

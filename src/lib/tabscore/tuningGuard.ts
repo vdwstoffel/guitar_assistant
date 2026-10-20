@@ -25,12 +25,50 @@
  * crashes, notes resolved too renders clean).
  */
 
-/** Frets allowed when placing a bare pitch on a string; past this the
- *  placement is unplayable-ish and we leave the note alone. */
+/** Frets treated as a musically sensible placement when choosing which
+ *  default tuning fits the tab. Placement itself has no ceiling — see
+ *  placeNote: an out-of-range pitch still gets a valid string/fret so the
+ *  tab renderer can never index a -1 string. */
 const MAX_FRET = 22;
 
 function clamp(n: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, n));
+}
+
+/**
+ * Assigns note.string/fret from the note's MIDI pitch on the given open
+ * strings (index 0 = string 1). Never leaves the note unplaced: prefers the
+ * lowest fret within MAX_FRET; if the pitch is out of the instrument's
+ * range, falls back to the nearest string (frets past MAX_FRET keep the
+ * pitch exact; pitches below every open string clamp to fret 0, which
+ * renders and sounds approximate — better than a blank canvas).
+ */
+function placeNote(note: any, openStrings: number[]): void {
+  let best: { string: number; fret: number } | null = null;
+  for (let s = 1; s <= openStrings.length; s++) {
+    const fret = note.realValue - openStrings[s - 1];
+    if (fret >= 0 && fret <= MAX_FRET && (!best || fret < best.fret)) {
+      best = { string: s, fret };
+    }
+  }
+  if (!best) {
+    // Out of comfortable range (e.g. e7 = MIDI 100 is fret 36 on string 1;
+    // c1 is below the open low E). Nearest string wins; a negative fret
+    // clamps to 0 rather than leaving string -1, which crashes the tab
+    // renderer in collectSpaces (spaces[tuning.length - note.string]).
+    let minAbs = Infinity;
+    for (let s = 1; s <= openStrings.length; s++) {
+      const d = Math.abs(note.realValue - openStrings[s - 1]);
+      if (d < minAbs) {
+        minAbs = d;
+        best = { string: s, fret: Math.max(0, note.realValue - openStrings[s - 1]) };
+      }
+    }
+  }
+  if (best) {
+    note.string = best.string;
+    note.fret = best.fret;
+  }
 }
 
 export function ensureRenderableTuning(alphaTab: any, score: any): void {
@@ -87,17 +125,7 @@ export function ensureRenderableTuning(alphaTab: any, score: any): void {
             for (const note of beat.notes ?? []) {
               if (note.string > 0 && note.fret >= 0) continue; // already placed
               if (!Number.isFinite(note.realValue)) continue;
-              let best: { string: number; fret: number } | null = null;
-              for (let s = 1; s <= openStrings.length; s++) {
-                const fret = note.realValue - openStrings[s - 1];
-                if (fret >= 0 && fret <= MAX_FRET && (!best || fret < best.fret)) {
-                  best = { string: s, fret };
-                }
-              }
-              if (best) {
-                note.string = best.string;
-                note.fret = best.fret;
-              }
+              placeNote(note, openStrings);
             }
           }
         }
