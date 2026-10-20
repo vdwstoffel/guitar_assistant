@@ -325,13 +325,23 @@ export function useAlphaTabPlayback(options: PlaybackOptions): PlaybackHandle {
     };
 
     /**
-     * The midi tick at which `beat` sounds, in the same tick space
-     * `api.tickPosition` seeks to (repeats resolved by alphaTab's own lookup).
-     * Null for a release off any beat, or before midi generation built it.
+     * The midi tick at which a plain bar click should land: the START of the
+     * bar whose beat was clicked, in the same tick space `api.tickPosition`
+     * seeks to (repeats resolved by alphaTab's own lookup, via the clicked
+     * beat's own bar). Null for a release off any beat, or before midi
+     * generation built the cache.
+     *
+     * It used to be the clicked BEAT's start, which made a click in the
+     * middle of a bar land there — Jasper/friend's 'clicking a bar already
+     * skips a few clicks into the bar' (2026-10-21): the count-in ran, then
+     * playback resumed from beat 3 or 4 instead of the bar you aimed at. A
+     * bar click means the bar.
      */
     const clickedBeatTick = (beat: any): number | null => {
       try {
-        const tick = apiRef.current?.tickCache?.getBeatStart(beat);
+        const bar = beat?.voice?.bar;
+        const firstBeat = bar?.voices?.[0]?.beats?.[0] ?? beat;
+        const tick = apiRef.current?.tickCache?.getBeatStart(firstBeat);
         return typeof tick === "number" && Number.isFinite(tick) ? tick : null;
       } catch {
         return null;
