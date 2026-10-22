@@ -19,6 +19,7 @@ import PlaybackSpeedControl from "@/components/PlaybackSpeedControl";
 import PlaybackMixControl from "@/components/tabs/PlaybackMixControl";
 import { clampPlaybackSpeed } from "@/lib/playbackSpeed";
 import { claimGlobalShortcuts } from "@/lib/globalShortcuts";
+import { createPlaybackScrollHandler } from "@/lib/tabscore/playbackScroll";
 import { focusPlayer, focusedPlayer } from "@/lib/playerFocus";
 import { useFocusedPlayer, useRegisterPlayer } from "@/lib/usePlayerFocus";
 import {
@@ -266,6 +267,7 @@ export default function GpSongPlayer({
     volume: mix.volume,
     metronomeVolume: metronomeVolumeOf(mix),
     countInVolume: countInVolumeOf(mix),
+    clickToPlay: true,
     onLoopChange: (range) => {
       setDraggedRange(range);
       // A fresh drag replaces whichever saved section was looping.
@@ -454,6 +456,9 @@ export default function GpSongPlayer({
         settings.player.playerMode = alphaTab.PlayerMode.EnabledSynthesizer;
         settings.player.soundFont = "/soundfont/sonivox.sf2";
         settings.player.enableCursor = true;
+        // Continuous, gated by createPlaybackScrollHandler: scroll only when
+        // a new line starts playing — one glide per line boundary at
+        // alphaTab's own speed — and never past the line's pinned top.
         settings.player.scrollMode = alphaTab.ScrollMode.Continuous;
         settings.player.scrollElement = scrollRef.current!;
         // Keep a little music above the active bar rather than pinning it to
@@ -461,6 +466,7 @@ export default function GpSongPlayer({
         settings.player.scrollOffsetY = -40;
 
         const api = new AlphaTabApi(containerRef.current, settings);
+        api.customScrollHandler = createPlaybackScrollHandler(api);
         apiRef.current = api;
         detachPlayback = playback.attach(api, alphaTab);
 

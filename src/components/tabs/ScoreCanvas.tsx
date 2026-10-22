@@ -21,6 +21,8 @@ import { selectionRects, type Rect } from "@/lib/tabscore/selectionRects";
 import type { Rect as ScreenRect } from "@/lib/tabscore/placeMenu";
 import { createPreviewSynth, type PreviewSynth } from "./previewSynth";
 import { styleBrokenBars } from "@/lib/tabscore/barStyles";
+import { ensureRenderableTuning } from "@/lib/tabscore/tuningGuard";
+import { createPlaybackScrollHandler } from "@/lib/tabscore/playbackScroll";
 import type { StripMessage } from "@/lib/tabscore/barMessages";
 import BarStatusStrip from "./BarStatusStrip";
 import { onOwnScrollbar } from "./ownScrollbar";
@@ -329,6 +331,16 @@ const ScoreCanvas = forwardRef<ScoreCanvasHandle, ScoreCanvasProps>(function Sco
       }
     }
 
+    // Tab-only rendering above removes the one renderer that tolerates an
+    // empty staff tuning, so a hand-typed tab without a `\tuning` line used
+    // to blank the canvas with 'reading staves'. Fill the tuning (and place
+    // bare-pitch notes on strings) before rendering — see tuningGuard.ts.
+    try {
+      if (alphaTabRef.current) ensureRenderableTuning(alphaTabRef.current, parsed.score);
+    } catch (e) {
+      console.warn("[tabs] could not apply the tuning guard", e);
+    }
+
     // Bars that do not add up, in colour (barStyles.ts). Applied to this
     // fresh Score every time, so a fixed bar is drawn plain on the next render.
     // A hint, so never a reason not to draw the score at all.
@@ -409,6 +421,12 @@ const ScoreCanvas = forwardRef<ScoreCanvasHandle, ScoreCanvasProps>(function Sco
         settings.player.playerMode = alphaTab.PlayerMode.EnabledSynthesizer;
         settings.player.soundFont = SOUND_FONT_URL;
         settings.player.enableCursor = true;
+        // Continuous: scroll only when a new system (line) starts playing —
+        // one glide per line boundary, at settings.player.scrollSpeed.
+        // Smooth was tried first and rejected: it scrolls the whole system
+        // height across the system's full duration starting at its first
+        // beat, so on slow music the active bar drifts out of picture while
+        // you play it (measured 2026-10-21: Y 224 -> 114 on a 60 BPM line).
         settings.player.scrollMode = alphaTab.ScrollMode.Continuous;
         settings.player.scrollElement = scrollRef.current!;
         // Keep a little music above the active bar rather than pinning it to
@@ -416,6 +434,11 @@ const ScoreCanvas = forwardRef<ScoreCanvasHandle, ScoreCanvasProps>(function Sco
         settings.player.scrollOffsetY = -40;
 
         const api = new AlphaTabApi(containerRef.current, settings);
+        // Jasper's scroll-blocking rule (2026-10-21): alphaTab's own speed is
+        // kept; scrolling is allowed only to bring the next line up, and a
+        // line already at the viewport top never scrolls further — the score
+        // can't slide out from under the playhead.
+        api.customScrollHandler = createPlaybackScrollHandler(api);
         apiRef.current = api;
         // Playback — the click, the count-in, the output device, the speed
         // and volumes, and drag-across-bars to loop — is the shared hook's.

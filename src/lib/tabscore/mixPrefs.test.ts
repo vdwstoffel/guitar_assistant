@@ -79,7 +79,7 @@ describe("subscribers", () => {
 
 describe("reading back what was stored", () => {
   it("round-trips through localStorage", async () => {
-    setMix({ volume: 0.4, metronome: 0.8, metronomeOn: true, countIn: true, previewNotes: false });
+    setMix({ volume: 0.4, metronome: 0.8, metronomeOn: true, countIn: true, previewNotes: false, mixOpen: true });
     const raw = localStorage.getItem(KEY)!;
     expect(JSON.parse(raw)).toEqual({
       volume: 0.4,
@@ -87,6 +87,7 @@ describe("reading back what was stored", () => {
       metronomeOn: true,
       countIn: true,
       previewNotes: false,
+      mixOpen: true,
     });
   });
 
@@ -98,6 +99,19 @@ describe("reading back what was stored", () => {
     // Never zero: the toggle owns off, and a zero would leave the slider
     // with nothing to restore.
     expect(mod.getMix().metronome).toBe(0.05);
+  });
+
+  it("gives a stored pref written before mixOpen existed the layout default", async () => {
+    // Same rule as countIn/previewNotes: no flag in an older save is not a
+    // decision against the feature, so it gets the default (folded).
+    installStorage();
+    localStorage.setItem(KEY, JSON.stringify({ volume: 0.5, metronome: 0.6, metronomeOn: true, countIn: true, previewNotes: true }));
+    const mod = await freshModule();
+    expect(mod.getMix().mixOpen).toBe(false);
+    // An explicit false is also the default, but an explicit true must stick.
+    localStorage.setItem(KEY, JSON.stringify({ volume: 0.5, metronome: 0.6, metronomeOn: true, countIn: true, previewNotes: true, mixOpen: true }));
+    const mod2 = await freshModule();
+    expect(mod2.getMix().mixOpen).toBe(true);
   });
 
   it("falls back to the defaults on junk", async () => {
