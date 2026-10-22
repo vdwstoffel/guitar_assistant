@@ -17,6 +17,14 @@ GM guitar patches are the weakest link — they sound like a keyboard imitating 
 free soundfonts and add a per-track "Sound" dropdown (persisted preference, same
 pattern as the Mix toggle). Works fully in-browser, on every platform, no user install.
 
+> **STATUS 2026-10-22: implemented on this branch** (commits `4d7e2db` assets,
+> `27182a9` + `7c21d89` picker). Shipped three banks — Default (sonivox), TimGM6mb
+> (GPL), Open SoundFont FM variants (OFL) — as a "Sound" dropdown in the tab editor
+> and GP player toolbars. Preference persists in localStorage across both players;
+> swaps hot-load into the live synth and the note-preview follows the choice. It is
+> playback-only: never written into tab text. VST support and MIDI humanization are
+> dropped per Jasper (app is a practice/note-verification aid, not production).
+
 Candidate banks (all free; licenses to be double-checked before bundling):
 
 | Instrument | Candidates |
