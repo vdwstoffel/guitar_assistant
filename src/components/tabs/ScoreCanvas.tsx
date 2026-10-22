@@ -54,6 +54,14 @@ export interface ScoreCanvasProps {
   metronomeVolume?: number;
   /** Count-in tick volume, 0-1. Zero means no count-in, as above. */
   countInVolume?: number;
+  /**
+   * Which sound bank the score plays with: a URL under `/soundfont/`. A
+   * playback preference only — the written notes and their sounds' pitches
+   * are unchanged, only the instrument samples. See `src/lib/soundBank.ts`.
+   * Absent means the default bank. A change mid-play reloads the synth and
+   * resumes where the pause left off.
+   */
+  soundBankUrl?: string;
 
   /**
    * A bar range was selected by dragging across the score, or cleared.
@@ -179,6 +187,7 @@ const ScoreCanvas = forwardRef<ScoreCanvasHandle, ScoreCanvasProps>(function Sco
     volume,
     metronomeVolume,
     countInVolume,
+    soundBankUrl,
     onFinished,
     onLoopChange,
     onCaretClick,
@@ -205,6 +214,21 @@ const ScoreCanvas = forwardRef<ScoreCanvasHandle, ScoreCanvasProps>(function Sco
   const previewSynthRef = useRef<PreviewSynth | null>(null);
   const volumeRef = useRef(volume);
   volumeRef.current = volume;
+  // The bank actually loaded in the score's synth right now: the swap effect
+  // below compares against it, and the soundFontLoaded handler consults the
+  // resume flag. (The picker in TabEditor owns the *preference*; this is what
+  // survived on the synth.)
+  const bankUrlRef = useRef(soundBankUrl ?? SOUND_FONT_URL);
+  const resumeAfterBankRef = useRef(false);
+  // alphaTab's own load of the bank chosen at init is async; a swap may not
+  // hand it bytes before that load has reported, or the two loads race and the
+  // default bank can win. The swap effect parks the newest URL here until the
+  // first soundFontLoaded arrives.
+  const initialBankLoadedRef = useRef(false);
+  const pendingBankUrlRef = useRef<string | null>(null);
+  // Guards against two bank fetches finishing out of order: only the newest
+  // swap may hand its bytes to the synth.
+  const soundFontSwapIdRef = useRef(0);
 
   // Latest-value refs so long-lived alphaTab event handlers (registered once,
   // in the setup effect below) never close over stale props.
@@ -419,7 +443,7 @@ const ScoreCanvas = forwardRef<ScoreCanvasHandle, ScoreCanvasProps>(function Sco
         settings.core.fontDirectory = "/font/";
         settings.core.tex = true;
         settings.player.playerMode = alphaTab.PlayerMode.EnabledSynthesizer;
-        settings.player.soundFont = SOUND_FONT_URL;
+        settings.player.soundFont = bankUrlRef.current;
         settings.player.enableCursor = true;
         // Continuous: scroll only when a new system (line) starts playing —
         // one glide per line boundary, at settings.player.scrollSpeed.
@@ -447,7 +471,7 @@ const ScoreCanvas = forwardRef<ScoreCanvasHandle, ScoreCanvasProps>(function Sco
         previewSynthRef.current = createPreviewSynth(alphaTab, {
           scoreOutput: api.player?.output,
           mainSettings: settings,
-          soundFontUrl: SOUND_FONT_URL,
+          soundFontUrl: bankUrlRef.current,
           workletUrl: WORKLET_URL,
           volume: volumeRef.current ?? 1,
         });
@@ -489,6 +513,44 @@ const ScoreCanvas = forwardRef<ScoreCanvasHandle, ScoreCanvasProps>(function Sco
           if (destroyed) return;
           const inner = e?.error || e?.innerError;
           setError(inner?.message || e?.message || "alphaTab error");
+        });
+
+        // alphaTab's own load of the init bank fires soundFontLoaded; mark it
+        // done and replay any bank the picker asked for while that fetch was
+        // still in flight (see the swap effect below). A swap's bytes land
+        // later and fire it again.
+        api.soundFontLoaded.on(() => {
+          if (destroyed) return;
+          initialBankLoadedRef.current = true;
+          const pending = pendingBankUrlRef.current;
+          if (pending && pending !== bankUrlRef.current) {
+            pendingBankUrlRef.current = null;
+            bankUrlRef.current = pending;
+            applySoundBankSwap(api, pending);
+          }
+        });
+
+        // Swapping a bank stops the synth (loadSoundFont stops playback);
+        // readyForPlayback fires once the new bank's presets are loaded into
+        // the synthesizer, which is when picking up where the stop left off
+        // sounds with the new bank — the sequencer kept its tick position.
+        api.player?.readyForPlayback.on(() => {
+          if (destroyed || !resumeAfterBankRef.current) return;
+          resumeAfterBankRef.current = false;
+          try {
+            api.play();
+          } catch {
+            /* the practice state already reflects the stop */
+          }
+        });
+        // A bank that failed to load leaves the old presets in place; drop the
+        // pending resume so a later readyForPlayback cannot restart playback on
+        // its own, and let the error surface like any other player failure.
+        api.player?.soundFontLoadFailed.on((e: any) => {
+          if (destroyed) return;
+          resumeAfterBankRef.current = false;
+          const inner = e?.error || e?.innerError;
+          setError(inner?.message || e?.message || "Could not load the selected sound bank");
         });
 
         const caretFor = (bar: any, beat: any, stringNumber: number): Caret => {
@@ -653,6 +715,58 @@ const ScoreCanvas = forwardRef<ScoreCanvasHandle, ScoreCanvasProps>(function Sco
       }
     };
   }, [applyTex, positionCaretOverlay, positionSelectionOverlay, playback]);
+
+  // --- Swapping the sound bank while the api is alive. The bank a score
+  // starts with is picked at init (settings.player.soundFont); this applies
+  // every later change to the live synth: fetch the file, hand alphaTab the
+  // bytes (append=false replaces the loaded bank), and let the readyForPlayback
+  // handler above resume whatever playback the load stopped. The preview synth
+  // follows the same choice so a clicked note sounds like the song it sits in.
+  const applySoundBankSwap = useCallback((api: any, url: string) => {
+    const id = ++soundFontSwapIdRef.current;
+    void fetch(url)
+      .then(async (response) => {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const bytes = new Uint8Array(await response.arrayBuffer());
+        // A superseded swap (the picker moved on mid-fetch) must not land out
+        // of order behind the newer one.
+        const live = apiRef.current;
+        if (!live || id !== soundFontSwapIdRef.current) return;
+        resumeAfterBankRef.current = isPlayingRef.current;
+        previewSynthRef.current?.setSoundFontUrl(url);
+        live.loadSoundFont(bytes, false);
+      })
+      .catch((err) => {
+        if (id !== soundFontSwapIdRef.current) return;
+        // The old bank is still loaded and playable; say so instead of
+        // pretending the picker took effect. The preference itself stays on
+        // the new choice — the picker is what the person asked for, and the
+        // next load will try it again.
+        console.warn("Could not load the selected sound bank", err);
+      });
+  }, []);
+
+  useEffect(() => {
+    const url = soundBankUrl ?? SOUND_FONT_URL;
+    if (url === bankUrlRef.current) return;
+    const api = apiRef.current;
+    if (!api) {
+      // Init has not built the api yet: its settings line reads bankUrlRef at
+      // creation, so pointing it here makes the first load use the new bank.
+      bankUrlRef.current = url;
+      return;
+    }
+    if (!initialBankLoadedRef.current) {
+      // alphaTab's own load of the init bank is still in flight. Handing it
+      // replacement bytes now would race its XHR — whichever lands last
+      // wins, and that could be the old bank. Park the request; the
+      // soundFontLoaded handler below replays it once the first load reports.
+      pendingBankUrlRef.current = url;
+      return;
+    }
+    bankUrlRef.current = url;
+    applySoundBankSwap(api, url);
+  }, [soundBankUrl, applySoundBankSwap]);
 
   // Re-render whenever the tex prop changes. (The very first render happens
   // above, right after setup, via texRef — this effect's own mount-time call

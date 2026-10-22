@@ -53,6 +53,14 @@ import {
 } from "@/lib/tabscore/mixPrefs";
 import { readTuningId, setTuning } from "@/lib/tabscore/commands/tuning";
 import {
+  subscribeToSoundBankChanges,
+  getSoundBankPreference,
+  getServerSoundBank,
+  setSoundBankPreference,
+  soundBankById,
+} from "@/lib/soundBank";
+import SoundBankControl from "@/components/SoundBankControl";
+import {
   toggleRepeatStart,
   toggleRepeatEnd,
   readBarRepeat,
@@ -251,6 +259,15 @@ export default function TabEditor({
 
   const updateMix = useCallback((patch: Partial<MixPrefs>) => {
     setMix({ ...getMix(), ...patch });
+    containerRef.current?.focus();
+  }, []);
+  // Which sound bank playback uses — the same kind of listening preference
+  // as the mix, kept in localStorage and shared with the GP player through
+  // src/lib/soundBank.ts. It changes only the samples the synth sounds with,
+  // never the tab's text.
+  const soundBankId = useSyncExternalStore(subscribeToSoundBankChanges, getSoundBankPreference, getServerSoundBank);
+  const handleSoundBankChange = useCallback((id: string) => {
+    setSoundBankPreference(id);
     containerRef.current?.focus();
   }, []);
   // Bars dragged out on the canvas to drill a section, zero-based inclusive.
@@ -1427,6 +1444,7 @@ export default function TabEditor({
         </div>
         <TempoControl tempo={tempo} onChange={handleTempoChange} disabled={!parsed.ok} />
         <TuningControl tuningId={tuningId} onChange={handleTuningChange} disabled={!parsed.ok} />
+        <SoundBankControl bankId={soundBankId} onChange={handleSoundBankChange} />
         <PlaybackSpeedControl speed={speed} onChange={setSpeed} />
         <button
           type="button"
@@ -1711,6 +1729,7 @@ export default function TabEditor({
             volume={mix.volume}
             metronomeVolume={metronomeVolumeOf(mix)}
             countInVolume={countInVolumeOf(mix)}
+            soundBankUrl={soundBankById(soundBankId).url}
             onLoopChange={handleLoopChange}
             onCaretClick={handleCaretClick}
             barStatus={barStatus}

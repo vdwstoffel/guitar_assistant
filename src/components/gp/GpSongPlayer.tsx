@@ -17,6 +17,14 @@ import type { BarRange } from "./useAlphaTabPlayback";
 import type { GpSongSection } from "@/types";
 import PlaybackSpeedControl from "@/components/PlaybackSpeedControl";
 import PlaybackMixControl from "@/components/tabs/PlaybackMixControl";
+import SoundBankControl from "@/components/SoundBankControl";
+import {
+  subscribeToSoundBankChanges,
+  getSoundBankPreference,
+  getServerSoundBank,
+  setSoundBankPreference,
+  soundBankById,
+} from "@/lib/soundBank";
 import { clampPlaybackSpeed } from "@/lib/playbackSpeed";
 import { claimGlobalShortcuts } from "@/lib/globalShortcuts";
 import { createPlaybackScrollHandler } from "@/lib/tabscore/playbackScroll";
@@ -76,6 +84,16 @@ export default function GpSongPlayer({
   // walks off the bottom.
   const scrollRef = useRef<HTMLDivElement>(null);
   const apiRef = useRef<any>(null);
+  // Which sound bank the synth right now holds (see soundBank.ts). The swap
+  // effect compares against it; alphaTab's own load of the init bank is async,
+  // so a swap parked in pendingBankUrlRef waits for the first soundFontLoaded
+  // rather than racing that fetch, and only the newest fetch (soundFontSwapId)
+  // may hand its bytes to the synth.
+  const bankUrlRef = useRef(soundBankById(getSoundBankPreference()).url);
+  const initialBankLoadedRef = useRef(false);
+  const pendingBankUrlRef = useRef<string | null>(null);
+  const resumeAfterBankRef = useRef(false);
+  const soundFontSwapIdRef = useRef(0);
 
   const [error, setError] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
@@ -103,6 +121,57 @@ export default function GpSongPlayer({
   const updateMix = useCallback((patch: Partial<MixPrefs>) => {
     setMix({ ...getMix(), ...patch });
   }, []);
+
+  // Which sound bank playback uses — shared with the tab editor through
+  // src/lib/soundBank.ts, so both surfaces play songs with the same samples.
+  const soundBankId = useSyncExternalStore(
+    subscribeToSoundBankChanges,
+    getSoundBankPreference,
+    getServerSoundBank,
+  );
+
+  // Fetch a bank's bytes and hand them to the live synth (append=false
+  // replaces what it holds). Only the newest fetch may land: picker clicks
+  // faster than 14 MB arrives, and an old bank's download must not finish
+  // after a new one's. A fetch failure leaves the old bank loaded — say so
+  // rather than pretend the picker took effect.
+  const applySoundBankSwap = useCallback((url: string) => {
+    const id = ++soundFontSwapIdRef.current;
+    void fetch(url)
+      .then(async (response) => {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const bytes = new Uint8Array(await response.arrayBuffer());
+        const api = apiRef.current;
+        if (!api || id !== soundFontSwapIdRef.current) return;
+        resumeAfterBankRef.current = isPlayingRef.current;
+        api.loadSoundFont(bytes, false);
+      })
+      .catch((err) => {
+        if (id !== soundFontSwapIdRef.current) return;
+        console.warn("Could not load the selected sound bank", err);
+      });
+  }, []);
+
+  // Apply a bank change to an api that already exists. Before the api exists,
+  // or while alphaTab's own load of the init bank is still in flight, the
+  // choice is parked (bankUrlRef for init's settings line, pendingBankUrlRef
+  // for the first soundFontLoaded to replay) rather than raced against that
+  // fetch.
+  useEffect(() => {
+    const url = soundBankById(soundBankId).url;
+    if (url === bankUrlRef.current) return;
+    const api = apiRef.current;
+    if (!api) {
+      bankUrlRef.current = url;
+      return;
+    }
+    if (!initialBankLoadedRef.current) {
+      pendingBankUrlRef.current = url;
+      return;
+    }
+    bankUrlRef.current = url;
+    applySoundBankSwap(url);
+  }, [soundBankId, applySoundBankSwap]);
 
   // Open state is remembered: someone who works with the mixer open wants it
   // open next time, and someone who never touches it should never see it.
@@ -454,7 +523,7 @@ export default function GpSongPlayer({
         settings.core.fontDirectory = "/font/";
         // No `core.tex`: this loads Guitar Pro bytes, not AlphaTex.
         settings.player.playerMode = alphaTab.PlayerMode.EnabledSynthesizer;
-        settings.player.soundFont = "/soundfont/sonivox.sf2";
+        settings.player.soundFont = bankUrlRef.current;
         settings.player.enableCursor = true;
         // Continuous, gated by createPlaybackScrollHandler: scroll only when
         // a new line starts playing — one glide per line boundary at
@@ -488,6 +557,37 @@ export default function GpSongPlayer({
           if (destroyed) return;
           const inner = e?.error || e?.innerError;
           setError(inner?.message || e?.message || "alphaTab could not read this file");
+        });
+
+        // Sound bank bookkeeping (see the swap effect below): alphaTab's own
+        // load of the init bank fires soundFontLoaded; a swap's bytes land
+        // later and their load fires it again, then readyForPlayback once the
+        // presets are in. A swap stopped playback (loadSoundFont stops the
+        // synth), so resume from the sequencer's kept position.
+        api.soundFontLoaded.on(() => {
+          if (destroyed) return;
+          initialBankLoadedRef.current = true;
+          const pending = pendingBankUrlRef.current;
+          if (pending && pending !== bankUrlRef.current) {
+            pendingBankUrlRef.current = null;
+            bankUrlRef.current = pending;
+            applySoundBankSwap(pending);
+          }
+        });
+        api.player?.readyForPlayback.on(() => {
+          if (destroyed || !resumeAfterBankRef.current) return;
+          resumeAfterBankRef.current = false;
+          try {
+            api.play();
+          } catch {
+            /* the transport already reflects the stop */
+          }
+        });
+        api.player?.soundFontLoadFailed.on((e: any) => {
+          if (destroyed) return;
+          resumeAfterBankRef.current = false;
+          const inner = e?.error || e?.innerError;
+          setError(inner?.message || e?.message || "Could not load the selected sound bank");
         });
 
         // Draw one part only. Done on scoreLoaded rather than after load()
@@ -620,6 +720,12 @@ export default function GpSongPlayer({
           ⟳ Repeat
         </button>
         <PlaybackSpeedControl speed={speed} onChange={handleSpeedChange} />
+        <SoundBankControl
+          bankId={soundBankId}
+          onChange={(id) => {
+            setSoundBankPreference(id);
+          }}
+        />
         <PlaybackMixControl
           volume={mix.volume}
           onVolumeChange={(volume) => updateMix({ volume })}
