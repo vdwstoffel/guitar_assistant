@@ -459,4 +459,64 @@ describe("createPreviewSynth", () => {
     await settle();
     expect(alpha.synths[0].loadSoundFont).not.toHaveBeenCalled();
   });
+
+  it("setSoundFontUrl loads a new bank with append=false and remembers it", async () => {
+    const alpha = fakeAlphaTab();
+    const preview = createPreviewSynth(alpha.ns, OPTS)!;
+    await settle();
+    expect(alpha.synths[0].loadSoundFont).toHaveBeenCalledTimes(1); // initial bank
+    preview.setSoundFontUrl("/other.sf2");
+    await settle();
+    expect(alpha.synths[0].loadSoundFont).toHaveBeenCalledTimes(2);
+    const [bytes, append] = alpha.synths[0].loadSoundFont.mock.calls[1];
+    expect(bytes).toBeInstanceOf(Uint8Array);
+    expect(append).toBe(false); // replace the bank, not stack another on top
+  });
+
+  it("setSoundFontUrl ignores a repeat of the loaded bank", async () => {
+    const alpha = fakeAlphaTab();
+    const preview = createPreviewSynth(alpha.ns, OPTS)!;
+    await settle();
+    preview.setSoundFontUrl(OPTS.soundFontUrl);
+    await settle();
+    expect(alpha.synths[0].loadSoundFont).toHaveBeenCalledTimes(1); // only the initial load
+  });
+
+  it("setSoundFontUrl keeps the old bank when the new one cannot be fetched", async () => {
+    const alpha = fakeAlphaTab();
+    const preview = createPreviewSynth(alpha.ns, OPTS)!;
+    await settle();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: false, status: 404, arrayBuffer: async () => new ArrayBuffer(0) })),
+    );
+    preview.setSoundFontUrl("/missing.sf2");
+    await settle();
+    expect(alpha.synths[0].loadSoundFont).toHaveBeenCalledTimes(1); // the initial bank only
+    expect(console.warn).toHaveBeenCalledTimes(1);
+  });
+
+  it("setSoundFontUrl ignores a superseded fetch that finishes late", async () => {
+    const alpha = fakeAlphaTab();
+    const preview = createPreviewSynth(alpha.ns, OPTS)!;
+    await settle();
+    let slowResolve: (value: { ok: boolean; status: number; arrayBuffer: () => Promise<ArrayBuffer> }) => void = () => {};
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string) =>
+        url === "/slow.sf2"
+          ? new Promise((resolve) => {
+              slowResolve = resolve;
+            })
+          : Promise.resolve({ ok: true, status: 200, arrayBuffer: async () => new ArrayBuffer(8) }),
+      ),
+    );
+    preview.setSoundFontUrl("/slow.sf2");
+    preview.setSoundFontUrl("/fast.sf2"); // picker moved on before the slow fetch finished
+    await settle();
+    expect(alpha.synths[0].loadSoundFont).toHaveBeenCalledTimes(2); // initial + fast only
+    slowResolve({ ok: true, status: 200, arrayBuffer: async () => new ArrayBuffer(8) });
+    await settle();
+    expect(alpha.synths[0].loadSoundFont).toHaveBeenCalledTimes(2); // the slow one never lands
+  });
 });
