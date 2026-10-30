@@ -31,6 +31,16 @@ export interface MixPrefs {
    * same for every tab.
    */
   previewNotes: boolean;
+  /**
+   * Whether the volume/click sliders are shown in the editor toolbar or
+   * folded behind the Mix button. Layout, not listening — but it belongs to
+   * the same window-wide habit as the rest: whoever folds it once should not
+   * have to fold it again on every tab. Off by default: the sliders earn
+   * their ~30px of toolbar height (enough to wrap a whole row onto two
+   * lines, stealing that height from the score) only while you are actually
+   * balancing volumes.
+   */
+  mixOpen: boolean;
 }
 
 const KEY = "tabEditorMix";
@@ -41,6 +51,7 @@ export const DEFAULT_MIX: MixPrefs = {
   metronomeOn: false,
   countIn: true,
   previewNotes: true,
+  mixOpen: false,
 };
 
 function clamp01(value: unknown, fallback: number): number {
@@ -69,6 +80,9 @@ function loadMix(): MixPrefs {
       // Same reasoning as countIn: prefs saved before the preview existed
       // carry no flag, and must come back as the default (on).
       previewNotes: p.previewNotes !== false,
+      // mixOpen arrived with the toolbar rework; older saved prefs carry no
+      // flag and get the layout default (folded), like the others.
+      mixOpen: p.mixOpen === true,
     };
   } catch {
     return DEFAULT_MIX;

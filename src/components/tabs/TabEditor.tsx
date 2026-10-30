@@ -53,6 +53,14 @@ import {
 } from "@/lib/tabscore/mixPrefs";
 import { readTuningId, setTuning } from "@/lib/tabscore/commands/tuning";
 import {
+  subscribeToSoundBankChanges,
+  getSoundBankPreference,
+  getServerSoundBank,
+  setSoundBankPreference,
+  soundBankById,
+} from "@/lib/soundBank";
+import SoundBankControl from "@/components/SoundBankControl";
+import {
   toggleRepeatStart,
   toggleRepeatEnd,
   readBarRepeat,
@@ -204,6 +212,19 @@ const SAVE_LABEL: Record<SaveState, string | null> = {
  * its dependencies (`commandDeps`) — the refs it reads, and the callbacks,
  * `commitTex` among them, through which it acts.
  */
+const SOURCE_WIDTH_KEY = "tabEditorSourceWidth";
+const SOURCE_WIDTH_DEFAULT = 420;
+const clampSourceWidth = (w: number) =>
+  Math.max(240, Math.min(w, Math.floor(window.innerWidth * 0.7)));
+function loadSourceWidth(): number {
+  try {
+    const n = Number(localStorage.getItem(SOURCE_WIDTH_KEY));
+    return Number.isFinite(n) && n > 0 ? n : SOURCE_WIDTH_DEFAULT;
+  } catch {
+    return SOURCE_WIDTH_DEFAULT;
+  }
+}
+
 export default function TabEditor({
   initialTex,
   initialSpeed,
@@ -240,6 +261,15 @@ export default function TabEditor({
     setMix({ ...getMix(), ...patch });
     containerRef.current?.focus();
   }, []);
+  // Which sound bank playback uses — the same kind of listening preference
+  // as the mix, kept in localStorage and shared with the GP player through
+  // src/lib/soundBank.ts. It changes only the samples the synth sounds with,
+  // never the tab's text.
+  const soundBankId = useSyncExternalStore(subscribeToSoundBankChanges, getSoundBankPreference, getServerSoundBank);
+  const handleSoundBankChange = useCallback((id: string) => {
+    setSoundBankPreference(id);
+    containerRef.current?.focus();
+  }, []);
   // Bars dragged out on the canvas to drill a section, zero-based inclusive.
   const [loopRange, setLoopRange] = useState<{ startBar: number; endBar: number } | null>(null);
   // How many times the repeat-bars button writes. Not derived from the
@@ -247,6 +277,29 @@ export default function TabEditor({
   // button is pressed. Once written, the score itself carries the count.
   const [repeatCount, setRepeatCount] = useState(2);
   const [showSource, setShowSource] = useState(initialShowSource);
+  const [sourceWidth, setSourceWidth] = useState(loadSourceWidth);
+  const startSourceResize = (e: React.PointerEvent) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = sourceWidth;
+    let width = startWidth;
+    const onMove = (m: PointerEvent) => {
+      // The pane is on the right, so dragging left widens it.
+      width = clampSourceWidth(startWidth + (startX - m.clientX));
+      setSourceWidth(width);
+    };
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      try {
+        localStorage.setItem(SOURCE_WIDTH_KEY, String(width));
+      } catch {
+        /* storage unavailable: the width just won't be remembered */
+      }
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  };
 
   // Carried over from AlphaTexPlayer, which this replaces in the track
   // dialog: without it, practising a tab silently stops counting toward
@@ -1391,27 +1444,95 @@ export default function TabEditor({
         </div>
         <TempoControl tempo={tempo} onChange={handleTempoChange} disabled={!parsed.ok} />
         <TuningControl tuningId={tuningId} onChange={handleTuningChange} disabled={!parsed.ok} />
+        <SoundBankControl bankId={soundBankId} onChange={handleSoundBankChange} />
         <PlaybackSpeedControl speed={speed} onChange={setSpeed} />
-        <PlaybackMixControl
-          volume={mix.volume}
-          onVolumeChange={(volume) => updateMix({ volume })}
-          metronome={mix.metronome}
-          metronomeOn={mix.metronomeOn}
-          onMetronomeToggle={() => updateMix({ metronomeOn: !mix.metronomeOn })}
-          // Dragging the slider to the bottom is a mute, not an "off" — the
-          // toggle owns that, and a stored zero would leave the slider with
-          // nothing to restore. See mixPrefs.ts.
-          onMetronomeChange={(metronome) => updateMix({ metronome: Math.max(0.05, metronome) })}
-          countIn={mix.countIn}
-          onCountInToggle={() => updateMix({ countIn: !mix.countIn })}
-          previewNotes={mix.previewNotes}
-          onPreviewNotesToggle={() => {
-            const next = !mix.previewNotes;
-            updateMix({ previewNotes: next });
-            // Off means silence now, not after a ringing whole note ends.
-            if (!next) cancelPreview();
-          }}
-        />
+        <button
+          type="button"
+          onClick={() => updateMix({ mixOpen: !mix.mixOpen })}
+          title={mix.mixOpen ? "Hide volume and click controls" : "Show volume and click controls"}
+          aria-label="Volume and click controls"
+          aria-pressed={mix.mixOpen}
+          className={`px-2 py-1 text-xs rounded border focus:outline-none focus:border-blue-500 ${
+            mix.mixOpen
+              ? "bg-gray-500 border-gray-400 text-white"
+              : "bg-gray-600 border-gray-500 text-gray-300 hover:bg-gray-500 hover:text-white"
+          }`}
+        >
+          🔊 Mix
+        </button>
+        {mix.mixOpen && (
+          <PlaybackMixControl
+            volume={mix.volume}
+            onVolumeChange={(volume) => updateMix({ volume })}
+            metronome={mix.metronome}
+            metronomeOn={mix.metronomeOn}
+            onMetronomeToggle={() => updateMix({ metronomeOn: !mix.metronomeOn })}
+            // Dragging the slider to the bottom is a mute, not an "off" — the
+            // toggle owns that, and a stored zero would leave the slider with
+            // nothing to restore. See mixPrefs.ts.
+            onMetronomeChange={(metronome) => updateMix({ metronome: Math.max(0.05, metronome) })}
+            countIn={mix.countIn}
+            onCountInToggle={() => updateMix({ countIn: !mix.countIn })}
+            previewNotes={mix.previewNotes}
+            onPreviewNotesToggle={() => {
+              const next = !mix.previewNotes;
+              updateMix({ previewNotes: next });
+              // Off means silence now, not after a ringing whole note ends.
+              if (!next) cancelPreview();
+            }}
+          />
+        )}
+        {/* Undo/redo moved to the writing row below: they act on what you
+            press there, and every control removed from this row is vertical
+            space the score gets back — a full-width mix slider plus an undo
+            pair was enough to wrap this whole row onto two lines. */}
+      </div>
+
+      {/* Writing row: what you press while writing notes — the note menu,
+          beats and bars, repeats, undo/redo for exactly those presses, and
+          at the right edge the panel toggles. Undo/redo and the Source /
+          Shortcuts / save-status group used to sit in the settings row and
+          pushed it onto a second line even on a full-width window; every
+          sub-row they cost is height taken straight off the score. */}
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        {MENU_SUPPORTED && (
+          <button
+            type="button"
+            aria-haspopup="menu"
+            aria-expanded={menuShown}
+            aria-controls={menuId}
+            onClick={handleMenuButton}
+            title="Note menu: every command for the note at the caret (Enter, or right-click a beat)"
+            className={`px-2 py-1 text-xs rounded border focus:outline-none focus:border-blue-500 ${
+              menuShown
+                ? "bg-gray-500 border-gray-400 text-white"
+                : "bg-gray-600 border-gray-500 text-gray-300 hover:bg-gray-500 hover:text-white"
+            }`}
+          >
+            ⋯ Menu
+          </button>
+        )}
+        <div className="flex items-center gap-1">
+          {(
+            [
+              ["+ Beat", "Insert a beat after the caret (Insert)", "insertBeat"],
+              ["− Beat", "Delete the beat at the caret, or the selected beats (Shift+Delete)", "deleteBeat"],
+              ["+ Bar", "Add a bar at the end (Ctrl+Enter)", "addBar"],
+              ["− Bar", "Delete the bar at the caret (Ctrl+Shift+Backspace)", "deleteBar"],
+            ] as const
+          ).map(([label, title, kind]) => (
+            <button
+              key={label}
+              type="button"
+              disabled={!parsed.ok}
+              onClick={() => run({ kind })}
+              title={title}
+              className="px-2 py-1 text-xs rounded bg-gray-600 border border-gray-500 text-gray-300 hover:bg-gray-500 hover:text-white focus:outline-none focus:border-blue-500 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-gray-600 disabled:hover:text-gray-300"
+            >
+              {label}
+            </button>
+          ))}
+        </div>
         <div className="flex items-center gap-1">
           <button
             type="button"
@@ -1431,6 +1552,46 @@ export default function TabEditor({
           >
             ↷ Redo
           </button>
+        </div>
+        <RepeatBarsControl
+          barIndex={caret.barIndex}
+          startOn={barRepeat.open}
+          endCount={barRepeat.count}
+          count={shownRepeatCount}
+          onCountChange={handleRepeatCountChange}
+          onToggleStart={handleToggleRepeatStart}
+          onToggleEnd={handleToggleRepeatEnd}
+          disabled={!parsed.ok}
+        />
+        <span className="w-px self-stretch bg-gray-700" aria-hidden />
+        <div className="flex flex-wrap items-center gap-1">
+          <button
+            type="button"
+            disabled={!parsed.ok}
+            onClick={() => run({ kind: "toggleTie" })}
+            title="Tie to the previous note on this string (i)"
+            className="px-2 py-1 text-xs rounded bg-gray-600 border border-gray-500 text-gray-300 hover:bg-gray-500 hover:text-white focus:outline-none focus:border-blue-500 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-gray-600 disabled:hover:text-gray-300"
+          >
+            Tie<span className="ml-1 text-gray-500">i</span>
+          </button>
+          <button
+            type="button"
+            disabled={!parsed.ok}
+            onClick={() => run({ kind: "toggleTuplet" })}
+            aria-pressed={tuplet === TRIPLET}
+            title="Triplet — make this beat and the next two one group (u)"
+            className={`px-2 py-1 text-xs rounded border focus:outline-none focus:border-blue-500 disabled:opacity-40 disabled:cursor-not-allowed ${
+              tuplet === TRIPLET
+                ? "bg-purple-800 border-purple-600 text-white hover:bg-purple-700"
+                : "bg-gray-600 border-gray-500 text-gray-300 hover:bg-gray-500 hover:text-white"
+            }`}
+          >
+            Triplet<span className="ml-1 text-gray-500">u</span>
+          </button>
+          <TechniquePalette
+            disabled={!parsed.ok}
+            onSelect={(technique: Technique) => run({ kind: "toggleTechnique", technique })}
+          />
         </div>
         <div className="ml-auto flex items-center gap-1">
           <button
@@ -1477,87 +1638,6 @@ export default function TabEditor({
               </button>
             )}
           </div>
-        </div>
-      </div>
-
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-        {MENU_SUPPORTED && (
-          <button
-            type="button"
-            aria-haspopup="menu"
-            aria-expanded={menuShown}
-            aria-controls={menuId}
-            onClick={handleMenuButton}
-            title="Note menu: every command for the note at the caret (Enter, or right-click a beat)"
-            className={`px-2 py-1 text-xs rounded border focus:outline-none focus:border-blue-500 ${
-              menuShown
-                ? "bg-gray-500 border-gray-400 text-white"
-                : "bg-gray-600 border-gray-500 text-gray-300 hover:bg-gray-500 hover:text-white"
-            }`}
-          >
-            ⋯ Menu
-          </button>
-        )}
-        <div className="flex items-center gap-1">
-          {(
-            [
-              ["+ Beat", "Insert a beat after the caret (Insert)", "insertBeat"],
-              ["− Beat", "Delete the beat at the caret, or the selected beats (Shift+Delete)", "deleteBeat"],
-              ["+ Bar", "Add a bar at the end (Ctrl+Enter)", "addBar"],
-              ["− Bar", "Delete the bar at the caret (Ctrl+Shift+Backspace)", "deleteBar"],
-            ] as const
-          ).map(([label, title, kind]) => (
-            <button
-              key={label}
-              type="button"
-              disabled={!parsed.ok}
-              onClick={() => run({ kind })}
-              title={title}
-              className="px-2 py-1 text-xs rounded bg-gray-600 border border-gray-500 text-gray-300 hover:bg-gray-500 hover:text-white focus:outline-none focus:border-blue-500 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-gray-600 disabled:hover:text-gray-300"
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-        <RepeatBarsControl
-          barIndex={caret.barIndex}
-          startOn={barRepeat.open}
-          endCount={barRepeat.count}
-          count={shownRepeatCount}
-          onCountChange={handleRepeatCountChange}
-          onToggleStart={handleToggleRepeatStart}
-          onToggleEnd={handleToggleRepeatEnd}
-          disabled={!parsed.ok}
-        />
-        <span className="w-px self-stretch bg-gray-700" aria-hidden />
-        <div className="flex flex-wrap items-center gap-1">
-          <button
-            type="button"
-            disabled={!parsed.ok}
-            onClick={() => run({ kind: "toggleTie" })}
-            title="Tie to the previous note on this string (i)"
-            className="px-2 py-1 text-xs rounded bg-gray-600 border border-gray-500 text-gray-300 hover:bg-gray-500 hover:text-white focus:outline-none focus:border-blue-500 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-gray-600 disabled:hover:text-gray-300"
-          >
-            Tie<span className="ml-1 text-gray-500">i</span>
-          </button>
-          <button
-            type="button"
-            disabled={!parsed.ok}
-            onClick={() => run({ kind: "toggleTuplet" })}
-            aria-pressed={tuplet === TRIPLET}
-            title="Triplet — make this beat and the next two one group (u)"
-            className={`px-2 py-1 text-xs rounded border focus:outline-none focus:border-blue-500 disabled:opacity-40 disabled:cursor-not-allowed ${
-              tuplet === TRIPLET
-                ? "bg-purple-800 border-purple-600 text-white hover:bg-purple-700"
-                : "bg-gray-600 border-gray-500 text-gray-300 hover:bg-gray-500 hover:text-white"
-            }`}
-          >
-            Triplet<span className="ml-1 text-gray-500">u</span>
-          </button>
-          <TechniquePalette
-            disabled={!parsed.ok}
-            onSelect={(technique: Technique) => run({ kind: "toggleTechnique", technique })}
-          />
         </div>
       </div>
       </div>
@@ -1649,6 +1729,7 @@ export default function TabEditor({
             volume={mix.volume}
             metronomeVolume={metronomeVolumeOf(mix)}
             countInVolume={countInVolumeOf(mix)}
+            soundBankUrl={soundBankById(soundBankId).url}
             onLoopChange={handleLoopChange}
             onCaretClick={handleCaretClick}
             barStatus={barStatus}
@@ -1672,7 +1753,15 @@ export default function TabEditor({
           />
         </div>
         {showSource && (
-          <div className="w-[420px] shrink-0 min-h-0">
+          <div className="relative shrink-0 min-h-0" style={{ width: sourceWidth }}>
+            <div
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="Resize the source pane"
+              title="Drag to resize the source pane"
+              onPointerDown={startSourceResize}
+              className="absolute -left-1.5 top-0 bottom-0 w-1.5 z-10 cursor-col-resize rounded hover:bg-blue-500/60 active:bg-blue-500"
+            />
             <SourcePane tex={tex} diagnostics={parsed.diagnostics} onChange={handleSourceChange} />
           </div>
         )}

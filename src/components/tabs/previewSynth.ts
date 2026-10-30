@@ -18,6 +18,13 @@ export interface PreviewSynth {
   stop(): void;
   /** 0-1, alphaTab's unit. Stored; applied by the next `play`. */
   setVolume(volume: number): void;
+  /**
+   * Swap the sound bank this preview sounds with — the same picker the score
+   * uses, so a preview and the song it sits beside never sound different.
+   * Keeps the current bank until the new one is in hand; a bank that cannot
+   * be fetched leaves the preview on the old one.
+   */
+  setSoundFontUrl(url: string): void;
   destroy(): void;
 }
 
@@ -81,6 +88,11 @@ export function createPreviewSynth(alphaTab: any, opts: PreviewSynthOptions): Pr
   let soundFontReady = false;
   let primed = false;
   let volume = opts.volume;
+  // The bank currently loaded into this synth, and how many swaps are queued
+  // ahead of it: a fetch can finish out of order, so only the newest request
+  // may tell the synth what to load.
+  let loadedUrl = opts.soundFontUrl;
+  let soundFontRequestId = 0;
   let warned = false;
   const warnOnce = (message: string, error?: unknown) => {
     if (warned) return;
@@ -116,6 +128,28 @@ export function createPreviewSynth(alphaTab: any, opts: PreviewSynthOptions): Pr
     });
   };
 
+  // Fetch a bank and hand its bytes to the synth. The worker reads `.length`
+  // off what it is given, so this needs bytes rather than a bare ArrayBuffer;
+  // a bank the score has just fetched comes from the HTTP cache. `id` guards
+  // the order: when the picker moves on mid-fetch, a superseded swap must not
+  // land after the newer one, and only the newest request may report failure.
+  const loadBank = (url: string) => {
+    const id = ++soundFontRequestId;
+    void fetch(url)
+      .then(async (response) => {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const bytes = new Uint8Array(await response.arrayBuffer());
+        if (destroyed || id !== soundFontRequestId || !synth) return;
+        loadedUrl = url;
+        synth.loadSoundFont(bytes, false);
+      })
+      .catch((error) => {
+        if (!destroyed && id === soundFontRequestId) {
+          warnOnce("Note preview is off: its soundfont could not be fetched.", error);
+        }
+      });
+  };
+
   try {
     // The same output class as the score's player. Without a score output to
     // copy, alphaTab's own rule: an AudioWorklet in a secure context, else a
@@ -140,15 +174,7 @@ export function createPreviewSynth(alphaTab: any, opts: PreviewSynthOptions): Pr
     // The worker reads `.length` off what it is given, so it needs bytes rather
     // than a bare ArrayBuffer. The score has just fetched the same file, so this
     // comes from the HTTP cache.
-    void fetch(opts.soundFontUrl)
-      .then(async (response) => {
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const bytes = new Uint8Array(await response.arrayBuffer());
-        if (!destroyed) synth!.loadSoundFont(bytes, false); // set above, before this fetch began
-      })
-      .catch((error) => {
-        if (!destroyed) warnOnce("Note preview is off: its soundfont could not be fetched.", error);
-      });
+    loadBank(opts.soundFontUrl);
 
     // The first worklet module load on a fresh AudioContext takes ~50 ms. Doing
     // it now, on the preview's own context, keeps it out of the first real
@@ -236,6 +262,10 @@ export function createPreviewSynth(alphaTab: any, opts: PreviewSynthOptions): Pr
     },
     setVolume(next) {
       if (!destroyed) volume = next;
+    },
+    setSoundFontUrl(url) {
+      if (destroyed || url === loadedUrl) return;
+      loadBank(url);
     },
     destroy() {
       if (destroyed) return;
