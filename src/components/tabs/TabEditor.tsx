@@ -18,6 +18,7 @@ import TechniquePalette from "./TechniquePalette";
 import TuningControl from "./TuningControl";
 import PlaybackMixControl from "./PlaybackMixControl";
 import RepeatBarsControl from "./RepeatBarsControl";
+import TimeSignatureControl from "./TimeSignatureControl";
 
 import { parseTex } from "@/lib/tabscore/parse";
 import { normalizeNewlines } from "@/lib/tabscore/offsets";
@@ -65,6 +66,11 @@ import {
   toggleRepeatEnd,
   readBarRepeat,
 } from "@/lib/tabscore/commands/repeat";
+import {
+  readTimeSignature,
+  setTimeSignature,
+  type TimeSignature,
+} from "@/lib/tabscore/commands/timeSignature";
 
 export interface TabEditorProps {
   initialTex: string;
@@ -836,6 +842,20 @@ export default function TabEditor({
     containerRef.current?.focus();
   }, [commitTex, cancelPreview]);
 
+  // Like the repeat signs, a time signature goes on the caret's bar — and,
+  // as in written music, holds from there until the next bar that changes it.
+  const timeSignature = useMemo(
+    () => (parsed.ok ? readTimeSignature(parsed.score, caret.barIndex) : null),
+    [parsed, caret.barIndex],
+  );
+
+  const handleTimeSignatureChange = useCallback((next: TimeSignature) => {
+    cancelPreview();
+    const result = setTimeSignature(texRef.current, caretRef.current, caretRef.current.barIndex, next);
+    if (result) commitTex(result.text, result.caret);
+    containerRef.current?.focus();
+  }, [commitTex, cancelPreview]);
+
   const handleTuningChange = useCallback((presetId: string) => {
     cancelPreview();
     const result = setTuning(texRef.current, presetId, caretRef.current);
@@ -1489,7 +1509,7 @@ export default function TabEditor({
       </div>
 
       {/* Writing row: what you press while writing notes — the note menu,
-          beats and bars, repeats, undo/redo for exactly those presses, and
+          beats and bars, repeats and the time signature, undo/redo for exactly those presses, and
           at the right edge the panel toggles. Undo/redo and the Source /
           Shortcuts / save-status group used to sit in the settings row and
           pushed it onto a second line even on a full-width window; every
@@ -1561,6 +1581,12 @@ export default function TabEditor({
           onCountChange={handleRepeatCountChange}
           onToggleStart={handleToggleRepeatStart}
           onToggleEnd={handleToggleRepeatEnd}
+          disabled={!parsed.ok}
+        />
+        <TimeSignatureControl
+          barIndex={caret.barIndex}
+          value={timeSignature}
+          onChange={handleTimeSignatureChange}
           disabled={!parsed.ok}
         />
         <span className="w-px self-stretch bg-gray-700" aria-hidden />
