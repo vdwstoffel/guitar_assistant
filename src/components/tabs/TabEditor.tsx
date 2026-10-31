@@ -19,6 +19,7 @@ import TuningControl from "./TuningControl";
 import PlaybackMixControl from "./PlaybackMixControl";
 import RepeatBarsControl from "./RepeatBarsControl";
 import TimeSignatureControl from "./TimeSignatureControl";
+import AlternateEndingsControl from "./AlternateEndingsControl";
 
 import { parseTex } from "@/lib/tabscore/parse";
 import { normalizeNewlines } from "@/lib/tabscore/offsets";
@@ -71,6 +72,7 @@ import {
   setTimeSignature,
   type TimeSignature,
 } from "@/lib/tabscore/commands/timeSignature";
+import { readEndings, toggleEnding } from "@/lib/tabscore/commands/endings";
 
 export interface TabEditorProps {
   initialTex: string;
@@ -842,6 +844,20 @@ export default function TabEditor({
     containerRef.current?.focus();
   }, [commitTex, cancelPreview]);
 
+  // Ending numbers go on the caret's bar too; a longer ending is several
+  // bars marked alike, which alphaTab draws as one bracket.
+  const endings = useMemo(
+    () => (parsed.ok ? readEndings(parsed.score, caret.barIndex) : []),
+    [parsed, caret.barIndex],
+  );
+
+  const handleToggleEnding = useCallback((ending: number) => {
+    cancelPreview();
+    const result = toggleEnding(texRef.current, caretRef.current, caretRef.current.barIndex, ending);
+    if (result) commitTex(result.text, result.caret);
+    containerRef.current?.focus();
+  }, [commitTex, cancelPreview]);
+
   // Like the repeat signs, a time signature goes on the caret's bar — and,
   // as in written music, holds from there until the next bar that changes it.
   const timeSignature = useMemo(
@@ -1509,7 +1525,7 @@ export default function TabEditor({
       </div>
 
       {/* Writing row: what you press while writing notes — the note menu,
-          beats and bars, repeats and the time signature, undo/redo for exactly those presses, and
+          beats and bars, repeats and endings and the time signature, undo/redo for exactly those presses, and
           at the right edge the panel toggles. Undo/redo and the Source /
           Shortcuts / save-status group used to sit in the settings row and
           pushed it onto a second line even on a full-width window; every
@@ -1581,6 +1597,12 @@ export default function TabEditor({
           onCountChange={handleRepeatCountChange}
           onToggleStart={handleToggleRepeatStart}
           onToggleEnd={handleToggleRepeatEnd}
+          disabled={!parsed.ok}
+        />
+        <AlternateEndingsControl
+          barIndex={caret.barIndex}
+          endings={endings}
+          onToggle={handleToggleEnding}
           disabled={!parsed.ok}
         />
         <TimeSignatureControl
