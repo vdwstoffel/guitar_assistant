@@ -14,7 +14,7 @@ export interface SerializerOptions {
   title: string;
   tempo: number;
   duration: AlphaTexDuration;
-  /** alphaTab instrument code (25 = acoustic nylon, 29 = overdriven guitar). */
+  /** Zero-based General MIDI program (24 = nylon acoustic, 25 = steel acoustic, 29 = overdriven guitar). */
   instrument?: number;
 }
 

@@ -31,7 +31,7 @@ const ON = "bg-purple-800 border-purple-600 text-white hover:bg-purple-700";
  * because that is how the signs work: they mark two bars, and everything
  * between them is implied. Nothing has to be selected in between.
  *
- * Deliberately distinct from the ⟳ Repeat transport toggle and the drag-
+ * Deliberately distinct from the ⟳ Loop transport toggle and the drag-
  * selected practice section, which both only affect playback. This one
  * changes the music: the score draws `𝄆 … 𝄇` and alphaTab plays the section
  * that many times, for anyone reading the tab afterwards.

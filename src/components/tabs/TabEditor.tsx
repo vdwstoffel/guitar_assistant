@@ -7,7 +7,6 @@ import NoteMenu, { type NoteMenuHandle } from "./NoteMenu";
 import { onOwnScrollbar } from "./ownScrollbar";
 import PlaybackSpeedControl from "@/components/PlaybackSpeedControl";
 import KeyboardShortcutsHelp from "@/components/KeyboardShortcutsHelp";
-import TempoControl from "./TempoControl";
 import { TAB_EDITOR_SHORTCUTS } from "./tabEditorShortcuts";
 import { readTempo, setTempo } from "@/lib/tabscore/commands/tempo";
 import { usePracticeSessionTracker } from "@/hooks/usePracticeSessionTracker";
@@ -15,11 +14,10 @@ import type { TrackableItem } from "@/lib/metrics/playedRef";
 import { clampPlaybackSpeed } from "@/lib/playbackSpeed";
 import SourcePane from "./SourcePane";
 import TechniquePalette from "./TechniquePalette";
-import TuningControl from "./TuningControl";
+import ToolbarPopover from "./ToolbarPopover";
+import TabSettingsControl from "./TabSettingsControl";
+import BarControl from "./BarControl";
 import PlaybackMixControl from "./PlaybackMixControl";
-import RepeatBarsControl from "./RepeatBarsControl";
-import TimeSignatureControl from "./TimeSignatureControl";
-import AlternateEndingsControl from "./AlternateEndingsControl";
 
 import { parseTex } from "@/lib/tabscore/parse";
 import { normalizeNewlines } from "@/lib/tabscore/offsets";
@@ -54,6 +52,7 @@ import {
   type MixPrefs,
 } from "@/lib/tabscore/mixPrefs";
 import { readTuningId, setTuning } from "@/lib/tabscore/commands/tuning";
+import { readGuitarId, setGuitar } from "@/lib/tabscore/commands/instrument";
 import {
   subscribeToSoundBankChanges,
   getSoundBankPreference,
@@ -375,6 +374,12 @@ export default function TabEditor({
   // carries a tuning no preset names, which the control shows as "Custom".
   const tuningId = useMemo(
     () => (parsed.ok ? readTuningId(tex, parsed.scoreNode) : null),
+    [tex, parsed],
+  );
+  // The guitar is a directive too. null means an instrument the preset list
+  // does not name, which the control shows as "Other".
+  const guitarId = useMemo(
+    () => (parsed.ok ? readGuitarId(tex, parsed.score) : null),
     [tex, parsed],
   );
   // Synced in the effect below with the rest, not during render: the
@@ -762,8 +767,8 @@ export default function TabEditor({
   }, [cancelPreview]);
 
   // Dragging out a section is only ever done in order to drill it, so it
-  // turns Repeat on by itself; clearing the section leaves Repeat alone,
-  // since by then it is an ordinary whole-score repeat the user can see.
+  // turns Loop on by itself; clearing the section leaves Loop alone,
+  // since by then it is an ordinary whole-score loop the user can see.
   const handleLoopChange = useCallback(
     (range: { startBar: number; endBar: number } | null) => {
       setLoopRange(range);
@@ -875,6 +880,13 @@ export default function TabEditor({
   const handleTuningChange = useCallback((presetId: string) => {
     cancelPreview();
     const result = setTuning(texRef.current, presetId, caretRef.current);
+    if (result) commitTex(result.text, result.caret);
+    containerRef.current?.focus();
+  }, [commitTex, cancelPreview]);
+
+  const handleGuitarChange = useCallback((presetId: string) => {
+    cancelPreview();
+    const result = setGuitar(texRef.current, presetId, caretRef.current);
     if (result) commitTex(result.text, result.caret);
     containerRef.current?.focus();
   }, [commitTex, cancelPreview]);
@@ -1419,11 +1431,11 @@ export default function TabEditor({
         }}
       >
       {/*
-        Two rows, not one: play/tempo/tuning/speed are settings you reach for
-        between takes, while beats, bars, repeats and techniques are what you
-        press while writing. Crammed onto one line the fourteen technique
-        buttons wrapped into a narrow four-row block wedged against the right
-        edge — the layout the user called cluttered.
+        Two rows, sorted by what each control acts on. The first is playback
+        and the settings around it — speed, the mix, and what is written into
+        the tab — folded behind buttons, since all three are set and left; the
+        second is what you press while writing. Laid out flat the two rows
+        wrapped to four in the docked panel, the layout the user called messy.
       */}
       <div className="flex flex-wrap items-center gap-2">
         <div className="flex items-center gap-1">
@@ -1447,11 +1459,13 @@ export default function TabEditor({
           >
             ⏹ Stop
           </button>
+          {/* "Loop", not "Repeat": the Bar menu's repeat signs are notation,
+              and two different things both called Repeat read as one. */}
           <button
             type="button"
             onClick={() => setLooping((prev) => !prev)}
-            title={looping ? "Repeat on" : "Repeat off"}
-            aria-label="Repeat"
+            title={looping ? "Loop on" : "Loop off"}
+            aria-label="Loop"
             aria-pressed={looping}
             className={`px-2 py-1 text-xs rounded border focus:outline-none focus:border-blue-500 ${
               looping
@@ -1459,7 +1473,7 @@ export default function TabEditor({
                 : "bg-gray-600 border-gray-500 text-gray-300 hover:bg-gray-500 hover:text-white"
             }`}
           >
-            ⟳ Repeat
+            ⟳ Loop
           </button>
           {loopRange && (
             <span className="flex items-center gap-1 px-2 py-1 text-xs rounded bg-blue-900/60 border border-blue-700 text-blue-200">
@@ -1478,25 +1492,19 @@ export default function TabEditor({
             </span>
           )}
         </div>
-        <TempoControl tempo={tempo} onChange={handleTempoChange} disabled={!parsed.ok} />
-        <TuningControl tuningId={tuningId} onChange={handleTuningChange} disabled={!parsed.ok} />
-        <SoundBankControl bankId={soundBankId} onChange={handleSoundBankChange} />
-        <PlaybackSpeedControl speed={speed} onChange={setSpeed} />
-        <button
-          type="button"
-          onClick={() => updateMix({ mixOpen: !mix.mixOpen })}
-          title={mix.mixOpen ? "Hide volume and click controls" : "Show volume and click controls"}
-          aria-label="Volume and click controls"
-          aria-pressed={mix.mixOpen}
-          className={`px-2 py-1 text-xs rounded border focus:outline-none focus:border-blue-500 ${
-            mix.mixOpen
-              ? "bg-gray-500 border-gray-400 text-white"
-              : "bg-gray-600 border-gray-500 text-gray-300 hover:bg-gray-500 hover:text-white"
-          }`}
+        <span className="w-px self-stretch bg-gray-700" aria-hidden />
+        <ToolbarPopover
+          label={`Speed ${speed}%`}
+          title="Practice playback speed — not the written tempo"
+          ariaLabel="Playback speed"
         >
-          🔊 Mix
-        </button>
-        {mix.mixOpen && (
+          <PlaybackSpeedControl speed={speed} onChange={setSpeed} />
+        </ToolbarPopover>
+        <ToolbarPopover
+          label="🔊 Mix"
+          title="Volume, click, count-in, note preview and sound — how you hear every tab"
+          ariaLabel="Volume and click controls"
+        >
           <PlaybackMixControl
             volume={mix.volume}
             onVolumeChange={(volume) => updateMix({ volume })}
@@ -1517,37 +1525,95 @@ export default function TabEditor({
               if (!next) cancelPreview();
             }}
           />
-        )}
-        {/* Undo/redo moved to the writing row below: they act on what you
-            press there, and every control removed from this row is vertical
-            space the score gets back — a full-width mix slider plus an undo
-            pair was enough to wrap this whole row onto two lines. */}
-      </div>
-
-      {/* Writing row: what you press while writing notes — the note menu,
-          beats and bars, repeats and endings and the time signature, undo/redo for exactly those presses, and
-          at the right edge the panel toggles. Undo/redo and the Source /
-          Shortcuts / save-status group used to sit in the settings row and
-          pushed it onto a second line even on a full-width window; every
-          sub-row they cost is height taken straight off the score. */}
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-        {MENU_SUPPORTED && (
+          {/* The sound bank is a listening preference shared by every tab,
+              like the volume — not a setting of this one. */}
+          <SoundBankControl bankId={soundBankId} onChange={handleSoundBankChange} />
+        </ToolbarPopover>
+        <TabSettingsControl
+          tempo={tempo}
+          tuningId={tuningId}
+          guitarId={guitarId}
+          onTempoChange={handleTempoChange}
+          onTuningChange={handleTuningChange}
+          onGuitarChange={handleGuitarChange}
+          disabled={!parsed.ok}
+        />
+        <div className="ml-auto flex items-center gap-1">
           <button
             type="button"
-            aria-haspopup="menu"
-            aria-expanded={menuShown}
-            aria-controls={menuId}
-            onClick={handleMenuButton}
-            title="Note menu: every command for the note at the caret (Enter, or right-click a beat)"
+            onClick={() => setShowSource((prev) => !prev)}
+            title={showSource ? "Hide the AlphaTex source" : "Show the AlphaTex source"}
+            aria-label="Toggle source"
+            aria-pressed={showSource}
             className={`px-2 py-1 text-xs rounded border focus:outline-none focus:border-blue-500 ${
-              menuShown
+              showSource
                 ? "bg-gray-500 border-gray-400 text-white"
                 : "bg-gray-600 border-gray-500 text-gray-300 hover:bg-gray-500 hover:text-white"
             }`}
           >
-            ⋯ Menu
+            {"</>"}
           </button>
-        )}
+          <button
+            type="button"
+            // Opening the panel closes the note menu, as `?` does: a click's
+            // press has already closed it; pressed from the keyboard, this does.
+            onClick={() => {
+              closeMenu();
+              setShowHelp(true);
+            }}
+            title="Keyboard shortcuts (?)"
+            aria-label="Keyboard shortcuts"
+            className="px-2 py-1 text-xs rounded bg-gray-600 border border-gray-500 text-gray-300 hover:bg-gray-500 hover:text-white focus:outline-none focus:border-blue-500"
+          >
+            ?
+          </button>
+          <div className="flex items-center gap-2 text-xs pl-1" aria-live="polite">
+            {saveLabel && (
+              <span className={saveState === "error" ? "text-red-400" : "text-gray-400"}>
+                {saveLabel}
+              </span>
+            )}
+            {saveState === "error" && (
+              <button
+                type="button"
+                onClick={performSave}
+                className="text-blue-400 hover:text-blue-300 underline"
+              >
+                Retry
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Writing row: what you press while writing notes, most used first —
+          undo/redo, beats and bars, ties, triplets and techniques — then the
+          caret's bar settings and the note menu. Groups are split by a rule
+          rather than spacing alone, so the eye finds a group before a button. */}
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            disabled={!canUndo}
+            onClick={undo}
+            title="Undo (Ctrl+Z)"
+            aria-label="Undo"
+            className="px-2 py-1 text-xs rounded bg-gray-600 border border-gray-500 text-gray-300 hover:bg-gray-500 hover:text-white focus:outline-none focus:border-blue-500 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-gray-600 disabled:hover:text-gray-300"
+          >
+            ↶
+          </button>
+          <button
+            type="button"
+            disabled={!canRedo}
+            onClick={redo}
+            title="Redo (Ctrl+Shift+Z)"
+            aria-label="Redo"
+            className="px-2 py-1 text-xs rounded bg-gray-600 border border-gray-500 text-gray-300 hover:bg-gray-500 hover:text-white focus:outline-none focus:border-blue-500 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-gray-600 disabled:hover:text-gray-300"
+          >
+            ↷
+          </button>
+        </div>
+        <span className="w-px self-stretch bg-gray-700" aria-hidden />
         <div className="flex items-center gap-1">
           {(
             [
@@ -1569,48 +1635,6 @@ export default function TabEditor({
             </button>
           ))}
         </div>
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            disabled={!canUndo}
-            onClick={undo}
-            title="Undo (Ctrl+Z)"
-            className="px-2 py-1 text-xs rounded bg-gray-600 border border-gray-500 text-gray-300 hover:bg-gray-500 hover:text-white focus:outline-none focus:border-blue-500 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-gray-600 disabled:hover:text-gray-300"
-          >
-            ↶ Undo
-          </button>
-          <button
-            type="button"
-            disabled={!canRedo}
-            onClick={redo}
-            title="Redo (Ctrl+Shift+Z)"
-            className="px-2 py-1 text-xs rounded bg-gray-600 border border-gray-500 text-gray-300 hover:bg-gray-500 hover:text-white focus:outline-none focus:border-blue-500 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-gray-600 disabled:hover:text-gray-300"
-          >
-            ↷ Redo
-          </button>
-        </div>
-        <RepeatBarsControl
-          barIndex={caret.barIndex}
-          startOn={barRepeat.open}
-          endCount={barRepeat.count}
-          count={shownRepeatCount}
-          onCountChange={handleRepeatCountChange}
-          onToggleStart={handleToggleRepeatStart}
-          onToggleEnd={handleToggleRepeatEnd}
-          disabled={!parsed.ok}
-        />
-        <AlternateEndingsControl
-          barIndex={caret.barIndex}
-          endings={endings}
-          onToggle={handleToggleEnding}
-          disabled={!parsed.ok}
-        />
-        <TimeSignatureControl
-          barIndex={caret.barIndex}
-          value={timeSignature}
-          onChange={handleTimeSignatureChange}
-          disabled={!parsed.ok}
-        />
         <span className="w-px self-stretch bg-gray-700" aria-hidden />
         <div className="flex flex-wrap items-center gap-1">
           <button
@@ -1641,52 +1665,38 @@ export default function TabEditor({
             onSelect={(technique: Technique) => run({ kind: "toggleTechnique", technique })}
           />
         </div>
-        <div className="ml-auto flex items-center gap-1">
+        <span className="w-px self-stretch bg-gray-700" aria-hidden />
+        <BarControl
+          barIndex={caret.barIndex}
+          repeatStartOn={barRepeat.open}
+          repeatEndCount={barRepeat.count}
+          repeatCount={shownRepeatCount}
+          onRepeatCountChange={handleRepeatCountChange}
+          onToggleRepeatStart={handleToggleRepeatStart}
+          onToggleRepeatEnd={handleToggleRepeatEnd}
+          endings={endings}
+          onToggleEnding={handleToggleEnding}
+          timeSignature={timeSignature}
+          onTimeSignatureChange={handleTimeSignatureChange}
+          disabled={!parsed.ok}
+        />
+        {MENU_SUPPORTED && (
           <button
             type="button"
-            onClick={() => setShowSource((prev) => !prev)}
-            title={showSource ? "Hide the AlphaTex source" : "Show the AlphaTex source"}
-            aria-label="Toggle source"
-            aria-pressed={showSource}
+            aria-haspopup="menu"
+            aria-expanded={menuShown}
+            aria-controls={menuId}
+            onClick={handleMenuButton}
+            title="Note menu: every command for the note at the caret (Enter, or right-click a beat)"
             className={`px-2 py-1 text-xs rounded border focus:outline-none focus:border-blue-500 ${
-              showSource
+              menuShown
                 ? "bg-gray-500 border-gray-400 text-white"
                 : "bg-gray-600 border-gray-500 text-gray-300 hover:bg-gray-500 hover:text-white"
             }`}
           >
-            {"</>"} Source
+            ⋯ Menu
           </button>
-          <button
-            type="button"
-            // Opening the panel closes the note menu, as `?` does: a click's
-            // press has already closed it; pressed from the keyboard, this does.
-            onClick={() => {
-              closeMenu();
-              setShowHelp(true);
-            }}
-            title="Keyboard shortcuts (?)"
-            aria-label="Keyboard shortcuts"
-            className="px-2 py-1 text-xs rounded bg-gray-600 border border-gray-500 text-gray-300 hover:bg-gray-500 hover:text-white focus:outline-none focus:border-blue-500"
-          >
-            ? Shortcuts
-          </button>
-          <div className="flex items-center gap-2 text-xs pl-1" aria-live="polite">
-            {saveLabel && (
-              <span className={saveState === "error" ? "text-red-400" : "text-gray-400"}>
-                {saveLabel}
-              </span>
-            )}
-            {saveState === "error" && (
-              <button
-                type="button"
-                onClick={performSave}
-                className="text-blue-400 hover:text-blue-300 underline"
-              >
-                Retry
-              </button>
-            )}
-          </div>
-        </div>
+        )}
       </div>
       </div>
 
