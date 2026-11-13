@@ -88,3 +88,23 @@ export function setTempo(
     beats: countBeats(scoreNode),
   });
 }
+
+/**
+ * The tempo set, as `setTempo` sets it, or — for a tab that states none (a
+ * riff's tab started before its tempo was tapped) — a `\tempo` line put at
+ * the top. Null for a tab alphaTab cannot read.
+ */
+export function setOrInsertTempo(
+  text: string,
+  bpm: number,
+  caret: Caret = { barIndex: 0, beatIndex: 0, string: 6 },
+): CommandResult | null {
+  if (!Number.isFinite(bpm)) return null;
+  const { scoreNode, ok } = parseTex(text);
+  if (!ok || !scoreNode) return null;
+  if (findTempoArgument(text, scoreNode)) return setTempo(text, bpm, caret);
+  return commitEdit(`\\tempo ${clampTempo(bpm)}\n${text}`, caret, {
+    bars: countBars(scoreNode),
+    beats: countBeats(scoreNode),
+  });
+}

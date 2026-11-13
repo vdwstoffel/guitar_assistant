@@ -78,6 +78,7 @@ interface ScannedVideo {
 }
 
 const JAM_TRACKS_FOLDER = "JamTracks";
+const RIFFS_FOLDER = "Riffs"; // the Songs section's takes: never Tracks, never moved
 
 // Helper function to get audio/video duration via ffprobe
 function getMediaDuration(filePath: string): Promise<number> {
@@ -147,6 +148,9 @@ async function findAudioFiles(dir: string, skipJamTracks: boolean = true): Promi
       if (entry.isDirectory()) {
         // Skip JamTracks folder during regular scanning
         if (skipJamTracks && currentDir === musicPath && entry.name === JAM_TRACKS_FOLDER) {
+          continue;
+        }
+        if (currentDir === musicPath && entry.name === RIFFS_FOLDER) {
           continue;
         }
         await scanDir(fullPath);

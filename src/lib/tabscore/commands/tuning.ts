@@ -14,11 +14,12 @@ import { commitEdit, type CommandResult } from "../apply";
  * AlphaTex's `\tuning` directive takes and the order alphaTab stores on the
  * staff.
  *
- * Six strings only. The caret's string number is clamped to 1-6 throughout
- * (see locate.ts `clampCaret`) and ScoreCanvas divides the staff's height by
- * a fixed six to turn a click's y into a string, so a 7- or 8-string tuning
- * would render but could not be edited. Adding those means changing the
- * caret model, not this list.
+ * Six strings for a guitar tab, four for a bass tab. The editor takes the
+ * caret's string range from the tab's own string count (locate.ts
+ * `stringCount`): `clampCaret`, the arrow keys and ScoreCanvas's
+ * click-to-string mapping all follow it. So a list for another count — 7 or
+ * 8 strings — would also edit; there just is none, and `tuningPresetsFor`
+ * offers such a tab the guitar list, where its tuning shows as "Custom".
  */
 export interface TuningPreset {
   /** Stable id, used as the select's value. */
@@ -39,7 +40,10 @@ export const TUNING_PRESETS: TuningPreset[] = [
   { id: "standard", label: "Standard", notes: ["e4", "b3", "g3", "d3", "a2", "e2"] },
   { id: "half-down", label: "½ step down", notes: ["eb4", "bb3", "gb3", "db3", "ab2", "eb2"] },
   { id: "full-down", label: "1 step down", notes: ["d4", "a3", "f3", "c3", "g2", "d2"] },
+  { id: "c-sharp-standard", label: "C♯ standard", notes: ["db4", "ab3", "e3", "b2", "gb2", "db2"] },
+  { id: "c-standard", label: "C standard", notes: ["c4", "g3", "eb3", "bb2", "f2", "c2"] },
   { id: "drop-d", label: "Drop D", notes: ["e4", "b3", "g3", "d3", "a2", "d2"] },
+  { id: "drop-c-sharp", label: "Drop C♯", notes: ["eb4", "bb3", "gb3", "db3", "ab2", "db2"] },
   { id: "double-drop-d", label: "Double drop D", notes: ["d4", "b3", "g3", "d3", "a2", "d2"] },
   { id: "drop-c", label: "Drop C", notes: ["d4", "a3", "f3", "c3", "g2", "c2"] },
   { id: "open-d", label: "Open D", notes: ["d4", "a3", "f#3", "d3", "a2", "d2"] },
@@ -49,7 +53,41 @@ export const TUNING_PRESETS: TuningPreset[] = [
   { id: "dadgad", label: "DADGAD", notes: ["d4", "a3", "g3", "d3", "a2", "d2"] },
 ];
 
+/**
+ * Four-string bass, one per tuning the writing session offers (see
+ * songwriting/tunings.ts `SESSION_TUNING_IDS`): each is the matching guitar
+ * tuning's four lowest strings an octave down, under the same label, and its
+ * id is the guitar's prefixed with `bass-` (songwriting/bassTunings.ts maps
+ * one to the other). Flats, like the guitar list. Each was round-tripped
+ * through `AlphaTexImporter`; alphaTab 1.8.1's own `Tuning.getPresetsFor(4)`
+ * table names five of them (Standard, ½ and 1 step down, C standard as
+ * "Tune down 2 step", Drop D) and has no entry for C♯ standard, Drop C♯ or
+ * Drop C, which import all the same.
+ */
+export const BASS_TUNING_PRESETS: TuningPreset[] = [
+  { id: "bass-standard", label: "Standard", notes: ["g2", "d2", "a1", "e1"] },
+  { id: "bass-half-down", label: "½ step down", notes: ["gb2", "db2", "ab1", "eb1"] },
+  { id: "bass-full-down", label: "1 step down", notes: ["f2", "c2", "g1", "d1"] },
+  { id: "bass-c-sharp-standard", label: "C♯ standard", notes: ["e2", "b1", "gb1", "db1"] },
+  { id: "bass-c-standard", label: "C standard", notes: ["eb2", "bb1", "f1", "c1"] },
+  { id: "bass-drop-d", label: "Drop D", notes: ["g2", "d2", "a1", "d1"] },
+  { id: "bass-drop-c-sharp", label: "Drop C♯", notes: ["gb2", "db2", "ab1", "db1"] },
+  { id: "bass-drop-c", label: "Drop C", notes: ["f2", "c2", "g1", "c1"] },
+];
+
 export const STANDARD_TUNING_ID = "standard";
+
+const ALL_PRESETS: TuningPreset[] = [...TUNING_PRESETS, ...BASS_TUNING_PRESETS];
+
+/** The preset with this id, guitar or bass. */
+export function findTuningPreset(id: string | null): TuningPreset | undefined {
+  return ALL_PRESETS.find((p) => p.id === id);
+}
+
+/** The list the tuning control offers a tab with this many strings: bass for four, guitar otherwise. */
+export function tuningPresetsFor(strings: number): TuningPreset[] {
+  return strings === 4 ? BASS_TUNING_PRESETS : TUNING_PRESETS;
+}
 
 /** The directive as it is written into the document. */
 export function tuningDirective(preset: TuningPreset): string {
@@ -98,11 +136,14 @@ export function readTuningId(text: string, scoreNode?: any): string | null {
   if (!found) return STANDARD_TUNING_ID;
 
   const written = found.notes.map((n) => n.toLowerCase()).join(" ");
-  return TUNING_PRESETS.find((p) => p.notes.join(" ") === written)?.id ?? null;
+  return ALL_PRESETS.find((p) => p.notes.join(" ") === written)?.id ?? null;
 }
 
 /**
  * Rewrite the document's tuning, inserting the directive when it has none.
+ * Guitar or bass: a preset with a different string count than the tab's is
+ * written as asked, and refused (null) only when the result does not import —
+ * a bass tuning on a guitar tab with notes on strings 5 or 6.
  *
  * The directive is always written, even for standard tuning: one code path,
  * and the source pane then states the tuning outright instead of leaving the
@@ -116,7 +157,7 @@ export function setTuning(
   presetId: string,
   caret: Caret = { barIndex: 0, beatIndex: 0, string: 6 },
 ): CommandResult | null {
-  const preset = TUNING_PRESETS.find((p) => p.id === presetId);
+  const preset = findTuningPreset(presetId);
   if (!preset) return null;
 
   const { scoreNode, ok } = parseTex(text);

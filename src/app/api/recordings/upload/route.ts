@@ -2,27 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import * as fs from "fs/promises";
 import * as path from "path";
+import { audioExtension } from "@/lib/recordings/mime";
 import { parseTempo } from "@/lib/recordings/tempo";
 
 const MUSIC_DIR = process.env.MUSIC_DIR || "./music";
 const RECORDINGS_FOLDER = "Recordings";
-
-const MIME_TO_EXT: Record<string, string> = {
-  "audio/webm": ".webm",
-  "audio/webm;codecs=opus": ".webm",
-  "audio/ogg": ".ogg",
-  "audio/ogg;codecs=opus": ".ogg",
-  "audio/mp4": ".mp4",
-  "audio/mp4;codecs=mp4a.40.2": ".mp4",
-  "audio/mpeg": ".mp3",
-  "audio/wav": ".wav",
-};
-
-function extFromMime(mime: string): string {
-  if (MIME_TO_EXT[mime]) return MIME_TO_EXT[mime];
-  const base = mime.split(";")[0].trim();
-  return MIME_TO_EXT[base] || ".webm";
-}
 
 function sanitizeName(name: string): string {
   return name.replace(/[<>:"/\\|?*]/g, "_").trim();
@@ -52,7 +36,7 @@ export async function POST(request: NextRequest) {
 
     const mimeType = file.type || "audio/webm";
     const duration = durationRaw ? parseFloat(durationRaw.toString()) : 0;
-    const ext = extFromMime(mimeType);
+    const ext = audioExtension(mimeType);
     const slug = timestampSlug();
     const fileName = `${slug}${ext}`;
     const title = titleRaw

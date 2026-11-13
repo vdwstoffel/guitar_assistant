@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { beatAt, isPreviewable, isAudible } from "./caretBeat";
+import { beatAt, beatNotes, isPreviewable, isAudible } from "./caretBeat";
 import { parseTex } from "./parse";
 
 const score = (head: string, body: string) => parseTex(`\\tempo 120\n${head}.\n${body}\n`).score;
@@ -78,5 +78,42 @@ describe("isAudible", () => {
 
   it("is false for nothing", () => {
     expect(isAudible(null)).toBe(false);
+  });
+});
+
+describe("beatNotes", () => {
+  it("gives each note's string (1 = highest), fret and sounding pitch", () => {
+    const s = score("\\tuning e4 b3 g3 d3 a2 e2\n", "5.6.4 3.5.4 r r");
+    expect(beatNotes(s, caret(0, 0))).toEqual([{ string: 6, fret: 5, midi: 45 }]);
+    expect(beatNotes(s, caret(0, 1))).toEqual([{ string: 5, fret: 3, midi: 48 }]);
+  });
+
+  it("is the whole beat, lowest first, whatever string the caret is on", () => {
+    const s = score("", "(7.4 7.5 5.6).4 r r r");
+    expect(beatNotes(s, caret(0, 0, 1)).map((n) => n.midi)).toEqual([45, 52, 57]);
+  });
+
+  it("is empty on a rest, and out of range", () => {
+    const s = score("", "5.6.4 r r r");
+    expect(beatNotes(s, caret(0, 1))).toEqual([]);
+    expect(beatNotes(s, caret(3, 0))).toEqual([]);
+    expect(beatNotes(null, caret(0, 0))).toEqual([]);
+  });
+
+  it("gives a tied-over note as the fret it sounds", () => {
+    const s = score("", "5.6.4 -.6.4 r r");
+    expect(beatNotes(s, caret(0, 1))).toEqual([{ string: 6, fret: 5, midi: 45 }]);
+  });
+
+  it("leaves out a dead note: it has no pitch", () => {
+    expect(beatNotes(score("", "x.6.4 r r r"), caret(0, 0))).toEqual([]);
+    expect(beatNotes(score("", "(x.6 7.5).4 r r r"), caret(0, 0)).map((n) => n.fret)).toEqual([7]);
+  });
+
+  it("counts strings from the top on a bass, and sounds a capo", () => {
+    const bass = score("\\tuning g2 d2 a1 e1\n", "5.4.4 r r r");
+    expect(beatNotes(bass, caret(0, 0, 4))).toEqual([{ string: 4, fret: 5, midi: 33 }]);
+    const capo = score("\\capo 2\n", "5.6.4 r r r");
+    expect(beatNotes(capo, caret(0, 0))).toEqual([{ string: 6, fret: 5, midi: 47 }]);
   });
 });

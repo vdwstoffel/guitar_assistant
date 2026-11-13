@@ -321,6 +321,19 @@ describe("runCommand: the rules around the dispatch", () => {
     expect(past.state.text).toBe(setFret(TEX, at(0, 1), 2)!.text);
   });
 
+  it("↑ and ↓ stop at the strings a four-string bass tab has", () => {
+    const bass = "\\tuning g2 d2 a1 e1\n\\tempo 120\n.\n3.4.4 5.4 7.3 0.1\n";
+    const down = editor(bass, at(0, 0, 3));
+    runCommand({ kind: "moveString", delta: 1 }, down.deps);
+    expect(down.state.caret).toEqual(at(0, 0, 4));
+    runCommand({ kind: "moveString", delta: 1 }, down.deps);
+    expect(down.state.caret).toEqual(at(0, 0, 4));
+
+    const up = editor(bass, at(0, 0, 1));
+    runCommand({ kind: "moveString", delta: -1 }, up.deps);
+    expect(up.state.caret).toEqual(at(0, 0, 1));
+  });
+
   it("→ on the last beat grows the score", () => {
     const e = editor(TEX, at(2, 2));
     runCommand({ kind: "moveBeat", delta: 1 }, e.deps);

@@ -338,3 +338,76 @@ model GpSongSection {
 
   @@index([gpSongId])
 }
+
+/// A short recorded take saved from the Songs section's Write view.
+model Riff {
+  id          String     @id @default(uuid())
+  name        String
+  /// "A", "C#", ...
+  keyRoot     String
+  /// A SCALE_FORMULAS key
+  scale       String
+  /// A tuning preset id
+  tuning      String
+  /// Quarter-note bpm; null until it is tapped (a recording needs none)
+  tempo       Int?
+  tsNum       Int        @default(4)
+  tsDen       Int        @default(4)
+  /// JSON [{root, quality, bars}]
+  progression String?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  parts       RiffPart[]
+  sections    CompositionSection[]
+}
+
+model RiffPart {
+  id            String  @id @default(uuid())
+  riffId        String
+  riff          Riff    @relation(fields: [riffId], references: [id], onDelete: Cascade)
+  /// "guitar" | "bass"
+  kind          String
+  /// "Guitar 1", "Bass"
+  name          String
+  sortOrder     Int     @default(0)
+  alphatex      String?
+  /// Relative to MUSIC_DIR, e.g. Riffs/<riffId>/<partId>-<stamp>.webm
+  audioPath     String?
+  audioMime     String?
+  audioDuration Float?
+  /// Seconds into the take
+  trimStart     Float?
+  trimEnd       Float?
+  /// "tab" | "recording" — which plays when both exist
+  listen        String  @default("tab")
+  level         Float   @default(1)
+  muted         Boolean @default(false)
+  soloed        Boolean @default(false)
+  /// Editor practice speed, as TrackTab
+  playbackSpeed Int?
+
+  @@index([riffId])
+}
+
+/// A song made of riff sections. Named Composition because "Song" already means a Guitar Pro song (GpSong).
+model Composition {
+  id        String               @id @default(uuid())
+  name      String
+  lyrics    String               @default("")
+  createdAt DateTime             @default(now())
+  updatedAt DateTime             @updatedAt
+  sections  CompositionSection[]
+}
+
+model CompositionSection {
+  id            String      @id @default(uuid())
+  compositionId String
+  composition   Composition @relation(fields: [compositionId], references: [id], onDelete: Cascade)
+  riffId        String?
+  riff          Riff?       @relation(fields: [riffId], references: [id], onDelete: SetNull)
+  label         String
+  repeats       Int         @default(1)
+  sortOrder     Int         @default(0)
+
+  @@index([compositionId])
+}

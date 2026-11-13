@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useId, useImperativeHandle, useMemo, useRef, useState, useSyncExternalStore, type Ref } from "react";
 
 import ScoreCanvas, { type MenuRequest, type ScoreCanvasHandle } from "./ScoreCanvas";
 import NoteMenu, { type NoteMenuHandle } from "./NoteMenu";
@@ -8,7 +8,7 @@ import { onOwnScrollbar } from "./ownScrollbar";
 import PlaybackSpeedControl from "@/components/PlaybackSpeedControl";
 import KeyboardShortcutsHelp from "@/components/KeyboardShortcutsHelp";
 import { TAB_EDITOR_SHORTCUTS } from "./tabEditorShortcuts";
-import { readTempo, setTempo } from "@/lib/tabscore/commands/tempo";
+import { readTempo, setOrInsertTempo, setTempo } from "@/lib/tabscore/commands/tempo";
 import { usePracticeSessionTracker } from "@/hooks/usePracticeSessionTracker";
 import type { TrackableItem } from "@/lib/metrics/playedRef";
 import { clampPlaybackSpeed } from "@/lib/playbackSpeed";
@@ -21,7 +21,8 @@ import PlaybackMixControl from "./PlaybackMixControl";
 
 import { parseTex } from "@/lib/tabscore/parse";
 import { normalizeNewlines } from "@/lib/tabscore/offsets";
-import { clampCaret, type BeatPos, type Caret } from "@/lib/tabscore/locate";
+import { clampCaret, stringCount, type BeatPos, type Caret } from "@/lib/tabscore/locate";
+import { beatNotes, type BeatNote } from "@/lib/tabscore/caretBeat";
 import { claims, clipboardChord, matchChord, type ChordCommand } from "@/lib/tabscore/keymap";
 import { menuItems, menuStaysOpen, type MenuGroup, type MenuItem } from "@/lib/tabscore/menuItems";
 import { rangeOf, sizeOf, stillValid } from "@/lib/tabscore/selection";
@@ -33,6 +34,7 @@ import {
   type PreviewSource,
 } from "@/lib/tabscore/notePreview";
 import { claimGlobalShortcuts } from "@/lib/globalShortcuts";
+import { SPACE_STAYS_LOCAL } from "@/lib/playerFocus";
 import { type Technique } from "@/lib/tabscore/commands/technique";
 import { tupletAt, TRIPLET } from "@/lib/tabscore/commands/tuplet";
 import { fixAllBars } from "@/lib/tabscore/commands/fixBar";
@@ -93,6 +95,45 @@ export interface TabEditorProps {
    * other down two independent save paths.
    */
   onSave: (patch: { alphatex: string; playbackSpeed: number; tempo?: number }) => Promise<void>;
+  /**
+   * The score started or stopped playing. Optional: for a screen with another
+   * player on it (a riff's take) that must stop when the tab starts.
+   */
+  onPlayingChange?: (playing: boolean) => void;
+  /**
+   * The notes at the caret: called when the caret moves to another beat and
+   * when the beat under it changes, with the caret's bar and that beat's
+   * pitched notes, lowest first (`string` counted as the caret counts, 1 = the
+   * highest); `notes` is empty on a rest or an empty beat. Not called while
+   * the document does not parse. Optional: for a riff's tab, which shows how
+   * the notes sound over its chords; without it nothing is read.
+   */
+  onCaretNote?: (info: CaretNoteInfo) => void;
+  /**
+   * The tab's tuning is not its own to change: the tuning control is
+   * disabled, with this message saying why and where to change it. Optional:
+   * for a riff's bass part, which follows the riff's tuning.
+   */
+  tuningLocked?: string;
+  /** Optional handle for that same screen: pause the score's playback. */
+  ref?: Ref<TabEditorHandle>;
+}
+
+/** What `onCaretNote` reports: the caret's bar and the notes of its beat. */
+export interface CaretNoteInfo {
+  barIndex: number;
+  notes: BeatNote[];
+}
+
+export interface TabEditorHandle {
+  /** Pause the score if it is playing (or counting in); otherwise nothing. */
+  pause(): void;
+  /**
+   * Write a tempo and a tuning (a preset id) into the tab from outside it, as
+   * the settings chip would: one undoable edit, autosaved. Whichever the tab
+   * already has is left alone.
+   */
+  setTempoAndTuning(fields: { tempo?: number; tuning?: string }): void;
 }
 
 type SaveState = "idle" | "saving" | "saved" | "error";
@@ -238,6 +279,10 @@ export default function TabEditor({
   track = null,
   initialShowSource = true,
   onSave,
+  onPlayingChange,
+  onCaretNote,
+  tuningLocked,
+  ref,
 }: TabEditorProps) {
   const [tex, setTex] = useState(() => normalizeNewlines(initialTex));
   const [caret, setCaret] = useState<Caret>(INITIAL_CARET);
@@ -346,6 +391,8 @@ export default function TabEditor({
   const historyRef = useRef<string[]>([tex]);
   const historyIndexRef = useRef(0);
   const onSaveRef = useRef(onSave);
+  const onPlayingChangeRef = useRef(onPlayingChange);
+  const isPlayingRef = useRef(false);
 
   const digitBufferRef = useRef<DigitBuffer | null>(null);
   const noticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -376,6 +423,9 @@ export default function TabEditor({
     () => (parsed.ok ? readTuningId(tex, parsed.scoreNode) : null),
     [tex, parsed],
   );
+  // 4 for a bass tab, 6 for a guitar one: which tunings the control offers.
+  // Read off the AST, which survives a document that does not import.
+  const strings = useMemo(() => stringCount(parsed.scoreNode), [parsed]);
   // The guitar is a directive too. null means an instrument the preset list
   // does not name, which the control shows as "Other".
   const guitarId = useMemo(
@@ -407,6 +457,7 @@ export default function TabEditor({
     texRef.current = tex;
     caretRef.current = caret;
     onSaveRef.current = onSave;
+    onPlayingChangeRef.current = onPlayingChange;
     speedRef.current = speed;
     parsedRef.current = parsed;
     tempoRef.current = tempo;
@@ -502,6 +553,8 @@ export default function TabEditor({
   const handlePlayingChange = useCallback(
     (playing: boolean) => {
       setIsPlaying(playing);
+      isPlayingRef.current = playing;
+      onPlayingChangeRef.current?.(playing);
       if (playing) {
         sessionTrackerRef.current.onPlay();
         closeMenu();
@@ -713,6 +766,24 @@ export default function TabEditor({
     if (anchor && !stillValid(parsed.scoreNode, rangeOf(anchor, c))) setAnchor(null);
   }, [parsed, setAnchor]);
 
+  // The notes at the caret, for a screen that asked for them (onCaretNote):
+  // read off the parsed model whenever the caret's beat or the document
+  // changes, and passed on only when they differ from the last report. Read
+  // at the caret as the re-clamp above will leave it, so a stranded caret
+  // never reports an empty beat first. A document that does not parse keeps
+  // the last report.
+  const lastCaretNoteRef = useRef<{ to: (info: CaretNoteInfo) => void; key: string } | null>(null);
+  useEffect(() => {
+    if (!onCaretNote || !parsed.ok || !parsed.scoreNode) return;
+    const at = clampCaret(parsed.scoreNode, { barIndex: caret.barIndex, beatIndex: caret.beatIndex, string: 1 });
+    const notes = beatNotes(parsed.score, at);
+    const key = `${at.barIndex}:${notes.map((n) => `${n.string}.${n.fret}.${n.midi}`).join(" ")}`;
+    const last = lastCaretNoteRef.current;
+    if (last && last.to === onCaretNote && last.key === key) return;
+    lastCaretNoteRef.current = { to: onCaretNote, key };
+    onCaretNote({ barIndex: at.barIndex, notes });
+  }, [onCaretNote, parsed, caret.barIndex, caret.beatIndex]);
+
   // Transport. The handle methods have existed since Task 12; until now
   // nothing called stop() at all and playPause() was reachable only via
   // Space, which no on-screen control advertised.
@@ -739,8 +810,9 @@ export default function TabEditor({
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const el = event.target as HTMLElement | null;
-      // Space types a space in the source pane and the tempo box.
-      if (el?.closest("input, textarea, [contenteditable]")) return;
+      // Space types a space in the source pane and the tempo box, and
+      // belongs to a player of its own where one is marked (playerFocus).
+      if (el?.closest(SPACE_STAYS_LOCAL)) return;
       // Only transport. Everything else the keymap resolves is about the
       // caret, which has no meaning when the canvas is not focused.
       if (matchChord({
@@ -759,6 +831,31 @@ export default function TabEditor({
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   });
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      pause: () => {
+        if (isPlayingRef.current) scoreCanvasRef.current?.playPause();
+      },
+      setTempoAndTuning: ({ tempo, tuning }) => {
+        let text = texRef.current;
+        let next = caretRef.current;
+        if (tempo !== undefined && readTempo(text) !== tempo) {
+          const r = setOrInsertTempo(text, tempo, next);
+          if (r) ({ text, caret: next } = r);
+        }
+        if (tuning !== undefined && readTuningId(text) !== tuning) {
+          const r = setTuning(text, tuning, next);
+          if (r) ({ text, caret: next } = r);
+        }
+        if (text === texRef.current) return;
+        cancelPreview();
+        commitTex(text, next);
+      },
+    }),
+    [commitTex, cancelPreview],
+  );
 
   const handleStop = useCallback(() => {
     cancelPreview();
@@ -1532,11 +1629,13 @@ export default function TabEditor({
         <TabSettingsControl
           tempo={tempo}
           tuningId={tuningId}
+          strings={strings}
           guitarId={guitarId}
           onTempoChange={handleTempoChange}
           onTuningChange={handleTuningChange}
           onGuitarChange={handleGuitarChange}
           disabled={!parsed.ok}
+          tuningLocked={tuningLocked}
         />
         <div className="ml-auto flex items-center gap-1">
           <button

@@ -3,7 +3,7 @@
  * imported as types across the bundle boundary. These `any`s are the interop
  * boundary with that untyped surface, not unexamined typing.
  */
-import type { Caret } from "./locate";
+import { stringCount, type BeatPos, type Caret } from "./locate";
 
 /**
  * The alphaTab Beat a caret points at, through track 0, staff 0, voice 0 —
@@ -40,4 +40,31 @@ export function isAudible(beat: any): boolean {
   if (!beat || beat.isRest) return false;
   const notes: any[] = beat.notes ?? [];
   return notes.some((note) => !note.isTieDestination);
+}
+
+export interface BeatNote {
+  /** 1 to the tab's string count, 1 = the highest string: the Caret's numbering. */
+  string: number;
+  fret: number;
+  midi: number;
+}
+
+/**
+ * The pitched notes of the beat at `at` (its string is ignored), lowest
+ * first; empty on a rest, an empty beat or out of range. A tied-over note is
+ * the fret it sounds — alphaTab gives a tie destination its origin's fret.
+ * `midi` is alphaTab's `realValue`: the sounding pitch, capo included. A dead
+ * note has no pitch, so it is left out.
+ */
+export function beatNotes(score: any, at: BeatPos): BeatNote[] {
+  const beat = beatAt(score, { barIndex: at.barIndex, beatIndex: at.beatIndex, string: 1 });
+  if (!beat || beat.isRest) return [];
+  // alphaTab's Note.string is 1 = the lowest string; turned over for the caret's.
+  const strings = stringCount(beat.voice?.bar?.staff);
+  const out: BeatNote[] = [];
+  for (const note of beat.notes ?? []) {
+    if (note.isDead || !Number.isFinite(note.realValue)) continue;
+    out.push({ string: strings + 1 - note.string, fret: note.fret, midi: note.realValue });
+  }
+  return out.sort((a, b) => a.midi - b.midi);
 }

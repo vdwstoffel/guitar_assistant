@@ -15,6 +15,16 @@
 export type PlayerId = "audio" | "tab";
 
 /**
+ * Marks controls that handle Space for a player of their own (the riff's
+ * take, shown above the tab editor). A window-level Space shortcut leaves a
+ * key press from inside such an element alone, as it does for a text box.
+ */
+export const OWNS_SPACE_ATTRIBUTE = "data-owns-space";
+
+/** Elements a window-level Space shortcut must not act from: typing in them, or a player of their own. */
+export const SPACE_STAYS_LOCAL = `input, textarea, [contenteditable], [${OWNS_SPACE_ATTRIBUTE}]`;
+
+/**
  * Counted, like the shortcut claims: React mounts the next owner before
  * unmounting the last (Strict Mode double-invokes effects, and switching
  * songs re-keys the player), and a boolean would be cleared by whichever

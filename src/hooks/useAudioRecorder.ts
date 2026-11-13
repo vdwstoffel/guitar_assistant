@@ -5,6 +5,12 @@ import { withInputDevice } from "@/lib/audioSink";
 
 export type RecorderStatus = "idle" | "requesting" | "recording" | "stopping" | "error";
 
+export interface RecordingResult {
+  blob: Blob;
+  mimeType: string;
+  duration: number;
+}
+
 interface UseAudioRecorderResult {
   status: RecorderStatus;
   error: string | null;
@@ -13,7 +19,12 @@ interface UseAudioRecorderResult {
   durationMs: number;
   level: number;
   start: () => Promise<void>;
-  stop: () => Promise<{ blob: Blob; mimeType: string; duration: number } | null>;
+  /**
+   * Stop and hand back what was recorded. When the recorder stopped by itself
+   * (the input went away), nobody asked for its result, so it is kept: the
+   * next `stop()` hands it back (a new `start()` drops it).
+   */
+  stop: () => Promise<RecordingResult | null>;
 }
 
 function pickSupportedMimeType(): string {
@@ -48,7 +59,13 @@ export function useAudioRecorder(): UseAudioRecorderResult {
   const analyserRef = useRef<AnalyserNode | null>(null);
   const sourceNodeRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const animRef = useRef<number | null>(null);
-  const resolveStopRef = useRef<((value: { blob: Blob; mimeType: string; duration: number } | null) => void) | null>(null);
+  const resolveStopRef = useRef<((value: RecordingResult | null) => void) | null>(null);
+  /** What the recorder made when it stopped with nobody asking (stop() hands it back). */
+  const keptRef = useRef<RecordingResult | null>(null);
+  // A start only takes the mic if it is still the newest one and the owner is
+  // still mounted when getUserMedia answers; otherwise it closes it again.
+  const mountedRef = useRef(true);
+  const startGenRef = useRef(0);
 
   const requestPermission = useCallback(async () => {
     setError(null);
@@ -99,19 +116,43 @@ export function useAudioRecorder(): UseAudioRecorderResult {
   }, []);
 
   useEffect(() => {
+    mountedRef.current = true;
     return () => {
+      mountedRef.current = false;
+      // A start still waiting for the mic closes it when it comes.
+      startGenRef.current += 1;
+      const recorder = mediaRecorderRef.current;
+      mediaRecorderRef.current = null;
+      if (recorder) {
+        recorder.ondataavailable = null;
+        recorder.onstop = null;
+        recorder.onerror = null;
+        if (recorder.state !== "inactive") {
+          try {
+            recorder.stop();
+          } catch {}
+        }
+      }
+      resolveStopRef.current?.(null);
+      resolveStopRef.current = null;
+      keptRef.current = null;
       cleanupStream();
     };
   }, [cleanupStream]);
 
   const start = useCallback(async () => {
+    const gen = ++startGenRef.current;
+    /** Unmounted, or a newer start began: this one must not take the mic. */
+    const abandoned = () => !mountedRef.current || gen !== startGenRef.current;
     setError(null);
+    keptRef.current = null;
     if (typeof MediaRecorder === "undefined") {
       setError("MediaRecorder is not supported in this browser.");
       setStatus("error");
       return;
     }
     setStatus("requesting");
+    let stream: MediaStream | null = null;
     try {
       const audioConstraints = await withInputDevice({
         echoCancellation: false,
@@ -121,7 +162,26 @@ export function useAudioRecorder(): UseAudioRecorderResult {
         sampleRate: 48000,
         sampleSize: 16,
       });
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
+      if (abandoned()) return;
+      stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
+      if (abandoned()) {
+        stream.getTracks().forEach((t) => t.stop());
+        return;
+      }
+      // A recorder still running (never expected: Record is busy until it
+      // stops) is let go first, with its stream, so no mic stays open unowned.
+      const previous = mediaRecorderRef.current;
+      if (previous && previous.state !== "inactive") {
+        previous.ondataavailable = null;
+        previous.onstop = null;
+        previous.onerror = null;
+        try {
+          previous.stop();
+        } catch {}
+        resolveStopRef.current?.(null);
+        resolveStopRef.current = null;
+        cleanupStream();
+      }
       streamRef.current = stream;
 
       const mimeType = pickSupportedMimeType();
@@ -138,11 +198,15 @@ export function useAudioRecorder(): UseAudioRecorderResult {
         const finalType = recorder.mimeType || mimeType || "audio/webm";
         const blob = new Blob(chunksRef.current, { type: finalType });
         const duration = (Date.now() - startTimeRef.current) / 1000;
+        const result = { blob, mimeType: finalType, duration };
         cleanupStream();
         setStatus("idle");
         setDurationMs(0);
-        resolveStopRef.current?.({ blob, mimeType: finalType, duration });
+        const resolve = resolveStopRef.current;
         resolveStopRef.current = null;
+        // Stopped by itself (the input unplugged, say): keep it for the next stop().
+        if (resolve) resolve(result);
+        else keptRef.current = result;
       };
       recorder.onerror = (e) => {
         console.error("MediaRecorder error:", e);
@@ -185,6 +249,10 @@ export function useAudioRecorder(): UseAudioRecorderResult {
       }, 200);
       setStatus("recording");
     } catch (err) {
+      if (abandoned()) {
+        stream?.getTracks().forEach((t) => t.stop());
+        return;
+      }
       console.error("Failed to start recording:", err);
       const msg = err instanceof Error ? err.message : "Could not start recording";
       setError(msg);
@@ -194,10 +262,12 @@ export function useAudioRecorder(): UseAudioRecorderResult {
   }, [cleanupStream]);
 
   const stop = useCallback(() => {
-    return new Promise<{ blob: Blob; mimeType: string; duration: number } | null>((resolve) => {
+    return new Promise<RecordingResult | null>((resolve) => {
       const recorder = mediaRecorderRef.current;
       if (!recorder || recorder.state === "inactive") {
-        resolve(null);
+        // It stopped by itself: what it recorded is waiting.
+        resolve(keptRef.current);
+        keptRef.current = null;
         return;
       }
       resolveStopRef.current = resolve;

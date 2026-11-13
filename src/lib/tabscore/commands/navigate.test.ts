@@ -43,3 +43,21 @@ describe("moveString", () => {
     expect(moveString(at(0, 0, 1), -1)).toEqual(at(0, 0, 1));
   });
 });
+
+describe("on a four-string tab", () => {
+  const BASS = "\\tuning g2 d2 a1 e1\n\\tempo 120\n.\n3.4.8 5.4 7.3 | 7.4.4 r.4\n";
+
+  it("moveString stops at the lowest string, 4", () => {
+    expect(moveString(at(0, 0, 3), 1, 4)).toEqual(at(0, 0, 4));
+    expect(moveString(at(0, 0, 4), 1, 4)).toEqual(at(0, 0, 4));
+  });
+
+  it("moveString stops at the highest string, 1", () => {
+    expect(moveString(at(0, 0, 2), -1, 4)).toEqual(at(0, 0, 1));
+    expect(moveString(at(0, 0, 1), -1, 4)).toEqual(at(0, 0, 1));
+  });
+
+  it("moveBeat keeps the caret on its string", () => {
+    expect(moveBeat(BASS, at(0, 2, 4), 1)).toEqual(at(1, 0, 4));
+  });
+});

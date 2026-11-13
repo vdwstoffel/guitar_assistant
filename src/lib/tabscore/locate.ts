@@ -9,7 +9,9 @@ export interface Caret {
   barIndex: number;
   beatIndex: number;
   /**
-   * 1-6: the AlphaTex text digit / `Caret` convention, 1 = high e, 6 = low E.
+   * 1 to the tab's `stringCount`: the AlphaTex text digit / `Caret`
+   * convention, 1 = the highest string (high e), 6 = low E on a guitar, 4 =
+   * low E on a bass.
    * This is the INVERSE of alphaTab's internal `Note.string` (1 = low E) —
    * see ScoreCanvas.tsx's `noteStringToCaretString` doc comment for the
    * verified conversion. Do not read this as "alphaTab convention."
@@ -81,13 +83,39 @@ export function sameCaret(a: Caret, b: Caret): boolean {
   return a.barIndex === b.barIndex && a.beatIndex === b.beatIndex && a.string === b.string;
 }
 
+/** A note name as a `\tuning` directive lists it: "e2", "f#3", "bb1". */
+const TUNING_NOTE = /^[a-g][#b]?-?\d+$/i;
+const DEFAULT_STRINGS = 6;
+
+/**
+ * How many strings the tab has — 6 for a guitar tab, 4 for a bass tab — and
+ * so the caret's string range. Takes either the AlphaTex AST (`scoreNode`:
+ * the notes its first bar's `\tuning` directive lists) or one of alphaTab's
+ * model staves (its `tuning`, which is what is actually drawn).
+ *
+ * 6 when it cannot tell. A document with no `\tuning`, or a `\tuning piano`
+ * that names no strings, renders as a standard six-string guitar: alphaTab
+ * fills that tuning in itself when a note names a string, and tuningGuard.ts
+ * does when none does.
+ */
+export function stringCount(source: any): number {
+  if (Array.isArray(source?.tuning)) return source.tuning.length || DEFAULT_STRINGS;
+  for (const node of source?.bars?.[0]?.metaData ?? []) {
+    if (String(node?.tag?.tag?.text ?? "").toLowerCase() !== "tuning") continue;
+    const args: any[] = node.arguments?.arguments ?? [];
+    return args.filter((a) => TUNING_NOTE.test(String(a?.text ?? ""))).length || DEFAULT_STRINGS;
+  }
+  return DEFAULT_STRINGS;
+}
+
 export function clampCaret(scoreNode: any, caret: Caret): Caret {
+  const strings = stringCount(scoreNode);
   const bars = countBars(scoreNode);
-  if (bars === 0) return { barIndex: 0, beatIndex: 0, string: 6 };
+  if (bars === 0) return { barIndex: 0, beatIndex: 0, string: strings };
 
   const barIndex = Math.min(Math.max(caret.barIndex, 0), bars - 1);
   const beats = scoreNode.bars[barIndex].beats?.length ?? 0;
   const beatIndex = Math.min(Math.max(caret.beatIndex, 0), Math.max(beats - 1, 0));
-  const string = Math.min(Math.max(caret.string, 1), 6);
+  const string = Math.min(Math.max(caret.string, 1), strings);
   return { barIndex, beatIndex, string };
 }

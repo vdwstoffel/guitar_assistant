@@ -23,7 +23,7 @@ import {
 const NAV_TOOLTIP =
   "pointer-events-none absolute left-1/2 top-full z-50 mt-1 -translate-x-1/2 whitespace-nowrap rounded bg-gray-900 px-2 py-1 text-xs text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100";
 
-type Section = 'home' | 'lessons' | 'videos' | 'fretboard' | 'chords' | 'tools' | 'circle' | 'jamtracks' | 'recordings' | 'caged' | 'tabs';
+type Section = 'home' | 'lessons' | 'videos' | 'fretboard' | 'chords' | 'tools' | 'circle' | 'jamtracks' | 'recordings' | 'caged' | 'tabs' | 'songs';
 type TimeSignature = '4/4' | '3/4' | '2/4' | '6/8';
 
 interface TopNavProps {
@@ -459,6 +459,21 @@ const TopNav = memo(function TopNav({ activeSection, onSectionChange, onSearchTr
               </svg>
               <span className="hidden sm:inline">Tabs</span>
               <span className="sm:hidden">Tabs</span>
+            </Link>
+            <Link
+              href="/songs"
+              onClick={() => onSectionChange('songs')}
+              className={`px-2 sm:px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-1 ${
+                activeSection === 'songs'
+                  ? 'bg-gray-700 text-white'
+                  : 'text-gray-400 hover:text-white hover:bg-gray-700/50'
+              }`}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19a3 3 0 11-6 0 3 3 0 016 0zm12-3a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+              <span className="hidden sm:inline">Songs</span>
+              <span className="sm:hidden">Songs</span>
             </Link>
             {/* Theory dropdown */}
             <div className="relative" ref={theoryDropdownRef}>

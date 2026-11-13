@@ -14,7 +14,7 @@ import {
   useState,
 } from "react";
 import { parseTex } from "@/lib/tabscore/parse";
-import { clampCaret, sameCaret, type BeatPos, type Caret } from "@/lib/tabscore/locate";
+import { clampCaret, sameCaret, stringCount, type BeatPos, type Caret } from "@/lib/tabscore/locate";
 import { beatAt, isAudible, isPreviewable } from "@/lib/tabscore/caretBeat";
 import { comparePos, type Range } from "@/lib/tabscore/selection";
 import { selectionRects, type Rect } from "@/lib/tabscore/selectionRects";
@@ -158,8 +158,6 @@ interface OverlayRect {
   height: number;
 }
 
-const STRINGS = 6;
-
 // One copy of each, shared by the score and the note preview's synth.
 const SOUND_FONT_URL = "/soundfont/sonivox.sf2";
 const WORKLET_URL = "/alphaTab.worklet.mjs";
@@ -172,8 +170,8 @@ const WORKLET_URL = "/alphaTab.worklet.mjs";
  * low E). Our `Caret.string` — like the AlphaTex text digit itself — is
  * 1 = highest/top string, so the two numbering schemes are inverted.
  */
-function noteStringToCaretString(noteString: number, stringCount: number): number {
-  return stringCount + 1 - noteString;
+function noteStringToCaretString(noteString: number, strings: number): number {
+  return strings + 1 - noteString;
 }
 
 const ScoreCanvas = forwardRef<ScoreCanvasHandle, ScoreCanvasProps>(function ScoreCanvas(
@@ -293,8 +291,10 @@ const ScoreCanvas = forwardRef<ScoreCanvasHandle, ScoreCanvasProps>(function Sco
     }
     const barVisual = barBounds.visualBounds;
     const beatVisual = beatBounds.visualBounds;
-    const rowHeight = barVisual.h / STRINGS;
-    const rowIndex = Math.min(Math.max(c.string - 1, 0), STRINGS - 1);
+    // One row per string of the staff as drawn: 6 on a guitar tab, 4 on a bass.
+    const strings = stringCount(beat.voice?.bar?.staff);
+    const rowHeight = barVisual.h / strings;
+    const rowIndex = Math.min(Math.max(c.string - 1, 0), strings - 1);
     setOverlayRect({
       left: beatVisual.x,
       top: barVisual.y + rowIndex * rowHeight,
@@ -563,13 +563,15 @@ const ScoreCanvas = forwardRef<ScoreCanvasHandle, ScoreCanvasProps>(function Sco
           if (pressRef.current) pressRef.current.landed = next;
           onCaretChangeRef.current(next);
         };
-        // The string row under a press's height within its bar: six equal
-        // rows of the tab staff, top string first.
-        const stringAt = (barBounds: any, y: number | null): number => {
+        // The string row under a press's height within its bar: one equal
+        // row per string of the tab staff (six on a guitar, four on a bass),
+        // top string first.
+        const stringAt = (bar: any, barBounds: any, y: number | null): number => {
           if (!barBounds || y == null) return caretRef.current.string;
-          const rowHeight = barBounds.visualBounds.h / STRINGS;
+          const strings = stringCount(bar?.staff);
+          const rowHeight = barBounds.visualBounds.h / strings;
           const row = Math.floor((y - barBounds.visualBounds.y) / rowHeight);
-          return Math.min(Math.max(row, 0), STRINGS - 1) + 1;
+          return Math.min(Math.max(row, 0), strings - 1) + 1;
         };
         // The caret a pointer event is over — the beat there, and the string
         // row at its height — hit-tested the way alphaTab does, against the
@@ -585,7 +587,7 @@ const ScoreCanvas = forwardRef<ScoreCanvasHandle, ScoreCanvasProps>(function Sco
           const beat = lookup.getBeatAtPos(e.clientX - box.left, y);
           const bar = beat?.voice?.bar;
           if (!bar) return null;
-          return caretFor(bar, beat, stringAt(lookup.findBeat(beat)?.barBounds, y));
+          return caretFor(bar, beat, stringAt(bar, lookup.findBeat(beat)?.barBounds, y));
         };
 
         // Behaviour 3/4 — click to place the caret. noteMouseDown fires for
@@ -601,9 +603,8 @@ const ScoreCanvas = forwardRef<ScoreCanvasHandle, ScoreCanvasProps>(function Sco
           if (destroyed) return;
           const bar = note?.beat?.voice?.bar;
           if (!bar) return;
-          const stringCount = bar.staff?.tuning?.length || STRINGS;
           suppressBeatHandlerRef.current = true;
-          emitCaret(bar, note.beat, noteStringToCaretString(note.string, stringCount));
+          emitCaret(bar, note.beat, noteStringToCaretString(note.string, stringCount(bar.staff)));
         });
 
         // The hook has its own beatMouseDown for the drag; this one is the
@@ -617,7 +618,7 @@ const ScoreCanvas = forwardRef<ScoreCanvasHandle, ScoreCanvasProps>(function Sco
           const bar = beat?.voice?.bar;
           if (!bar) return;
           const barBounds = apiRef.current?.boundsLookup?.findBeat(beat)?.barBounds;
-          emitCaret(bar, beat, stringAt(barBounds, lastClickYRef.current));
+          emitCaret(bar, beat, stringAt(bar, barBounds, lastClickYRef.current));
         });
 
         // A left Shift+press extends the edit selection and is nothing else.

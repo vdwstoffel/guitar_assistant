@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import {
+  OWNS_SPACE_ATTRIBUTE,
+  SPACE_STAYS_LOCAL,
   focusPlayer,
   focusedPlayer,
   registerPlayer,
@@ -138,5 +140,12 @@ describe("keyboardOwner", () => {
     expect(
       keyboardOwner({ exclusiveClaim: false, focused: "audio", tabRegistered: true }),
     ).toBe("audio");
+  });
+});
+
+describe("SPACE_STAYS_LOCAL", () => {
+  it("still covers the text boxes, and adds controls marked as a player of their own", () => {
+    expect(SPACE_STAYS_LOCAL.split(", ")).toEqual(["input", "textarea", "[contenteditable]", `[${OWNS_SPACE_ATTRIBUTE}]`]);
+    expect(OWNS_SPACE_ATTRIBUTE).toMatch(/^data-/);
   });
 });

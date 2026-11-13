@@ -317,3 +317,90 @@ export interface BackingTrack {
 export type Song = Track;
 export type Album = Book;
 export type Artist = Author;
+
+// Songs section: riffs saved from the Write view
+export interface RiffPart {
+  id: string;
+  riffId: string;
+  kind: "guitar" | "bass";
+  name: string;
+  sortOrder: number;
+  alphatex: string | null;
+  audioPath: string | null;
+  audioMime: string | null;
+  audioDuration: number | null;
+  trimStart: number | null;
+  trimEnd: number | null;
+  listen: "tab" | "recording";
+  level: number;
+  muted: boolean;
+  soloed: boolean;
+  playbackSpeed: number | null;
+}
+
+export interface Riff {
+  id: string;
+  name: string;
+  keyRoot: string;
+  scale: string;
+  tuning: string;
+  /** Null until it is tapped (or typed). */
+  tempo: number | null;
+  tsNum: number;
+  tsDen: number;
+  progression: { root: string; quality: string; bars: number }[];
+  createdAt: string;
+  updatedAt: string;
+  parts: RiffPart[];
+}
+
+export interface RiffSummary {
+  id: string;
+  name: string;
+  keyRoot: string;
+  scale: string;
+  tuning: string;
+  /** Null until it is tapped (or typed). */
+  tempo: number | null;
+  tsNum: number;
+  tsDen: number;
+  createdAt: string;
+  updatedAt: string;
+  parts: { id: string; kind: string; name: string; hasTab: boolean; hasAudio: boolean }[];
+}
+
+export interface SongSectionRiff {
+  id: string;
+  name: string;
+  keyRoot: string;
+  scale: string;
+  /** Null until it is tapped (or typed). */
+  tempo: number | null;
+  tsNum: number;
+  tsDen: number;
+}
+
+export interface SongSection {
+  id: string;
+  label: string;
+  repeats: number;
+  sortOrder: number;
+  /** null when no riff is chosen, or the riff was deleted */
+  riff: SongSectionRiff | null;
+}
+
+export interface Composition {
+  id: string;
+  name: string;
+  lyrics: string;
+  createdAt: string;
+  updatedAt: string;
+  sections: SongSection[];
+}
+
+export interface SongListItem {
+  id: string;
+  name: string;
+  sectionCount: number;
+  updatedAt: string;
+}

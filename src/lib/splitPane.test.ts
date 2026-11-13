@@ -127,6 +127,17 @@ describe("loadSplit", () => {
   });
 });
 
+describe("another view's split", () => {
+  it("is kept under its own key, apart from the Jam Tracks one", () => {
+    const data = installStorage();
+    saveSplit(0.4, "riffSplit");
+    expect(data.get("riffSplit")).toBe("0.4");
+    expect(data.get("jamTracksSplit")).toBeUndefined();
+    expect(loadSplit("riffSplit")).toBe(0.4);
+    expect(loadSplit()).toBe(DEFAULT_SPLIT);
+  });
+});
+
 describe("saveSplit", () => {
   it("stores the split so it survives a reload", () => {
     const data = installStorage();

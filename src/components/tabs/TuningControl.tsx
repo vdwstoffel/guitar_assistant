@@ -1,6 +1,6 @@
 "use client";
 
-import { TUNING_PRESETS } from "@/lib/tabscore/commands/tuning";
+import { tuningPresetsFor } from "@/lib/tabscore/commands/tuning";
 
 interface TuningControlProps {
   /**
@@ -8,6 +8,8 @@ interface TuningControlProps {
    * name — a hand-written `\tuning` in the source pane, most likely.
    */
   tuningId: string | null;
+  /** The tab's string count (locate.ts `stringCount`): 4 lists the bass tunings. */
+  strings?: number;
   onChange: (presetId: string) => void;
   disabled?: boolean;
 }
@@ -21,10 +23,15 @@ const CUSTOM = "__custom";
  *
  * A tuning outside the preset list shows as "Custom" and stays selectable
  * only in the sense that it is the current value — picking any preset
- * replaces it. The list is six-string only; see tuning.ts for why.
+ * replaces it. A four-string tab is offered the bass tunings, any other the
+ * six-string guitar ones, so a pick never changes how many strings the tab
+ * has.
  */
-export default function TuningControl({ tuningId, onChange, disabled = false }: TuningControlProps) {
-  const value = tuningId ?? CUSTOM;
+export default function TuningControl({ tuningId, strings = 6, onChange, disabled = false }: TuningControlProps) {
+  const presets = tuningPresetsFor(strings);
+  // An id the offered list does not hold (a bass id with `strings` left at
+  // its default) shows as Custom, not as whichever option happens to be first.
+  const value = tuningId !== null && presets.some((p) => p.id === tuningId) ? tuningId : CUSTOM;
 
   return (
     <label
@@ -41,10 +48,10 @@ export default function TuningControl({ tuningId, onChange, disabled = false }: 
         }}
         className="bg-gray-700 text-gray-200 text-xs rounded px-1 py-1 border border-gray-600 focus:outline-none focus:border-blue-500 disabled:opacity-40 disabled:cursor-not-allowed"
       >
-        {tuningId === null && (
+        {value === CUSTOM && (
           <option value={CUSTOM}>Custom</option>
         )}
-        {TUNING_PRESETS.map((preset) => (
+        {presets.map((preset) => (
           <option key={preset.id} value={preset.id}>
             {preset.label}
           </option>

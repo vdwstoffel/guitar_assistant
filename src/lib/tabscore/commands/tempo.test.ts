@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { readTempo, setTempo } from "./tempo";
+import { readTempo, setOrInsertTempo, setTempo } from "./tempo";
 import { parseTex } from "../parse";
 
 const TEX = '\\title "x"\n\\tempo 225\n\\ts 4 4\n.\n3.6.8 5.6 7.6 | 7.6.4 r.4\n';
@@ -58,5 +58,25 @@ describe("setTempo", () => {
   it("round-trips: setting the tempo back restores the original text", () => {
     const changed = setTempo(TEX, 96)!;
     expect(setTempo(changed.text, 225)!.text).toBe(TEX);
+  });
+});
+
+describe("setOrInsertTempo", () => {
+  it("changes a tempo the tab states, as setTempo does", () => {
+    const r = setOrInsertTempo("\\tempo 90\n.\n:4 0.6 0.6 0.6 0.6 |", 140);
+    expect(r && readTempo(r.text)).toBe(140);
+  });
+
+  it("puts one at the top of a tab that has none, leaving its bars alone", () => {
+    const tex = "\\tuning (e4 b3 g3 d3 a2 e2)\n.\n:4 0.6 3.6 5.6 0.6 | 0.5 3.5 5.5 0.5 |";
+    const r = setOrInsertTempo(tex, 152, { barIndex: 1, beatIndex: 2, string: 5 });
+    expect(r).not.toBeNull();
+    expect(r!.text).toBe(`\\tempo 152\n${tex}`);
+    expect(readTempo(r!.text)).toBe(152);
+    expect(r!.caret).toEqual({ barIndex: 1, beatIndex: 2, string: 5 });
+  });
+
+  it("leaves a tab alphaTab cannot read alone", () => {
+    expect(setOrInsertTempo("\\tuning (e4\n.\n:4 0.6 |", 120)).toBeNull();
   });
 });

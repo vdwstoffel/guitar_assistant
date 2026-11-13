@@ -37,6 +37,7 @@ export function moveBeat(text: string, caret: Caret, delta: 1 | -1): Caret {
   return { ...caret, barIndex, beatIndex };
 }
 
-export function moveString(caret: Caret, delta: 1 | -1): Caret {
-  return { ...caret, string: Math.min(Math.max(caret.string + delta, 1), 6) };
+/** Up or down a string, stopping at the tab's top and bottom ones (`strings`: see locate.ts `stringCount`). */
+export function moveString(caret: Caret, delta: 1 | -1, strings = 6): Caret {
+  return { ...caret, string: Math.min(Math.max(caret.string + delta, 1), strings) };
 }

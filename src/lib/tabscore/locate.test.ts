@@ -1,9 +1,11 @@
 import { describe, it, expect } from "vitest";
 import { parseTex } from "./parse";
-import { findBeatNode, beatSpliceRange, countBars, countBeats, clampCaret, sameCaret } from "./locate";
+import { findBeatNode, beatSpliceRange, countBars, countBeats, clampCaret, sameCaret, stringCount } from "./locate";
 import { sliceCp } from "./offsets";
 
 const TEX = "\\tempo 120\n.\n3.6.8 5.6 7.6 | 7.6.4 r.4\n";
+// A bass tab: four strings, 1 = G, 4 = low E.
+const BASS = "\\tuning g2 d2 a1 e1\n\\tempo 120\n.\n3.4.8 5.4 7.3 | 0.1.4 r.4\n";
 
 describe("locate", () => {
   it("counts bars and beats", () => {
@@ -67,6 +69,36 @@ describe("locate", () => {
       .toEqual({ barIndex: 1, beatIndex: 1, string: 6 });
     expect(clampCaret(scoreNode, { barIndex: -1, beatIndex: -1, string: 9 }))
       .toEqual({ barIndex: 0, beatIndex: 0, string: 6 });
+  });
+
+  it("clamps the string to the four a bass tab has", () => {
+    const { scoreNode } = parseTex(BASS);
+    expect(clampCaret(scoreNode, { barIndex: 0, beatIndex: 0, string: 6 }))
+      .toEqual({ barIndex: 0, beatIndex: 0, string: 4 });
+    expect(clampCaret(scoreNode, { barIndex: 1, beatIndex: 1, string: 0 }))
+      .toEqual({ barIndex: 1, beatIndex: 1, string: 1 });
+    expect(clampCaret(scoreNode, { barIndex: 0, beatIndex: 2, string: 3 }))
+      .toEqual({ barIndex: 0, beatIndex: 2, string: 3 });
+  });
+});
+
+describe("stringCount", () => {
+  it("reads the count off the document's \\tuning directive", () => {
+    expect(stringCount(parseTex(BASS).scoreNode)).toBe(4);
+    expect(stringCount(parseTex("\\tuning e4 b3 g3 d3 a2 d2\n.\n3.6 |\n").scoreNode)).toBe(6);
+    expect(stringCount(parseTex("\\tuning (g2 d2 a1 e1)\n.\n3.4 |\n").scoreNode)).toBe(4);
+  });
+
+  it("reads it off alphaTab's staff too", () => {
+    expect(stringCount(parseTex(BASS).score.tracks[0].staves[0])).toBe(4);
+    expect(stringCount(parseTex(TEX).score.tracks[0].staves[0])).toBe(6);
+  });
+
+  it("is six when it cannot tell: no \\tuning is standard guitar, as alphaTab renders it", () => {
+    expect(stringCount(parseTex(TEX).scoreNode)).toBe(6);
+    expect(stringCount(parseTex("\\tuning piano\n.\nc4 |\n").scoreNode)).toBe(6);
+    expect(stringCount(null)).toBe(6);
+    expect(stringCount(undefined)).toBe(6);
   });
 });
 

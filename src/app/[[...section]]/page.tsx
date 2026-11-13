@@ -24,6 +24,7 @@ import RecordingsView from "@/components/RecordingsView";
 import Tools from "@/components/Tools";
 import CAGEDSystem from "@/components/CAGEDSystem";
 import TabsSection from "@/components/tabs/TabsSection";
+import SongsSection from "@/components/songs/SongsSection";
 import HomeView from "@/components/HomeView";
 import UploadModal from "@/components/UploadModal";
 import VideoPlayer from "@/components/VideoPlayer";
@@ -37,12 +38,12 @@ import { useFocusedPlayer } from "@/lib/usePlayerFocus";
 import { resolvePageFlip } from "@/lib/pageFlips";
 import { DEFAULT_SPLIT, loadSplit, saveSplit, splitFromPointer } from "@/lib/splitPane";
 
-type Section = 'home' | 'lessons' | 'videos' | 'fretboard' | 'chords' | 'tools' | 'circle' | 'jamtracks' | 'recordings' | 'caged' | 'tabs';
+type Section = 'home' | 'lessons' | 'videos' | 'fretboard' | 'chords' | 'tools' | 'circle' | 'jamtracks' | 'recordings' | 'caged' | 'tabs' | 'songs';
 
 const getSectionFromPath = (section: string[] | undefined): Section => {
   if (!section || section.length === 0) return 'home';
   const first = section[0];
-  if (first === 'home' || first === 'lessons' || first === 'videos' || first === 'fretboard' || first === 'chords' || first === 'tools' || first === 'circle' || first === 'jamtracks' || first === 'recordings' || first === 'caged' || first === 'tabs') {
+  if (first === 'home' || first === 'lessons' || first === 'videos' || first === 'fretboard' || first === 'chords' || first === 'tools' || first === 'circle' || first === 'jamtracks' || first === 'recordings' || first === 'caged' || first === 'tabs' || first === 'songs') {
     return first;
   }
   return 'home';
@@ -2789,6 +2790,8 @@ export default function Home() {
         </div>
       ) : activeSection === 'tabs' ? (
         <TabsSection />
+      ) : activeSection === 'songs' ? (
+        <SongsSection />
       ) : activeSection === 'videos' ? (
         <div className="flex-1 min-h-0">
           <Videos initialVideoId={searchParams.get('video')} />

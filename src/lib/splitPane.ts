@@ -1,6 +1,7 @@
 /**
  * Where the divider sits between the two halves of the Jam Tracks practice
- * view: the recording on the left, the score on the right.
+ * view: the recording on the left, the score on the right. (A riff's page,
+ * its takes beside its tab, keeps its own split the same way.)
  *
  * Stored as a fraction of the container rather than a pixel width. The two
  * panes share the whole window, so a fraction keeps the balance you chose
@@ -25,7 +26,7 @@ export const DEFAULT_SPLIT = 0.5;
 export const MIN_SPLIT = 0.25;
 export const MAX_SPLIT = 0.75;
 
-const KEY = "jamTracksSplit";
+const JAM_TRACKS_KEY = "jamTracksSplit";
 
 /** A container's horizontal extent — the part of a DOMRect that matters here. */
 export interface SplitBounds {
@@ -62,9 +63,9 @@ export function splitFromPointer(clientX: number, bounds: SplitBounds): number {
  * perfectly usable, so none of that is worth reporting.
  */
 
-export function loadSplit(): number {
+export function loadSplit(key = JAM_TRACKS_KEY): number {
   try {
-    const raw = localStorage.getItem(KEY);
+    const raw = localStorage.getItem(key);
     if (raw === null) return DEFAULT_SPLIT;
     return clampSplit(raw);
   } catch {
@@ -72,9 +73,9 @@ export function loadSplit(): number {
   }
 }
 
-export function saveSplit(fraction: number): void {
+export function saveSplit(fraction: number, key = JAM_TRACKS_KEY): void {
   try {
-    localStorage.setItem(KEY, String(clampSplit(fraction)));
+    localStorage.setItem(key, String(clampSplit(fraction)));
   } catch {
     /* the balance just will not survive a reload */
   }

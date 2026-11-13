@@ -1,6 +1,6 @@
 import { parseTex } from "./parse";
 import { normalizeNewlines } from "./offsets";
-import type { BeatPos, Caret } from "./locate";
+import { stringCount, type BeatPos, type Caret } from "./locate";
 import type { CommandResult, EditOutcome } from "./apply";
 import { actsOnSelection, type ChordCommand } from "./keymap";
 import type { PreviewSource } from "./notePreview";
@@ -216,7 +216,8 @@ export function runCommand(command: ChordCommand, deps: CommandDeps): void {
     return;
   }
   if (command.kind === "moveString") {
-    const next = moveString(c, command.delta);
+    // Parsed afresh for the string count, as moveBeat parses for its bars.
+    const next = moveString(c, command.delta, stringCount(parseTex(text).scoreNode));
     deps.moveCaret(next);
     deps.preview(c, next, { kind: "command", command: "moveString", accepted: true });
     return;
